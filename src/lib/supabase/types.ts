@@ -187,6 +187,47 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["pipeline_etapas"]["Insert"]>;
         Relationships: Relationship[];
       };
+      mensajes_buffer: {
+        Row: {
+          id: string;
+          telefono: string;
+          contenido: string;
+          wa_message_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          telefono: string;
+          contenido: string;
+          wa_message_id?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mensajes_buffer"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      tickets: {
+        Row: {
+          id: string;
+          lead_id: string;
+          motivo: string;
+          estado: "abierto" | "en_atencion" | "cerrado";
+          vendedor_id: string | null;
+          resolucion: string | null;
+          sugerencia_kb: unknown | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          motivo: string;
+          estado?: "abierto" | "en_atencion" | "cerrado";
+          vendedor_id?: string | null;
+          resolucion?: string | null;
+          sugerencia_kb?: unknown | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["tickets"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       pipeline_movimientos: {
         Row: {
           id: string;
@@ -205,7 +246,7 @@ export interface Database {
           motivo?: string | null;
           movido_por?: MovidoPor;
         };
-        Update: never;
+        Update: Partial<Database["public"]["Tables"]["pipeline_movimientos"]["Insert"]>;
         Relationships: Relationship[];
       };
       recursos_conocimiento: {
