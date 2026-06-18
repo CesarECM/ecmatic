@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { parseWebhookPayload, markAsRead } from "@/lib/whatsapp/client";
-import { encolarMensaje } from "@/services/mensajes";
+import { procesarMensajeEntrante } from "@/services/mensajes";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 
@@ -27,20 +28,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Meta espera 200 inmediato — procesamos en background
   const messages = parseWebhookPayload(body);
+  if (messages.length === 0) {
+    return NextResponse.json({ status: "ok" }, { status: 200 });
+  }
 
-  // Procesamos sin await para responder rápido a Meta
-  Promise.all(
-    messages.map(async (msg) => {
+  // after() garantiza que el código corre después del 200
+  // incluso en Vercel serverless — sin perder el contexto de ejecución
+  after(async () => {
+    for (const msg of messages) {
       try {
         await markAsRead(msg.messageId);
-        await encolarMensaje(msg);
+        await procesarMensajeEntrante(msg);
       } catch (err) {
-        console.error("[webhook] error procesando mensaje", err);
+        console.error("[webhook] error procesando mensaje:", err);
       }
-    })
-  );
+    }
+  });
 
+  // Meta requiere 200 inmediato
   return NextResponse.json({ status: "ok" }, { status: 200 });
 }
