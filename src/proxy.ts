@@ -5,6 +5,9 @@ import type { Database } from "@/lib/supabase/types";
 
 const PUBLIC_PATHS = ["/login", "/api/whatsapp/webhook", "/api/stripe/webhook"];
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -12,19 +15,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Si Supabase no está configurado, redirige a login en lugar de 500
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   const response = await updateSession(request);
 
-  // Verifica sesión activa para rutas protegidas
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: () => {},
-      },
-    }
-  );
+  const supabase = createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      setAll: () => {},
+    },
+  });
 
   const {
     data: { user },
