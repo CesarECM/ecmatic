@@ -1,5 +1,6 @@
 import { anthropic, CLAUDE_MODEL, generarEmbedding } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
+import { registrarUso } from "@/services/conocimiento";
 
 interface ContextoLead {
   nombre: string | null;
@@ -20,7 +21,7 @@ async function buscarRecursos(query: string, limite = 4) {
     umbral: 0.65,
   });
 
-  return (data ?? []) as { titulo: string; contenido: string; tipo: string }[];
+  return (data ?? []) as { id: string; titulo: string; contenido: string; tipo: string }[];
 }
 
 // ── S1.4: Genera la respuesta de ECMatic usando Claude ───────────────────
@@ -30,6 +31,7 @@ export async function generarRespuesta(
 ): Promise<string> {
   const queryParaBusqueda = mensajes.join(" ");
   const recursos = await buscarRecursos(queryParaBusqueda);
+  void registrarUso(recursos.map((r) => r.id));
 
   const recursosTexto =
     recursos.length > 0
