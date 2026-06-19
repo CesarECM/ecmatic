@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { generarEmbedding } from "@/lib/ai/client";
+import { generarEmbedding, anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
 import type { TipoRecurso, OrigenRecurso } from "@/lib/supabase/types";
 
 interface VersionRecurso {
@@ -212,6 +212,30 @@ export async function detectarObsoletos(): Promise<AlertaRecurso[]> {
   for (const r of pendientes ?? []) alertas.push({ ...r, motivo: "pendiente_antiguo" });
 
   return alertas;
+}
+
+// S2.8 — Sugiere un recurso nuevo cuando la pregunta no tiene cobertura en KB
+export async function sugerirRecursoDesdeQuery(query: string): Promise<void> {
+  try {
+    const response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 300,
+      system: `Analiza la pregunta de un lead sobre certificaciones CONOCER en México.
+Determina si se debería crear un nuevo recurso en la base de conocimiento para responderla mejor.
+Responde SOLO en JSON con este formato exacto:
+{"crear": true, "tipo": "faq|objecion|servicio|practica_venta", "titulo": "...", "contenido": "..."}
+Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta por FAQs generales, responde: {"crear": false}`,
+      messages: [{ role: "user", content: `Pregunta sin cobertura en KB:\n${query}` }],
+    });
+
+    const raw = (response.content[0] as { text: string }).text.trim();
+    const json = JSON.parse(raw) as { crear: boolean; tipo?: TipoRecurso; titulo?: string; contenido?: string };
+    if (!json.crear || !json.tipo || !json.titulo || !json.contenido) return;
+
+    await crearRecurso(json.tipo, json.titulo, json.contenido, "ia_sugerido");
+  } catch {
+    // No bloquear el flujo principal si falla la sugerencia
+  }
 }
 
 // S2.3 — Registra que los recursos contribuyeron a un cierre de venta (llamar desde Sprint 3)

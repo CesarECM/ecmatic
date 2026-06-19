@@ -1,6 +1,6 @@
 import { anthropic, CLAUDE_MODEL, generarEmbedding } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
-import { registrarUso } from "@/services/conocimiento";
+import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
 
 interface ContextoLead {
   nombre: string | null;
@@ -32,6 +32,7 @@ export async function generarRespuesta(
   const queryParaBusqueda = mensajes.join(" ");
   const recursos = await buscarRecursos(queryParaBusqueda);
   void registrarUso(recursos.map((r) => r.id));
+  if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
   const recursosTexto =
     recursos.length > 0
