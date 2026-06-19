@@ -9,6 +9,7 @@ import { detectarPromesas } from "./promesas";
 import { detectarMomentoCierre } from "./momentos-cierre";
 import { generarLinkStripe } from "./pagos";
 import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } from "./privacidad";
+import { inferirYRegistrarFase } from "./cagc";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -137,6 +138,9 @@ export async function procesarConversacion(
   if (msgSaliente?.id) {
     void detectarMomentoCierre(lead.id, msgSaliente.id, textoCompleto, intencion).catch(console.error);
   }
+
+  // S13.2 — Inferir y actualizar fase CAGC del lead (fire-and-forget, silencioso)
+  void inferirYRegistrarFase(lead.id, mensajes, historial).catch(console.error);
 }
 
 // S1.5 — Divide respuestas largas en bloques de ≤160 caracteres

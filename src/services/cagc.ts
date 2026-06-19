@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { inferirFaseCAGC } from "@/lib/ai/cagc-inferencia";
 
 export interface FaseCAGC {
   numero: number;
@@ -85,6 +86,35 @@ export async function registrarFaseLead(
     );
 
   if (error) throw new Error(`[cagc] Error registrando fase: ${error.message}`);
+}
+
+// S13.2 — Infiere la fase CAGC desde la conversación y la persiste si confianza ≥ 0.5.
+// Diseñado para llamarse fire-and-forget desde procesarConversacion().
+export async function inferirYRegistrarFase(
+  leadId: string,
+  mensajes: string[],
+  historial: string
+): Promise<void> {
+  const [fases, estadoActual] = await Promise.all([
+    obtenerFases(),
+    obtenerFaseLead(leadId),
+  ]);
+
+  const resultado = await inferirFaseCAGC(
+    mensajes,
+    historial,
+    fases,
+    estadoActual?.fase_numero
+  );
+
+  if (resultado.confianza >= 0.5) {
+    await registrarFaseLead(
+      leadId,
+      resultado.fase,
+      resultado.confianza,
+      resultado.motivo
+    );
+  }
 }
 
 // Devuelve leads agrupados por fase (para analítica)

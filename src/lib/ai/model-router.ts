@@ -9,7 +9,8 @@ export type TareaIA =
   | "ENCUESTA"
   | "SUGERIR_KB"
   | "COMPETIDORES"
-  | "CHURN";
+  | "CHURN"
+  | "CAGC_INFERIR";
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -20,14 +21,15 @@ const MODELOS: Record<string, string> = {
 
 // Defaults por tarea (sin override de env)
 const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
-  CLASIFICAR:   "haiku",   // clasificación simple → modelo económico
-  SUGERIR_KB:   "haiku",
-  COMPETIDORES: "haiku",
-  CHURN:        "haiku",
-  RESPUESTA:    "sonnet",  // respuesta conversacional → balanceado
-  ENCUESTA:     "sonnet",
-  ANALISIS:     "sonnet",  // análisis de transcriptos
-  COACHING:     "sonnet",  // coaching de vendedores
+  CLASIFICAR:    "haiku",   // clasificación simple → modelo económico
+  SUGERIR_KB:    "haiku",
+  COMPETIDORES:  "haiku",
+  CHURN:         "haiku",
+  CAGC_INFERIR:  "haiku",   // clasificación de fase de compra
+  RESPUESTA:     "sonnet",  // respuesta conversacional → balanceado
+  ENCUESTA:      "sonnet",
+  ANALISIS:      "sonnet",  // análisis de transcriptos
+  COACHING:      "sonnet",  // coaching de vendedores
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.
