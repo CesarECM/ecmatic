@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { SideNav } from "./components/SideNav";
 import type { Rol } from "@/lib/supabase/types";
 
 interface DashboardLayoutProps {
@@ -16,7 +17,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   if (!user) redirect("/login");
 
-  // Service client para evitar bloqueos de RLS en la lectura del propio perfil
   const { data: profile } = await createServiceClient()
     .from("profiles")
     .select("*")
@@ -25,16 +25,21 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   if (!profile) redirect("/login?error=Perfil%20no%20encontrado%20—%20contacta%20al%20administrador");
 
+  const rol = profile.rol as Rol;
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
+      <header className="border-b bg-card px-6 py-3 flex items-center justify-between shrink-0">
         <span className="font-bold text-lg">ECMatic</span>
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span>{profile.nombre ?? user.email}</span>
-          <RolBadge rol={profile.rol as Rol} />
+          <RolBadge rol={rol} />
         </div>
       </header>
-      <main className="flex-1 p-6">{children}</main>
+      <div className="flex flex-1 overflow-hidden">
+        <SideNav rol={rol} />
+        <main className="flex-1 overflow-auto p-6">{children}</main>
+      </div>
     </div>
   );
 }
