@@ -735,6 +735,46 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["nurturing_envios"]["Insert"]>;
         Relationships: Relationship[];
       };
+      // ── Sprint 13 · CAGC ──────────────────────────────────
+      cagc_fases: {
+        Row: {
+          id: string;
+          numero: number;
+          nombre: string;
+          descripcion: string;
+          senales_deteccion: string[];
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          numero: number;
+          nombre: string;
+          descripcion: string;
+          senales_deteccion?: string[];
+        };
+        Update: Partial<Database["public"]["Tables"]["cagc_fases"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      lead_cagc_estado: {
+        Row: {
+          id: string;
+          lead_id: string;
+          fase_numero: number;
+          confianza: number;
+          historial: import("@/services/cagc").TransicionCAGC[];
+          updated_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          fase_numero?: number;
+          confianza?: number;
+          historial?: import("@/services/cagc").TransicionCAGC[];
+        };
+        Update: Partial<Database["public"]["Tables"]["lead_cagc_estado"]["Insert"]>;
+        Relationships: Relationship[];
+      };
     };  // end Tables
     Views: Record<string, never>;
     Functions: {
