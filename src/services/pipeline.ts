@@ -7,6 +7,7 @@ import { clasificarLead } from "@/services/avatares";
 import { calcularCalidadConversacion } from "@/services/calidad-conversacional";
 import { registrarConversionExperimento } from "@/services/experimentos";
 import { obtenerFaseLead } from "@/services/cagc";
+import { inscribirEnPipeline } from "@/services/pipeline-multi";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -90,12 +91,16 @@ export async function moverLead(
     .update({ pipeline_stage: nuevaEtapa })
     .eq("id", leadId);
 
+  // S13.5 — Mantener lead_pipelines sincronizado con el pipeline primario
+  void inscribirEnPipeline(leadId, lead.pipeline_ruta, nuevaEtapa).catch(console.error);
+
   await supabase.from("pipeline_movimientos").insert({
     lead_id: leadId,
     etapa_anterior: lead.pipeline_stage,
     etapa_nueva: nuevaEtapa,
     motivo: motivo ?? null,
     movido_por: movidoPor,
+    ruta: lead.pipeline_ruta,
   });
 
   // S3.6 — Acredita recursos KB cuando el lead compra
@@ -229,7 +234,7 @@ export async function obtenerHistorialPipeline(leadId: string) {
 
   const { data, error } = await supabase
     .from("pipeline_movimientos")
-    .select("id, etapa_anterior, etapa_nueva, motivo, movido_por, created_at")
+    .select("id, etapa_anterior, etapa_nueva, motivo, movido_por, ruta, created_at")
     .eq("lead_id", leadId)
     .order("created_at", { ascending: false });
 

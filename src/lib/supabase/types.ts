@@ -270,6 +270,7 @@ export interface Database {
           etapa_nueva: string;
           motivo: string | null;
           movido_por: MovidoPor;
+          ruta: string | null;
           created_at: string;
         };
         Insert: {
@@ -279,8 +280,29 @@ export interface Database {
           etapa_nueva: string;
           motivo?: string | null;
           movido_por?: MovidoPor;
+          ruta?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["pipeline_movimientos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      lead_pipelines: {
+        Row: {
+          id: string;
+          lead_id: string;
+          ruta: string;
+          etapa_actual: string;
+          activo: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          ruta: string;
+          etapa_actual?: string;
+          activo?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["lead_pipelines"]["Insert"]>;
         Relationships: Relationship[];
       };
       recursos_conocimiento: {
