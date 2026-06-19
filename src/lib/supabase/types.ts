@@ -15,6 +15,8 @@ export type TipoRecurso =
   | "practica_venta";
 export type OrigenRecurso = "interno" | "ia_sugerido" | "externo";
 export type MovidoPor = "ia" | "admin" | "vendedor" | "webhook";
+export type CanalNurturing = "whatsapp" | "email";
+export type EstadoEnvioNurturing = "pendiente" | "enviado" | "fallido" | "omitido";
 export type IntencionClasificada =
   | "compra"
   | "duda_tecnica"
@@ -284,7 +286,58 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["recursos_conocimiento"]["Insert"]>;
         Relationships: Relationship[];
       };
-    };
+      nurturing_secuencias: {
+        Row: {
+          id: string;
+          nombre: string;
+          canal: CanalNurturing;
+          etapa_pipeline: string | null;
+          ruta: PipelineRuta | null;
+          dias_sin_respuesta: number;
+          plantilla_id: string | null;
+          mensaje_fallback: string | null;
+          orden: number;
+          activo: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          nombre: string;
+          canal: CanalNurturing;
+          etapa_pipeline?: string | null;
+          ruta?: PipelineRuta | null;
+          dias_sin_respuesta?: number;
+          plantilla_id?: string | null;
+          mensaje_fallback?: string | null;
+          orden?: number;
+          activo?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      nurturing_envios: {
+        Row: {
+          id: string;
+          lead_id: string;
+          secuencia_id: string;
+          canal: CanalNurturing;
+          estado: EstadoEnvioNurturing;
+          error_detalle: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          secuencia_id: string;
+          canal: CanalNurturing;
+          estado?: EstadoEnvioNurturing;
+          error_detalle?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["nurturing_envios"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+    };  // end Tables
     Views: Record<string, never>;
     Functions: {
       buscar_recursos: {
