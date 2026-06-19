@@ -27,6 +27,9 @@ export type IntencionClasificada =
 export type OrigenMatriz = "manual" | "ia_sugerido" | "automatico";
 export type TipoGatillo = "escasez_cupo" | "escasez_evaluadores" | "urgencia_fecha" | "precio_vigente" | "evento_proximo" | "otro";
 export type AudienciaGatillo = "all" | "tripwire" | "premium";
+export type EstadoCita = "pendiente" | "confirmada" | "show" | "noshow" | "cancelada";
+export type ResultadoCita = "show" | "noshow" | "seguimiento";
+export type TemperaturaCierre = "fria" | "tibia" | "caliente";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
 
 export interface DimensionesMatriz {
@@ -329,6 +332,59 @@ export interface Database {
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      citas: {
+        Row: {
+          id: string; lead_id: string; vendedor_id: string | null;
+          fecha_inicio: string; fecha_fin: string; estado: EstadoCita;
+          google_event_id: string | null; google_meet_link: string | null;
+          notas_previas: string | null; notas_vendedor: string | null;
+          resultado: ResultadoCita | null; compromisos: string | null;
+          recordatorio_24h: boolean; recordatorio_2h: boolean; recordatorio_vendedor_30m: boolean;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; vendedor_id?: string | null;
+          fecha_inicio: string; fecha_fin: string; estado?: EstadoCita;
+          google_event_id?: string | null; google_meet_link?: string | null;
+          notas_previas?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["citas"]["Insert"] & {
+          notas_vendedor?: string | null; resultado?: ResultadoCita | null;
+          compromisos?: string | null; recordatorio_24h?: boolean;
+          recordatorio_2h?: boolean; recordatorio_vendedor_30m?: boolean;
+        }>;
+        Relationships: Relationship[];
+      };
+      vendedor_tokens: {
+        Row: {
+          id: string; vendedor_id: string; access_token: string;
+          refresh_token: string | null; expires_at: string | null;
+          scope: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; vendedor_id: string; access_token: string;
+          refresh_token?: string | null; expires_at?: string | null; scope?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["vendedor_tokens"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      transcriptos_meet: {
+        Row: {
+          id: string; cita_id: string | null; lead_id: string; contenido: string;
+          objeciones_detectadas: unknown[]; compromisos_detectados: unknown[];
+          temperatura_cierre: TemperaturaCierre | null; analisis_completo: unknown | null;
+          procesado_por_ia: boolean; created_at: string;
+        };
+        Insert: {
+          id?: string; cita_id?: string | null; lead_id: string; contenido: string;
+          objeciones_detectadas?: unknown[]; compromisos_detectados?: unknown[];
+          temperatura_cierre?: TemperaturaCierre | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["transcriptos_meet"]["Insert"] & {
+          analisis_completo?: unknown; procesado_por_ia?: boolean;
+        }>;
         Relationships: Relationship[];
       };
       gatillos: {

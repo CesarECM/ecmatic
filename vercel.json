@@ -7,6 +7,10 @@
     {
       "path": "/api/admin/gatillos",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/admin/recordatorios",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

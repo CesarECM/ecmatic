@@ -20,6 +20,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/matriz",          label: "Matriz nD",          emoji: "🧮", roles: ["admin"] },
   { href: "/admin/momentos",        label: "Momentos de cierre", emoji: "⏱️", roles: ["admin"] },
   { href: "/admin/gatillos",        label: "Gatillos mentales",  emoji: "⚡", roles: ["admin"] },
+  { href: "/admin/citas",           label: "Citas",              emoji: "📅", roles: ["admin"] },
+  { href: "/admin/vendedores",      label: "Vendedores",         emoji: "🏆", roles: ["admin"] },
+  { href: "/vendedor/agenda",       label: "Mi agenda",          emoji: "🗓️", roles: ["vendedor"] },
 ];
 
 interface SideNavProps {

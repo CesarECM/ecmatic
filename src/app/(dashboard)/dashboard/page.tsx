@@ -71,6 +71,30 @@ const MODULOS: Modulo[] = [
     roles: ["admin"],
     sprint: "S6",
   },
+  {
+    href: "/admin/citas",
+    titulo: "Citas agendadas",
+    descripcion: "Todas las citas del equipo. Google Calendar y Meet integrados.",
+    emoji: "📅",
+    roles: ["admin"],
+    sprint: "S7",
+  },
+  {
+    href: "/admin/vendedores",
+    titulo: "Vendedores",
+    descripcion: "Métricas de desempeño, show rate, coaching IA y alertas de anomalías.",
+    emoji: "🏆",
+    roles: ["admin"],
+    sprint: "S7",
+  },
+  {
+    href: "/vendedor/agenda",
+    titulo: "Mi agenda",
+    descripcion: "Próximas citas, links de Meet y fichas post-sesión.",
+    emoji: "🗓️",
+    roles: ["vendedor"],
+    sprint: "S7",
+  },
 ];
 
 export default async function DashboardPage() {
