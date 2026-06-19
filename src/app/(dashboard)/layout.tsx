@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     .eq("id", user.id)
     .single();
 
-  if (!profile?.activo) redirect("/login?error=Tu%20cuenta%20está%20desactivada");
+  if (!profile) redirect("/login?error=Perfil%20no%20encontrado%20—%20contacta%20al%20administrador");
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
