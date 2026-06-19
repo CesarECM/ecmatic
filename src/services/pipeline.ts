@@ -73,11 +73,7 @@ export async function listarLeads(filtros: FiltrosLeads = {}) {
 
   let query = supabase
     .from("leads")
-    .select(
-      "id, nombre, telefono, email, pipeline_stage, pipeline_ruta, " +
-      "temperamento_inferido, score_salud, compra_previa, vendedor_id, " +
-      "activo, created_at, updated_at"
-    )
+    .select("*")
     .order("updated_at", { ascending: false });
 
   if (filtros.etapa !== undefined) query = query.eq("pipeline_stage", filtros.etapa);
@@ -115,3 +111,5 @@ export async function obtenerHistorialPipeline(leadId: string) {
   if (error) throw new Error(`[pipeline] Error obteniendo historial: ${error.message}`);
   return data ?? [];
 }
+
+export type LeadRow = Awaited<ReturnType<typeof listarLeads>>[number];
