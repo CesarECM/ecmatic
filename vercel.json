@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/admin/nurturing",
+      "schedule": "0 14 * * 1-5"
+    }
+  ]
+}
