@@ -4,6 +4,9 @@ import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { generarRespuesta, necesitaHandoff } from "@/lib/ai/motor-respuesta";
 import { enviarRespuestaWhatsApp } from "./whatsapp-sender";
 import { crearTicketHandoff } from "./tickets";
+import { detectarCompetidores } from "./competidores";
+import { detectarPromesas } from "./promesas";
+import { detectarMomentoCierre } from "./momentos-cierre";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -81,11 +84,25 @@ export async function procesarConversacion(
   await enviarRespuestaWhatsApp(telefono, bloques);
 
   // 11. Guardar respuesta saliente
-  await guardarMensaje({
+  const msgSaliente = await guardarMensaje({
     leadId: lead.id,
     contenido: respuesta,
     direccion: "saliente",
   });
+
+  // S5.8 — Detectar competidores mencionados (fire-and-forget)
+  const textoCompleto = mensajes.join(" ");
+  void detectarCompetidores(textoCompleto, lead.id).catch(console.error);
+
+  // S5.10 — Detectar promesas en los mensajes del lead (fire-and-forget)
+  if (msgSaliente?.id) {
+    void detectarPromesas(textoCompleto, lead.id, msgSaliente.id).catch(console.error);
+  }
+
+  // S5.9 — Detectar momentos de cierre en la respuesta (fire-and-forget)
+  if (msgSaliente?.id) {
+    void detectarMomentoCierre(lead.id, msgSaliente.id, textoCompleto, intencion).catch(console.error);
+  }
 }
 
 // S1.5 — Divide respuestas largas en bloques de ≤160 caracteres

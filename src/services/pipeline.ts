@@ -2,6 +2,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { generarEmbedding } from "@/lib/ai/client";
 import { registrarCierre } from "@/services/conocimiento";
 import { actualizarListasAlMoverEtapa, excluirDeNurturing } from "@/lib/email/campanas";
+import { actualizarScoreMatriz } from "@/services/matriz";
+import { clasificarLead } from "@/services/avatares";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -82,6 +84,38 @@ export async function moverLead(
   // S4.3 — Excluye de nurturing al cerrar el ciclo
   if (nuevaEtapa === "Comprado" || nuevaEtapa === "Perdido") {
     void excluirDeNurturing(lead.email ?? null, lead.pipeline_ruta).catch(console.error);
+  }
+
+  // S5.4 — Actualiza score de efectividad en Matriz nD al cerrar o perder
+  if (nuevaEtapa === "Comprado" || nuevaEtapa === "Perdido") {
+    void actualizarDimensionesAlCerrar(leadId, nuevaEtapa === "Comprado");
+  }
+
+  // S5.6 — Clasifica el lead en un avatar al avanzar etapas relevantes
+  void clasificarLead(leadId).catch(console.error);
+}
+
+// S5.4 — Lee dimensiones del lead y actualiza score de matriz al cerrar
+async function actualizarDimensionesAlCerrar(leadId: string, cerrado: boolean): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("temperamento_inferido, canal_origen, pipeline_ruta, pipeline_stage")
+      .eq("id", leadId)
+      .single();
+    if (!lead) return;
+
+    await actualizarScoreMatriz(
+      {
+        temperamento: lead.temperamento_inferido ?? undefined,
+        canal_origen: lead.canal_origen ?? undefined,
+        etapa_atasco: lead.pipeline_stage ?? undefined,
+      },
+      cerrado
+    );
+  } catch {
+    // no bloquear
   }
 }
 

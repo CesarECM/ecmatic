@@ -69,7 +69,7 @@ export async function guardarMensaje(params: {
 }) {
   const supabase = createServiceClient();
 
-  await supabase.from("mensajes").insert({
+  const { data } = await supabase.from("mensajes").insert({
     lead_id: params.leadId,
     canal: "whatsapp",
     direccion: params.direccion,
@@ -77,7 +77,9 @@ export async function guardarMensaje(params: {
     intencion_clasificada: params.intencion ?? null,
     procesado_por_ia: true,
     wa_message_id: params.waMessageId ?? null,
-  });
+  }).select("id").single();
+
+  return data ?? null;
 }
 
 // ── Obtiene historial reciente del lead ───────────────────────────────────

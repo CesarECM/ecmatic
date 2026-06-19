@@ -24,6 +24,19 @@ export type IntencionClasificada =
   | "abandono_inminente"
   | "otro";
 
+export type OrigenMatriz = "manual" | "ia_sugerido" | "automatico";
+export type ActorPromesa = "vendedor" | "lead" | "ia";
+
+export interface DimensionesMatriz {
+  temperamento?: "D" | "I" | "S" | "C";
+  objecion?: string;
+  servicio?: string;
+  tipo_cliente?: "B2C" | "B2B";
+  canal_origen?: string;
+  etapa_atasco?: string;
+  temperatura?: "fria" | "tibia" | "caliente";
+}
+
 type Relationship = {
   foreignKeyName: string;
   columns: string[];
@@ -314,6 +327,99 @@ export interface Database {
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      matriz_nd: {
+        Row: {
+          id: string;
+          dimensiones: DimensionesMatriz;
+          respuesta_sugerida: string;
+          score_efectividad: number;
+          usos: number;
+          cierres: number;
+          aprobado: boolean;
+          origen: OrigenMatriz;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          dimensiones: DimensionesMatriz;
+          respuesta_sugerida: string;
+          score_efectividad?: number;
+          usos?: number;
+          cierres?: number;
+          aprobado?: boolean;
+          origen?: OrigenMatriz;
+        };
+        Update: Partial<Database["public"]["Tables"]["matriz_nd"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      competidores: {
+        Row: {
+          id: string;
+          nombre: string;
+          menciones: number;
+          ultima_mencion: string | null;
+          notas: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          nombre: string;
+          menciones?: number;
+          ultima_mencion?: string | null;
+          notas?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["competidores"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      momentos_cierre: {
+        Row: {
+          id: string;
+          lead_id: string;
+          mensaje_id: string | null;
+          objecion_tipo: string | null;
+          descripcion: string;
+          se_cerro: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          mensaje_id?: string | null;
+          objecion_tipo?: string | null;
+          descripcion: string;
+          se_cerro?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["momentos_cierre"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      promesas_conversacion: {
+        Row: {
+          id: string;
+          lead_id: string;
+          mensaje_id: string | null;
+          actor: ActorPromesa;
+          promesa: string;
+          fecha_prometida: string | null;
+          cumplida: boolean | null;
+          alerta_enviada: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          mensaje_id?: string | null;
+          actor: ActorPromesa;
+          promesa: string;
+          fecha_prometida?: string | null;
+          cumplida?: boolean | null;
+          alerta_enviada?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["promesas_conversacion"]["Insert"]>;
         Relationships: Relationship[];
       };
       nurturing_envios: {
