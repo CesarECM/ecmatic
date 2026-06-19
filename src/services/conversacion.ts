@@ -10,6 +10,7 @@ import { detectarMomentoCierre } from "./momentos-cierre";
 import { generarLinkStripe } from "./pagos";
 import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } from "./privacidad";
 import { inferirYRegistrarFase, obtenerFaseLead } from "./cagc";
+import { obtenerEtiquetasLead } from "./etiquetas";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -75,13 +76,14 @@ export async function procesarConversacion(
 
   // 8. S1.4 — Generar respuesta
   const supabase = createServiceClient();
-  const [{ data: leadActualizado }, estadoCagc] = await Promise.all([
+  const [{ data: leadActualizado }, estadoCagc, etiquetasLead] = await Promise.all([
     supabase
       .from("leads")
       .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa")
       .eq("id", lead.id)
       .single(),
     obtenerFaseLead(lead.id).catch(() => null),
+    obtenerEtiquetasLead(lead.id).catch(() => []),
   ]);
 
   const respuesta = await generarRespuesta(mensajes, {
@@ -92,6 +94,7 @@ export async function procesarConversacion(
     historial,
     pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
     faseCAGC: estadoCagc?.fase_numero,
+    etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
   });
 
   // 8.5. S8.1 — Si la intención es compra inmediata, generar link Stripe
@@ -145,6 +148,12 @@ export async function procesarConversacion(
 
   // S13.2 — Inferir y actualizar fase CAGC del lead (fire-and-forget, silencioso)
   void inferirYRegistrarFase(lead.id, mensajes, historial).catch(console.error);
+
+  // S14.2 — Sugerir etiquetas para el lead (fire-and-forget, solo si hay historial)
+  if (historial) {
+    const { sugerirEtiquetasParaLead } = await import("@/lib/ai/etiquetas-ia");
+    void sugerirEtiquetasParaLead(lead.id, mensajes, historial).catch(console.error);
+  }
 }
 
 // S1.5 — Divide respuestas largas en bloques de ≤160 caracteres

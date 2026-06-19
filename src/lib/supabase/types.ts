@@ -760,6 +760,35 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["nurturing_envios"]["Insert"]>;
         Relationships: Relationship[];
       };
+      // ── Sprint 14 · Etiquetas ─────────────────────────────
+      etiqueta_categorias: {
+        Row: { id: string; nombre: string; descripcion: string | null; color: string; created_at: string };
+        Insert: { id?: string; nombre: string; descripcion?: string | null; color?: string };
+        Update: Partial<Database["public"]["Tables"]["etiqueta_categorias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      etiquetas: {
+        Row: {
+          id: string; categoria_id: string; nombre: string; descripcion: string | null;
+          origen: "manual" | "ia_sugerido" | "automatico";
+          estado: "activa" | "pendiente_revision" | "archivada";
+          metadata: Record<string, unknown>; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; categoria_id: string; nombre: string; descripcion?: string | null;
+          origen?: "manual" | "ia_sugerido" | "automatico";
+          estado?: "activa" | "pendiente_revision" | "archivada";
+          metadata?: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["etiquetas"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      lead_etiquetas: {
+        Row: { id: string; lead_id: string; etiqueta_id: string; asignada_por: "manual" | "ia" | "automatico"; created_at: string };
+        Insert: { id?: string; lead_id: string; etiqueta_id: string; asignada_por?: "manual" | "ia" | "automatico" };
+        Update: Partial<Database["public"]["Tables"]["lead_etiquetas"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       // ── Sprint 13 · CAGC ──────────────────────────────────
       cagc_fases: {
         Row: {

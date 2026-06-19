@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { inferirFaseCAGC } from "@/lib/ai/cagc-inferencia";
+import { obtenerEtiquetasLead } from "@/services/etiquetas";
 
 export interface FaseCAGC {
   numero: number;
@@ -95,16 +96,20 @@ export async function inferirYRegistrarFase(
   mensajes: string[],
   historial: string
 ): Promise<void> {
-  const [fases, estadoActual] = await Promise.all([
+  const [fases, estadoActual, etiquetas] = await Promise.all([
     obtenerFases(),
     obtenerFaseLead(leadId),
+    obtenerEtiquetasLead(leadId).catch(() => []),
   ]);
+
+  const etiquetasTexto = etiquetas.map((e) => `${e.categoria}:${e.nombre}`);
 
   const resultado = await inferirFaseCAGC(
     mensajes,
     historial,
     fases,
-    estadoActual?.fase_numero
+    estadoActual?.fase_numero,
+    etiquetasTexto
   );
 
   if (resultado.confianza >= 0.5) {

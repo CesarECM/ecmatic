@@ -16,6 +16,7 @@ interface ContextoLead {
   historial: string;
   pipelineRuta?: PipelineRuta;
   faseCAGC?: number; // S13.3 — 8ª dimensión de personalización
+  etiquetas?: string[]; // S14.5 — etiquetas activas del lead
 }
 
 // ── S1.4: Búsqueda semántica en base de conocimiento ─────────────────────
@@ -77,6 +78,9 @@ export async function generarRespuesta(
   const faseCagcLinea = contexto.faseCAGC !== undefined
     ? `- Fase de compra CAGC: ${contexto.faseCAGC} — guía el tono y objetivo de tu respuesta según este momento del comprador`
     : "";
+  const etiquetasLinea = contexto.etiquetas?.length
+    ? `- Etiquetas del lead: ${contexto.etiquetas.join(", ")}`
+    : "";
 
   const matrizLinea = sugerenciaMatriz
     ? `\nSUGERENCIA DE MATRIZ (usa como guía, adapta a la conversación):\n${sugerenciaMatriz}`
@@ -91,6 +95,7 @@ CONTEXTO DEL LEAD:
 - Temperamento inferido: ${contexto.temperamento ?? "no determinado"}
 - Cliente previo: ${contexto.compraPreviaa ? "SÍ — trata con familiaridad" : "NO — es nuevo lead"}
 ${faseCagcLinea}
+${etiquetasLinea}
 
 HISTORIAL RECIENTE:
 ${contexto.historial || "(primera interacción)"}

@@ -25,7 +25,8 @@ export async function inferirFaseCAGC(
   mensajes: string[],
   historial: string,
   fases: FaseCAGC[],
-  faseActual?: number
+  faseActual?: number,
+  etiquetas?: string[]
 ): Promise<ResultadoCAGC> {
   const faseRef = buildFaseRef(fases);
   const textoActual = mensajes.join("\n");
@@ -50,7 +51,11 @@ REGLAS:
 Responde ÚNICAMENTE con JSON válido sin explicaciones:
 {"fase": N, "confianza": 0.XX, "motivo": "razón específica del lead"}`;
 
-  const userContent = `${contextoFase}
+  const etiquetasLinea = etiquetas?.length
+    ? `\nEtiquetas activas del lead: ${etiquetas.join(", ")}`
+    : "";
+
+  const userContent = `${contextoFase}${etiquetasLinea}
 
 Historial previo:
 ${historial || "(primera interacción)"}

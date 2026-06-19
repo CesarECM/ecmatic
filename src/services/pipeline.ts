@@ -8,6 +8,7 @@ import { calcularCalidadConversacion } from "@/services/calidad-conversacional";
 import { registrarConversionExperimento } from "@/services/experimentos";
 import { obtenerFaseLead } from "@/services/cagc";
 import { inscribirEnPipeline } from "@/services/pipeline-multi";
+import { asignarEtiquetaProducto } from "@/services/etiquetas-hooks";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -131,6 +132,11 @@ export async function moverLead(
   // S11.4 — Registra conversión en experimento de precio si aplica
   if (nuevaEtapa === "Comprado") {
     void registrarConversionExperimento(leadId).catch(console.error);
+  }
+
+  // S14.4 — Auto-etiqueta con producto comprado
+  if (nuevaEtapa === "Comprado") {
+    void asignarEtiquetaProducto(leadId, lead.pipeline_ruta).catch(console.error);
   }
 
   // S5.6 — Clasifica el lead en un avatar al avanzar etapas relevantes
