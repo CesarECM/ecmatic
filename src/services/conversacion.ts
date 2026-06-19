@@ -10,6 +10,7 @@ import { detectarMomentoCierre } from "./momentos-cierre";
 import { generarLinkStripe } from "./pagos";
 import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } from "./privacidad";
 import { inferirYRegistrarFase, obtenerFaseLead } from "./cagc";
+import { generarSolicitudDatosFaltantes } from "./limpieza-leads";
 import { obtenerEtiquetasLead } from "./etiquetas";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -19,8 +20,13 @@ export async function procesarConversacion(
   mensajes: string[],
   waMessageId?: string
 ) {
-  // 1. Obtener o crear lead
-  const lead = await obtenerOCrearLead(telefono);
+  // 1. Obtener o crear lead — lanza si está en blacklist (S15.3)
+  let lead: Awaited<ReturnType<typeof obtenerOCrearLead>>;
+  try {
+    lead = await obtenerOCrearLead(telefono);
+  } catch {
+    return; // número en blacklist — descartar silenciosamente
+  }
 
   // S12.9 — Privacidad LFPDPPP: si el lead acepta en este mensaje, registrar y salir
   const textoEntrada = mensajes.join(" ");
@@ -149,10 +155,22 @@ export async function procesarConversacion(
   // S13.2 — Inferir y actualizar fase CAGC del lead (fire-and-forget, silencioso)
   void inferirYRegistrarFase(lead.id, mensajes, historial).catch(console.error);
 
-  // S14.2 — Sugerir etiquetas para el lead (fire-and-forget, solo si hay historial)
+  // S14.2 — Sugerir etiquetas (fire-and-forget, solo si hay historial)
   if (historial) {
     const { sugerirEtiquetasParaLead } = await import("@/lib/ai/etiquetas-ia");
     void sugerirEtiquetasParaLead(lead.id, mensajes, historial).catch(console.error);
+  }
+
+  // S15.2 — Solicitar datos faltantes si hay señal positiva y la conversación ya avanzó
+  if (historial && (!lead.nombre || !lead.email)) {
+    const solicitud = await generarSolicitudDatosFaltantes(
+      { id: lead.id, nombre: lead.nombre ?? null, email: lead.email ?? null },
+      historial
+    ).catch(() => null);
+    if (solicitud) {
+      void enviarRespuestaWhatsApp(telefono, [solicitud]).catch(console.error);
+      void guardarMensaje({ leadId: lead.id, contenido: solicitud, direccion: "saliente" }).catch(console.error);
+    }
   }
 }
 

@@ -148,6 +148,8 @@ export interface Database {
           metadata: Record<string, unknown>;
           privacidad_aceptada: boolean;
           privacidad_fecha: string | null;
+          archivado: boolean;
+          archivado_razon: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -169,6 +171,8 @@ export interface Database {
           metadata?: Record<string, unknown>;
           privacidad_aceptada?: boolean;
           privacidad_fecha?: string | null;
+          archivado?: boolean;
+          archivado_razon?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: Relationship[];
@@ -315,6 +319,12 @@ export interface Database {
           score_confianza: number;
           score_uso: number;
           score_cierre: number;
+          usos: number;
+          score_efectividad: number;
+          score_vigencia: number;
+          score_consenso: number;
+          score_cobertura: number;
+          metadata: Record<string, unknown>;
           activo: boolean;
           aprobado: boolean;
           origen: OrigenRecurso;
@@ -332,6 +342,12 @@ export interface Database {
           score_confianza?: number;
           score_uso?: number;
           score_cierre?: number;
+          usos?: number;
+          score_efectividad?: number;
+          score_vigencia?: number;
+          score_consenso?: number;
+          score_cobertura?: number;
+          metadata?: Record<string, unknown>;
           activo?: boolean;
           aprobado?: boolean;
           origen?: OrigenRecurso;
@@ -453,14 +469,14 @@ export interface Database {
       };
       sugerencias_ia: {
         Row: {
-          id: string; tipo: "pipeline" | "flujo" | "avatar" | "gatillo" | "general";
+          id: string; tipo: "pipeline" | "flujo" | "avatar" | "gatillo" | "kb_calidad" | "general";
           titulo: string; descripcion: string;
           prioridad: "urgente" | "importante" | "puede_esperar";
           aprobado: boolean | null; metadata: Record<string, unknown>;
           created_at: string; updated_at: string;
         };
         Insert: {
-          id?: string; tipo: "pipeline" | "flujo" | "avatar" | "gatillo" | "general";
+          id?: string; tipo: "pipeline" | "flujo" | "avatar" | "gatillo" | "kb_calidad" | "general";
           titulo: string; descripcion: string;
           prioridad?: "urgente" | "importante" | "puede_esperar";
           aprobado?: boolean | null; metadata?: Record<string, unknown>;
@@ -760,6 +776,19 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["nurturing_envios"]["Insert"]>;
         Relationships: Relationship[];
       };
+      // ── Sprint 15 · Limpieza ──────────────────────────────
+      blacklist: {
+        Row: { id: string; telefono: string | null; email: string | null; motivo: string; creado_por: string; created_at: string };
+        Insert: { id?: string; telefono?: string | null; email?: string | null; motivo?: string; creado_por?: string };
+        Update: Partial<Database["public"]["Tables"]["blacklist"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      categorias_suciedad_kb: {
+        Row: { id: string; nombre: string; descripcion: string; regla_deteccion: string; origen: "manual" | "ia_sugerido"; estado: "activa" | "pendiente_revision" | "archivada"; created_at: string; updated_at: string };
+        Insert: { id?: string; nombre: string; descripcion: string; regla_deteccion: string; origen?: "manual" | "ia_sugerido"; estado?: "activa" | "pendiente_revision" | "archivada" };
+        Update: Partial<Database["public"]["Tables"]["categorias_suciedad_kb"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       // ── Sprint 14 · Etiquetas ─────────────────────────────
       etiqueta_categorias: {
         Row: { id: string; nombre: string; descripcion: string | null; color: string; created_at: string };
@@ -850,6 +879,10 @@ export interface Database {
           contenido: string;
           similitud: number;
         }[];
+      };
+      buscar_duplicados_kb: {
+        Args: { umbral?: number };
+        Returns: { id_a: string; id_b: string; similitud: number }[];
       };
     };
     Enums: Record<string, never>;

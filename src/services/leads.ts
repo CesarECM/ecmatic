@@ -2,10 +2,15 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { anthropic } from "@/lib/ai/client";
 import { modeloPorTarea } from "@/lib/ai/model-router";
 import { enviarBienvenida } from "@/lib/email/transaccional";
+import { verificarBlacklist } from "@/services/limpieza-leads";
 import type { Temperamento, IntencionClasificada } from "@/lib/supabase/types";
 
-// ── S1.7: Busca o crea el lead por número de teléfono ───────────────────
+// ── S1.7 / S15.3: Busca o crea el lead por número de teléfono ───────────
+// Si el teléfono está en blacklist, lanza error silencioso para cortar el flujo.
 export async function obtenerOCrearLead(telefono: string) {
+  const enBlacklist = await verificarBlacklist(telefono).catch(() => false);
+  if (enBlacklist) throw new Error("[leads] Número en blacklist — flujo abortado");
+
   const supabase = createServiceClient();
 
   const { data: existente } = await supabase
