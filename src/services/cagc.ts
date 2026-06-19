@@ -3,8 +3,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 export interface FaseCAGC {
   numero: number;
   nombre: string;
+  nombre_tecnico: string;
   descripcion: string;
   senales_deteccion: string[];
+  acciones_empresa: string[];
 }
 
 export interface EstadoCAGC {

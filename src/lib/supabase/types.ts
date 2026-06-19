@@ -741,16 +741,20 @@ export interface Database {
           id: string;
           numero: number;
           nombre: string;
+          nombre_tecnico: string;
           descripcion: string;
           senales_deteccion: string[];
+          acciones_empresa: string[];
           created_at: string;
         };
         Insert: {
           id?: string;
           numero: number;
           nombre: string;
+          nombre_tecnico: string;
           descripcion: string;
           senales_deteccion?: string[];
+          acciones_empresa?: string[];
         };
         Update: Partial<Database["public"]["Tables"]["cagc_fases"]["Insert"]>;
         Relationships: Relationship[];
