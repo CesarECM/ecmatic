@@ -7,6 +7,7 @@ import { crearTicketHandoff } from "./tickets";
 import { detectarCompetidores } from "./competidores";
 import { detectarPromesas } from "./promesas";
 import { detectarMomentoCierre } from "./momentos-cierre";
+import { generarLinkStripe } from "./pagos";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -73,6 +74,19 @@ export async function procesarConversacion(
     historial,
     pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
   });
+
+  // 8.5. S8.1 — Si la intención es compra, generar link Stripe y añadir a la respuesta
+  if (intencion === "compra") {
+    const linkStripe = await generarLinkStripe(lead.id).catch(() => null);
+    if (linkStripe) {
+      await enviarRespuestaWhatsApp(telefono, [
+        ...dividirRespuesta(respuesta),
+        `💳 Puedes completar tu inscripción aquí: ${linkStripe}`,
+      ]);
+      await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
+      return;
+    }
+  }
 
   // 9. S1.10 — Detectar handoff
   const requiereHandoff = await necesitaHandoff(mensajes, respuesta);

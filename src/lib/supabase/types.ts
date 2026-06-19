@@ -28,6 +28,9 @@ export type OrigenMatriz = "manual" | "ia_sugerido" | "automatico";
 export type TipoGatillo = "escasez_cupo" | "escasez_evaluadores" | "urgencia_fecha" | "precio_vigente" | "evento_proximo" | "otro";
 export type AudienciaGatillo = "all" | "tripwire" | "premium";
 export type EstadoCita = "pendiente" | "confirmada" | "show" | "noshow" | "cancelada";
+export type MetodoPago = "stripe" | "manual";
+export type EstadoPago = "pendiente" | "completado" | "reembolsado";
+export type EstadoComision = "pendiente" | "pagada";
 export type ResultadoCita = "show" | "noshow" | "seguimiento";
 export type TemperaturaCierre = "fria" | "tibia" | "caliente";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
@@ -332,6 +335,52 @@ export interface Database {
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      pagos: {
+        Row: {
+          id: string; lead_id: string; vendedor_id: string | null;
+          monto: number; moneda: string; metodo: MetodoPago;
+          stripe_payment_intent_id: string | null; stripe_session_id: string | null;
+          comprobante_url: string | null; estado: EstadoPago; notas: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; vendedor_id?: string | null;
+          monto: number; moneda?: string; metodo: MetodoPago;
+          stripe_payment_intent_id?: string | null; stripe_session_id?: string | null;
+          comprobante_url?: string | null; estado?: EstadoPago; notas?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["pagos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      comisiones: {
+        Row: {
+          id: string; pago_id: string; vendedor_id: string;
+          monto_comision: number; porcentaje: number; estado: EstadoComision;
+          fecha_pago: string | null; metodo_pago: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; pago_id: string; vendedor_id: string;
+          monto_comision: number; porcentaje?: number; estado?: EstadoComision;
+          fecha_pago?: string | null; metodo_pago?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["comisiones"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      uso_ia: {
+        Row: {
+          id: string; proveedor: "anthropic" | "openai";
+          tokens_entrada: number; tokens_salida: number;
+          costo_estimado: number; fecha: string; created_at: string;
+        };
+        Insert: {
+          id?: string; proveedor: "anthropic" | "openai";
+          tokens_entrada?: number; tokens_salida?: number;
+          costo_estimado?: number; fecha?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["uso_ia"]["Insert"]>;
         Relationships: Relationship[];
       };
       citas: {

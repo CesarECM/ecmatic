@@ -95,6 +95,22 @@ const MODULOS: Modulo[] = [
     roles: ["vendedor"],
     sprint: "S7",
   },
+  {
+    href: "/admin/financiero",
+    titulo: "Panel financiero",
+    descripcion: "Ingresos del mes, comisiones por vendedor y gasto en APIs de IA.",
+    emoji: "💰",
+    roles: ["admin", "admin_financiero"],
+    sprint: "S8",
+  },
+  {
+    href: "/vendedor/comisiones",
+    titulo: "Mis comisiones",
+    descripcion: "Saldo pendiente y comisiones cobradas.",
+    emoji: "💵",
+    roles: ["vendedor"],
+    sprint: "S8",
+  },
 ];
 
 export default async function DashboardPage() {
