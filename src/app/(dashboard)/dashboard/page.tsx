@@ -121,6 +121,14 @@ const MODULOS: Modulo[] = [
     sprint: "S7",
   },
   {
+    href: "/admin/analitica",
+    titulo: "Analítica avanzada",
+    descripcion: "Calidad conversacional, competidores, experimentos de precio A/B y efectividad KB.",
+    emoji: "📊",
+    roles: ["admin"],
+    sprint: "S11",
+  },
+  {
     href: "/admin/sistema",
     titulo: "Estado del sistema",
     descripcion: "Panel LED de salud de todas las integraciones. Polling cada 60 segundos.",

@@ -47,11 +47,15 @@ export async function inferirEtapaPipeline(
   intencion: IntencionClasificada
 ): Promise<string> {
   const mapaEtapas: Record<IntencionClasificada, string> = {
-    compra: "Propuesta",
-    duda_tecnica: "Interesado",
-    objecion_precio: "Negociación",
-    abandono_inminente: "Contactado",
-    otro: "Contactado",
+    compra_inmediata:    "Propuesta",
+    compra_consideracion:"Interesado",
+    duda_tecnica:        "Interesado",
+    objecion_precio:     "Negociación",
+    objecion_confianza:  "Negociación",
+    abandono_inminente:  "Contactado",
+    fuera_de_contexto:   "Contactado",
+    compra:              "Propuesta",    // legacy
+    otro:                "Contactado",   // legacy
   };
 
   const nuevaEtapa = mapaEtapas[intencion] ?? "Contactado";

@@ -47,6 +47,20 @@ export async function generarRespuesta(
       ? recursos.map((r) => `[${r.tipo.toUpperCase()}] ${r.titulo}:\n${r.contenido}`).join("\n\n")
       : "No se encontraron recursos específicos. Responde con información general del Centro ECM.";
 
+  // S11.8 — Inyectar mejores prácticas aprobadas en el contexto
+  const { data: practicas } = await createServiceClient()
+    .from("recursos_conocimiento")
+    .select("contenido")
+    .eq("tipo", "practica_venta")
+    .eq("aprobado", true)
+    .eq("activo", true)
+    .order("score_confianza", { ascending: false })
+    .limit(3);
+
+  const practicasTexto = practicas?.length
+    ? `\nMEJORES PRÁCTICAS DE VENTA APLICABLES:\n${practicas.map((p) => `• ${p.contenido}`).join("\n")}`
+    : "";
+
   const systemPrompt = `Eres el asistente de ventas de Centro ECM, un centro de certificación CONOCER en México.
 Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.
 
@@ -61,7 +75,7 @@ ${contexto.historial || "(primera interacción)"}
 
 INFORMACIÓN DISPONIBLE:
 ${recursosTexto}
-
+${practicasTexto}
 ${formatearGatillosParaPrompt(gatillos)}
 
 INSTRUCCIONES:

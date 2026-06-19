@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/citas",           label: "Citas",              emoji: "📅", roles: ["admin"] },
   { href: "/admin/vendedores",      label: "Vendedores",         emoji: "🏆", roles: ["admin"] },
   { href: "/vendedor/agenda",       label: "Mi agenda",          emoji: "🗓️", roles: ["vendedor"] },
+  { href: "/admin/analitica",       label: "Analítica",          emoji: "📊", roles: ["admin"] },
   { href: "/admin/sistema",         label: "Estado sistema",     emoji: "🔌", roles: ["admin"] },
   { href: "/admin/aprobaciones",    label: "Aprobaciones",       emoji: "✅", roles: ["admin"] },
   { href: "/admin/log-ia",          label: "Log IA",             emoji: "📋", roles: ["admin"] },

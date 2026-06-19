@@ -75,8 +75,8 @@ export async function procesarConversacion(
     pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
   });
 
-  // 8.5. S8.1 — Si la intención es compra, generar link Stripe y añadir a la respuesta
-  if (intencion === "compra") {
+  // 8.5. S8.1 — Si la intención es compra inmediata, generar link Stripe
+  if (intencion === "compra_inmediata" || intencion === "compra") {
     const linkStripe = await generarLinkStripe(lead.id).catch(() => null);
     if (linkStripe) {
       await enviarRespuestaWhatsApp(telefono, [

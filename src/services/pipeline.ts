@@ -4,6 +4,8 @@ import { registrarCierre } from "@/services/conocimiento";
 import { actualizarListasAlMoverEtapa, excluirDeNurturing } from "@/lib/email/campanas";
 import { actualizarScoreMatriz } from "@/services/matriz";
 import { clasificarLead } from "@/services/avatares";
+import { calcularCalidadConversacion } from "@/services/calidad-conversacional";
+import { registrarConversionExperimento } from "@/services/experimentos";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -89,6 +91,16 @@ export async function moverLead(
   // S5.4 — Actualiza score de efectividad en Matriz nD al cerrar o perder
   if (nuevaEtapa === "Comprado" || nuevaEtapa === "Perdido") {
     void actualizarDimensionesAlCerrar(leadId, nuevaEtapa === "Comprado");
+  }
+
+  // S11.2 — Calcula calidad conversacional al cerrar
+  if (nuevaEtapa === "Comprado" || nuevaEtapa === "Perdido") {
+    void calcularCalidadConversacion(leadId, nuevaEtapa === "Comprado").catch(console.error);
+  }
+
+  // S11.4 — Registra conversión en experimento de precio si aplica
+  if (nuevaEtapa === "Comprado") {
+    void registrarConversionExperimento(leadId).catch(console.error);
   }
 
   // S5.6 — Clasifica el lead en un avatar al avanzar etapas relevantes

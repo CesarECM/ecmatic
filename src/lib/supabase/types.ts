@@ -18,11 +18,15 @@ export type MovidoPor = "ia" | "admin" | "vendedor" | "webhook";
 export type CanalNurturing = "whatsapp" | "email";
 export type EstadoEnvioNurturing = "pendiente" | "enviado" | "fallido" | "omitido";
 export type IntencionClasificada =
-  | "compra"
+  | "compra_inmediata"
+  | "compra_consideracion"
   | "duda_tecnica"
   | "objecion_precio"
+  | "objecion_confianza"
   | "abandono_inminente"
-  | "otro";
+  | "fuera_de_contexto"
+  | "compra"       // legacy
+  | "otro";        // legacy
 
 export type OrigenMatriz = "manual" | "ia_sugerido" | "automatico";
 export type TipoGatillo = "escasez_cupo" | "escasez_evaluadores" | "urgencia_fecha" | "precio_vigente" | "evento_proximo" | "otro";
@@ -335,6 +339,43 @@ export interface Database {
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      calidad_conversacional: {
+        Row: {
+          id: string; lead_id: string; vendedor_id: string | null;
+          score_total: number; coherencia: number; velocidad: number;
+          cobertura_objeciones: number; personalizacion: number;
+          ganada: boolean; analisis_ia: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; vendedor_id?: string | null;
+          score_total?: number; coherencia?: number; velocidad?: number;
+          cobertura_objeciones?: number; personalizacion?: number;
+          ganada?: boolean; analisis_ia?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["calidad_conversacional"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      experimentos_precios: {
+        Row: {
+          id: string; nombre: string; descripcion: string | null;
+          precio_a_centavos: number; precio_b_centavos: number;
+          segmento_a: string; segmento_b: string; activo: boolean;
+          ganador: "a" | "b" | null; conversiones_a: number; conversiones_b: number;
+          asignaciones_a: number; asignaciones_b: number;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; nombre: string; descripcion?: string | null;
+          precio_a_centavos: number; precio_b_centavos: number;
+          segmento_a?: string; segmento_b?: string; activo?: boolean;
+          ganador?: "a" | "b" | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["experimentos_precios"]["Insert"] & {
+          conversiones_a?: number; conversiones_b?: number;
+          asignaciones_a?: number; asignaciones_b?: number;
+        }>;
         Relationships: Relationship[];
       };
       log_ia: {
