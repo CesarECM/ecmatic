@@ -337,6 +337,59 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
         Relationships: Relationship[];
       };
+      smartbuilder_accesos: {
+        Row: {
+          id: string; lead_id: string; candidato_id: string | null;
+          estandares: string[]; estado: "pendiente" | "activo" | "completado";
+          alta_confirmada: boolean; ultimo_avance: number; alerta_enviada: boolean;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; candidato_id?: string | null;
+          estandares?: string[]; estado?: "pendiente" | "activo" | "completado";
+          alta_confirmada?: boolean; ultimo_avance?: number; alerta_enviada?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["smartbuilder_accesos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      smartbuilder_progreso: {
+        Row: {
+          id: string; lead_id: string; porcentaje: number;
+          datos_raw: unknown | null; fecha: string; created_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; porcentaje?: number;
+          datos_raw?: unknown | null; fecha?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["smartbuilder_progreso"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      encuestas: {
+        Row: {
+          id: string; lead_id: string; preguntas: string[];
+          respuestas: unknown | null; estado: "pendiente" | "enviada" | "respondida";
+          procesada_ia: boolean; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; preguntas?: string[];
+          respuestas?: unknown | null; estado?: "pendiente" | "enviada" | "respondida";
+          procesada_ia?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["encuestas"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      referidos: {
+        Row: {
+          id: string; lead_id: string; codigo: string;
+          lead_referido_id: string | null; convertido: boolean; created_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; codigo: string;
+          lead_referido_id?: string | null; convertido?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["referidos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       pagos: {
         Row: {
           id: string; lead_id: string; vendedor_id: string | null;

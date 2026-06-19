@@ -11,6 +11,10 @@
     {
       "path": "/api/admin/recordatorios",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/admin/smartbuilder",
+      "schedule": "0 12 * * *"
     }
   ]
 }

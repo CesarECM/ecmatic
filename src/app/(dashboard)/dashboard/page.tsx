@@ -96,6 +96,14 @@ const MODULOS: Modulo[] = [
     sprint: "S7",
   },
   {
+    href: "/admin/postventa",
+    titulo: "Post-Venta",
+    descripcion: "SmartBuilderEC, progreso de candidatos, churn, encuestas y referidos.",
+    emoji: "🎓",
+    roles: ["admin"],
+    sprint: "S9",
+  },
+  {
     href: "/admin/financiero",
     titulo: "Panel financiero",
     descripcion: "Ingresos del mes, comisiones por vendedor y gasto en APIs de IA.",

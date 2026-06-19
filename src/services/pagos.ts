@@ -3,6 +3,7 @@ import { crearCheckoutSession, isConfigured } from "@/lib/stripe/client";
 import { moverLead } from "@/services/pipeline";
 import { calcularComision } from "@/services/comisiones";
 import { enviarBienvenida } from "@/lib/email/transaccional";
+import { altaAccesoSmartBuilder } from "@/services/smartbuilder";
 import type { MetodoPago, EstadoPago } from "@/lib/supabase/types";
 
 export interface DatosPago {
@@ -75,6 +76,9 @@ async function flujoPostCompra(leadId: string): Promise<void> {
     .single();
 
   await moverLead(leadId, "Comprado", "webhook");
+
+  // S9.1 — Alta en SmartBuilderEC (fire-and-forget)
+  void altaAccesoSmartBuilder(leadId).catch(console.error);
 
   if (lead?.email) {
     await enviarBienvenida({ nombre: lead.nombre, email: lead.email }).catch(console.error);
