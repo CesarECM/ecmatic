@@ -8,6 +8,7 @@ import { detectarCompetidores } from "./competidores";
 import { detectarPromesas } from "./promesas";
 import { detectarMomentoCierre } from "./momentos-cierre";
 import { generarLinkStripe } from "./pagos";
+import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } from "./privacidad";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -18,6 +19,19 @@ export async function procesarConversacion(
 ) {
   // 1. Obtener o crear lead
   const lead = await obtenerOCrearLead(telefono);
+
+  // S12.9 — Privacidad LFPDPPP: si el lead acepta en este mensaje, registrar y salir
+  const textoEntrada = mensajes.join(" ");
+  if (!lead.privacidad_aceptada && detectarAceptacion(textoEntrada)) {
+    await marcarPrivacidadAceptada(lead.id);
+    for (const contenido of mensajes) {
+      await guardarMensaje({ leadId: lead.id, contenido, direccion: "entrante", waMessageId });
+    }
+    const confirmacion = "¡Gracias por aceptar nuestra Política de Privacidad! ¿En qué puedo ayudarte hoy con tu certificación CONOCER?";
+    await enviarRespuestaWhatsApp(telefono, [confirmacion]);
+    await guardarMensaje({ leadId: lead.id, contenido: confirmacion, direccion: "saliente" });
+    return;
+  }
 
   // 2. S1.7 — rama cliente previo
   if (lead.compra_previa) {
@@ -104,6 +118,11 @@ export async function procesarConversacion(
     contenido: respuesta,
     direccion: "saliente",
   });
+
+  // S12.9 — En primera interacción, añadir aviso de privacidad (fire-and-forget)
+  if (!lead.privacidad_aceptada && !historial) {
+    void enviarRespuestaWhatsApp(telefono, [mensajeAvisoPrivacidad()]).catch(console.error);
+  }
 
   // S5.8 — Detectar competidores mencionados (fire-and-forget)
   const textoCompleto = mensajes.join(" ");

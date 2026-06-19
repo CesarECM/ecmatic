@@ -2,6 +2,8 @@ const BASE_URL = "https://graph.facebook.com/v20.0";
 const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 const TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!;
 
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+
 export interface WaTextMessage {
   to: string;
   body: string;
@@ -24,6 +26,10 @@ async function post(endpoint: string, body: unknown) {
   return res.json();
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function sendTextMessage(to: string, body: string) {
   return post(`/${PHONE_ID}/messages`, {
     messaging_product: "whatsapp",
@@ -32,6 +38,23 @@ export async function sendTextMessage(to: string, body: string) {
     type: "text",
     text: { body, preview_url: false },
   });
+}
+
+// Envía con retry exponencial (1s / 2s / 4s). Lanza si todos los intentos fallan.
+export async function sendTextMessageWithRetry(to: string, body: string): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await sendTextMessage(to, body);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+      }
+    }
+  }
+  throw lastErr;
 }
 
 export async function markAsRead(messageId: string) {

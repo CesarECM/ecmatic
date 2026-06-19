@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import type { TipoGatillo, AudienciaGatillo, PipelineRuta } from "@/lib/supabase/types";
 
 export interface Gatillo {
@@ -136,7 +137,7 @@ Máximo 3 sugerencias. Solo sugiere los que tengan evidencia real en los mensaje
 
   try {
     const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model: modeloPorTarea("ANALISIS"),
       max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });

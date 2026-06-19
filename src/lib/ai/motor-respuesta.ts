@@ -1,4 +1,5 @@
-import { anthropic, CLAUDE_MODEL, generarEmbedding } from "./client";
+import { anthropic, generarEmbedding } from "./client";
+import { modeloPorTarea } from "./model-router";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
 import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
@@ -87,7 +88,7 @@ INSTRUCCIONES:
 - Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto`;
 
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: modeloPorTarea("RESPUESTA"),
     max_tokens: 400,
     system: systemPrompt,
     messages: [

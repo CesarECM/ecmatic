@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { generarEmbedding, anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { generarEmbedding, anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import type { TipoRecurso, OrigenRecurso } from "@/lib/supabase/types";
 
 interface VersionRecurso {
@@ -218,7 +219,7 @@ export async function detectarObsoletos(): Promise<AlertaRecurso[]> {
 export async function sugerirRecursoDesdeQuery(query: string): Promise<void> {
   try {
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model: modeloPorTarea("SUGERIR_KB"),
       max_tokens: 300,
       system: `Analiza la pregunta de un lead sobre certificaciones CONOCER en México.
 Determina si se debería crear un nuevo recurso en la base de conocimiento para responderla mejor.
@@ -241,7 +242,7 @@ Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta po
 // S2.9 — Extrae y crea recursos desde contenido externo (URL o texto pegado)
 export async function procesarFuenteExterna(contenido: string): Promise<number> {
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: modeloPorTarea("SUGERIR_KB"),
     max_tokens: 1500,
     system: `Eres un extractor de conocimiento para un centro de certificación CONOCER en México.
 Analiza el contenido y extrae hasta 5 recursos útiles: FAQs, objeciones comunes, descripciones de servicios o prácticas de venta.

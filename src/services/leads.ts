@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import { enviarBienvenida } from "@/lib/email/transaccional";
 import type { Temperamento, IntencionClasificada } from "@/lib/supabase/types";
 
@@ -100,7 +101,7 @@ export async function inferirTemperamento(
   if (texto.length < 20) return; // muy poco texto para inferir
 
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: modeloPorTarea("CLASIFICAR"),
     max_tokens: 5,
     system: `Clasifica el estilo de comunicación del siguiente texto según DISC.
 Responde SOLO con una letra: D, I, S o C.

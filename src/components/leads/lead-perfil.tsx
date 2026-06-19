@@ -1,15 +1,17 @@
 "use client";
 
+import { useTransition, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { moverLeadDesdePerfilAction, asignarVendedorAction, toggleNurturingAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
+import { moverLeadDesdePerfilAction, asignarVendedorAction, toggleNurturingAction, actualizarDatosB2BAction, emitirFacturaAction, marcarPrivacidadManualAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
   pipeline_stage: string; pipeline_ruta: string; temperamento_inferido: string | null;
   score_salud: number; compra_previa: boolean; created_at: string; vendedor_id: string | null;
   metadata: Record<string, unknown> | null;
+  privacidad_aceptada: boolean; privacidad_fecha: string | null;
 };
 type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
@@ -35,6 +37,10 @@ const CANAL_ICON: Record<string, string> = {
 
 export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: LeadPerfilProps) {
   const scoreColor = lead.score_salud >= 67 ? "text-green-600" : lead.score_salud >= 34 ? "text-yellow-600" : "text-red-600";
+  const [facturaPending, startFactura] = useTransition();
+  const [facturaMsg, setFacturaMsg] = useState<string | null>(null);
+  const rfc = lead.metadata?.rfc as string | undefined;
+  const cfdiUuid = lead.metadata?.cfdi_uuid as string | undefined;
 
   return (
     <div className="space-y-4">
@@ -107,6 +113,85 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
         </CardContent>
       </Card>
 
+      {/* S12.5 — Datos B2B */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Datos B2B</CardTitle></CardHeader>
+        <CardContent>
+          <form action={actualizarDatosB2BAction} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input type="hidden" name="leadId" value={lead.id} />
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Empresa</label>
+              <input
+                name="empresa"
+                defaultValue={(lead.metadata?.empresa as string) ?? ""}
+                placeholder="Nombre de la empresa"
+                className="w-full text-sm border rounded-md px-3 py-1.5 bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Cargo</label>
+              <input
+                name="cargo"
+                defaultValue={(lead.metadata?.cargo as string) ?? ""}
+                placeholder="Puesto o cargo"
+                className="w-full text-sm border rounded-md px-3 py-1.5 bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Tamaño empresa</label>
+              <select
+                name="tamano_empresa"
+                defaultValue={(lead.metadata?.tamano_empresa as string) ?? ""}
+                className="w-full text-sm border rounded-md px-3 py-1.5 bg-background"
+              >
+                <option value="">Sin especificar</option>
+                <option value="micro">Micro (1-10)</option>
+                <option value="pequeña">Pequeña (11-50)</option>
+                <option value="mediana">Mediana (51-250)</option>
+                <option value="grande">Grande (250+)</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">RFC</label>
+              <input
+                name="rfc"
+                defaultValue={(lead.metadata?.rfc as string) ?? ""}
+                placeholder="RFC para facturación"
+                className="w-full text-sm border rounded-md px-3 py-1.5 bg-background uppercase"
+              />
+            </div>
+            <div className="sm:col-span-2 flex justify-end">
+              <Button type="submit" size="sm">Guardar datos B2B</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* S12.9 — Estado de privacidad LFPDPPP */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Privacidad LFPDPPP</CardTitle></CardHeader>
+        <CardContent className="flex items-center gap-4">
+          {lead.privacidad_aceptada ? (
+            <div className="flex-1 text-sm text-green-700 font-medium">
+              Aviso aceptado
+              {lead.privacidad_fecha && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  — {new Date(lead.privacidad_fecha).toLocaleDateString("es-MX")}
+                </span>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="flex-1 text-sm text-yellow-700">Aviso de privacidad pendiente de aceptación.</p>
+              <form action={marcarPrivacidadManualAction}>
+                <input type="hidden" name="leadId" value={lead.id} />
+                <Button type="submit" size="sm" variant="outline">Marcar aceptado</Button>
+              </form>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* S4.6 — Pausa de nurturing */}
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">Nurturing automático</CardTitle></CardHeader>
@@ -125,6 +210,59 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
           </form>
         </CardContent>
       </Card>
+
+      {/* S12.6 — Facturación (solo si hay RFC) */}
+      {rfc && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Facturación CFDI</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {cfdiUuid && (
+              <p className="text-xs text-green-700 font-medium">Último UUID: {cfdiUuid}</p>
+            )}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                startFactura(async () => {
+                  const res = await emitirFacturaAction(fd);
+                  setFacturaMsg(res.ok ? `Factura emitida: ${res.uuid}` : `Error: ${res.error}`);
+                });
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            >
+              <input type="hidden" name="leadId" value={lead.id} />
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Monto total (con IVA)</label>
+                <input name="monto" type="number" min="1" step="0.01" required
+                  placeholder="1160.00"
+                  className="w-full text-sm border rounded-md px-3 py-1.5 bg-background" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">CP fiscal del receptor</label>
+                <input name="cp_fiscal" defaultValue={(lead.metadata?.cp_fiscal as string) ?? ""}
+                  placeholder="00000"
+                  className="w-full text-sm border rounded-md px-3 py-1.5 bg-background" />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-xs text-muted-foreground">Descripción del servicio</label>
+                <input name="descripcion" defaultValue="Servicio de certificación CONOCER"
+                  className="w-full text-sm border rounded-md px-3 py-1.5 bg-background" />
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-3">
+                <Button type="submit" size="sm" disabled={facturaPending}>
+                  {facturaPending ? "Emitiendo..." : "Emitir factura"}
+                </Button>
+                <span className="text-xs text-muted-foreground">RFC: {rfc}</span>
+              </div>
+            </form>
+            {facturaMsg && (
+              <p className={`text-xs font-medium ${facturaMsg.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>
+                {facturaMsg}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Historial de pipeline */}
       {historial.length > 0 && (

@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import { registrarUsoIA } from "./alertas-ia";
 
 // S11.2 — Califica la calidad de una conversación cerrada (ganada o perdida)
@@ -46,7 +47,7 @@ Responde en JSON:
 
   try {
     const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL, max_tokens: 300,
+      model: modeloPorTarea("ANALISIS"), max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });
     void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});

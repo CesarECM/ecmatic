@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 
 export interface FiltrosMomentos {
   leadId?: string;
@@ -68,7 +69,7 @@ Si no hay momento relevante, responde {"detectado": false}`;
 
   try {
     const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model: modeloPorTarea("ANALISIS"),
       max_tokens: 150,
       messages: [{ role: "user", content: prompt }],
     });

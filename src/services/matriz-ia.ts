@@ -1,4 +1,5 @@
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import { crearCelda, listarMatriz, buscarEnMatriz } from "./matriz";
 import type { DimensionesMatriz } from "@/lib/supabase/types";
 
@@ -31,7 +32,7 @@ Genera UNA respuesta corta (máx 2 oraciones), cálida, orientada al cierre, ada
 No menciones el perfil internamente. Responde en español.`;
 
   const res = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: modeloPorTarea("ANALISIS"),
     max_tokens: 200,
     messages: [{ role: "user", content: prompt }],
   });
@@ -88,7 +89,7 @@ para el siguiente perfil de lead (máx 2 oraciones, orientada al cierre, en espa
 - Tipo cliente: ${dims.tipo_cliente ?? "B2C"}`;
 
   const res = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: modeloPorTarea("ANALISIS"),
     max_tokens: 150,
     messages: [{ role: "user", content: prompt }],
   });

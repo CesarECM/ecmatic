@@ -69,52 +69,46 @@ export async function actualizarSecuencia(
 //          > 3 envíos en últimos 7 días, ticket cerrado hace < 48h
 export async function obtenerLeadsParaNurturing(): Promise<LeadParaNurturing[]> {
   const supabase = createServiceClient();
-  const secuencias = await listarSecuencias(true);
+  const hace48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const hace7d  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Ronda 1: todas las queries independientes en paralelo (sin depender unas de otras)
+  const [
+    secuencias,
+    { data: leads, error },
+    { data: ticketsAbiertos },
+    { data: ticketsCerradosRecientes },
+    { data: enviosRecientes },
+  ] = await Promise.all([
+    listarSecuencias(true),
+    supabase
+      .from("leads")
+      .select("id, nombre, telefono, email, pipeline_stage, pipeline_ruta, updated_at, metadata")
+      .eq("activo", true)
+      .not("pipeline_stage", "in", '("Comprado","Perdido")'),
+    supabase.from("tickets").select("lead_id").in("estado", ["abierto", "en_atencion"]),
+    supabase.from("tickets").select("lead_id").eq("estado", "cerrado").gte("updated_at", hace48h),
+    supabase.from("nurturing_envios").select("lead_id").eq("estado", "enviado").gte("created_at", hace7d),
+  ]);
+
   if (!secuencias.length) return [];
-
-  const { data: leads, error } = await supabase
-    .from("leads")
-    .select("id, nombre, telefono, email, pipeline_stage, pipeline_ruta, updated_at, metadata")
-    .eq("activo", true)
-    .not("pipeline_stage", "in", '("Comprado","Perdido")');
-
   if (error) throw new Error(`[nurturing] Error obteniendo leads: ${error.message}`);
   if (!leads?.length) return [];
 
-  // S4.6 — Exclusión 1: leads con ticket abierto o en atención
-  const { data: ticketsAbiertos } = await supabase
-    .from("tickets")
-    .select("lead_id")
-    .in("estado", ["abierto", "en_atencion"]);
-  const idsConTicket = new Set((ticketsAbiertos ?? []).map((t) => t.lead_id));
-
-  // S4.6 — Exclusión 2: leads con ticket cerrado hace < 48h (recién salidos de handoff)
-  const hace48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-  const { data: ticketsCerradosRecientes } = await supabase
-    .from("tickets")
-    .select("lead_id")
-    .eq("estado", "cerrado")
-    .gte("updated_at", hace48h);
-  const idsTicketReciente = new Set((ticketsCerradosRecientes ?? []).map((t) => t.lead_id));
-
-  // S4.6 — Exclusión 3: leads con > 3 envíos nurturing en los últimos 7 días
-  const hace7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: enviosRecientes } = await supabase
-    .from("nurturing_envios")
-    .select("lead_id")
-    .eq("estado", "enviado")
-    .gte("created_at", hace7d);
-  const conteoSemanal = new Map<string, number>();
-  for (const e of enviosRecientes ?? []) {
-    conteoSemanal.set(e.lead_id, (conteoSemanal.get(e.lead_id) ?? 0) + 1);
-  }
-
+  // Ronda 2: mensajes del último contacto — filtrando por IDs ya conocidos
   const { data: ultimosMensajes } = await supabase
     .from("mensajes")
     .select("lead_id, created_at")
     .in("lead_id", leads.map((l) => l.id))
     .eq("direccion", "saliente")
     .order("created_at", { ascending: false });
+
+  const idsConTicket     = new Set((ticketsAbiertos ?? []).map((t) => t.lead_id));
+  const idsTicketReciente = new Set((ticketsCerradosRecientes ?? []).map((t) => t.lead_id));
+  const conteoSemanal    = new Map<string, number>();
+  for (const e of enviosRecientes ?? []) {
+    conteoSemanal.set(e.lead_id, (conteoSemanal.get(e.lead_id) ?? 0) + 1);
+  }
 
   const ultimoContacto = new Map<string, Date>();
   for (const m of ultimosMensajes ?? []) {

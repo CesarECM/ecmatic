@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 
 export interface MetricasVendedor {
   vendedorId: string;
@@ -91,7 +92,7 @@ Sé específico y accionable. En español.`;
 
   try {
     const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL, max_tokens: 400,
+      model: modeloPorTarea("COACHING"), max_tokens: 400,
       messages: [{ role: "user", content: prompt }],
     });
     const raw = (res.content[0] as { text: string }).text.trim();

@@ -5,7 +5,8 @@ import { cerrarTicket } from "@/services/tickets";
 import { sendTextMessage } from "@/lib/whatsapp/client";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 
 export async function responderTicketAction(formData: FormData) {
   const ticketId = formData.get("ticketId") as string;
@@ -52,7 +53,7 @@ export async function tomarTicketAction(formData: FormData) {
 async function generarSugerenciaKb(resolucion: string) {
   try {
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model: modeloPorTarea("ANALISIS"),
       max_tokens: 300,
       system: `Analiza la resolución de un ticket de soporte y determina si debería crear o actualizar un recurso en la base de conocimiento.
 Responde en JSON con este formato exacto:

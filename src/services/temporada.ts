@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import { sendTextMessage } from "@/lib/whatsapp/client";
 import { registrarUsoIA } from "./alertas-ia";
 
@@ -42,7 +43,7 @@ export async function verificarTemporadaAlta(): Promise<{
 
   try {
     const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL, max_tokens: 200,
+      model: modeloPorTarea("ANALISIS"), max_tokens: 200,
       messages: [{ role: "user", content: prompt }],
     });
     void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});

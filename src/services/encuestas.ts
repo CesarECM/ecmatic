@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { anthropic } from "@/lib/ai/client";
+import { modeloPorTarea } from "@/lib/ai/model-router";
 import { sendTextMessage } from "@/lib/whatsapp/client";
 import { registrarUsoIA } from "./alertas-ia";
 import { crearRecurso } from "./conocimiento";
@@ -28,7 +29,7 @@ Genera preguntas cortas, conversacionales, aptas para WhatsApp.
 Responde en JSON: ["pregunta 1", "pregunta 2", "pregunta 3"]`;
 
   const res = await anthropic.messages.create({
-    model: CLAUDE_MODEL, max_tokens: 200,
+    model: modeloPorTarea("ENCUESTA"), max_tokens: 200,
     messages: [{ role: "user", content: prompt }],
   });
   void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
@@ -96,7 +97,7 @@ Responde en JSON:
 
   try {
     const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL, max_tokens: 300,
+      model: modeloPorTarea("ENCUESTA"), max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });
     void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});

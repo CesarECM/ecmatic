@@ -145,6 +145,8 @@ export interface Database {
           compra_previa: boolean;
           activo: boolean;
           metadata: Record<string, unknown>;
+          privacidad_aceptada: boolean;
+          privacidad_fecha: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -164,6 +166,8 @@ export interface Database {
           compra_previa?: boolean;
           activo?: boolean;
           metadata?: Record<string, unknown>;
+          privacidad_aceptada?: boolean;
+          privacidad_fecha?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: Relationship[];
@@ -339,6 +343,36 @@ export interface Database {
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      utm_sources: {
+        Row: {
+          id: string; lead_id: string | null; utm_source: string | null;
+          utm_medium: string | null; utm_campaign: string | null;
+          utm_content: string | null; utm_term: string | null;
+          referrer: string | null; ip_address: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; lead_id?: string | null; utm_source?: string | null;
+          utm_medium?: string | null; utm_campaign?: string | null;
+          utm_content?: string | null; utm_term?: string | null;
+          referrer?: string | null; ip_address?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["utm_sources"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      mensajes_cola: {
+        Row: {
+          id: string; telefono: string; contenido: string;
+          intentos: number; estado: "pendiente" | "enviado" | "fallido";
+          error_detalle: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; telefono: string; contenido: string;
+          intentos?: number; estado?: "pendiente" | "enviado" | "fallido";
+          error_detalle?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["mensajes_cola"]["Insert"]>;
         Relationships: Relationship[];
       };
       calidad_conversacional: {

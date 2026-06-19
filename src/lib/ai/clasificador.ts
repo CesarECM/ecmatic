@@ -1,4 +1,5 @@
-import { anthropic, CLAUDE_MODEL } from "./client";
+import { anthropic } from "./client";
+import { modeloPorTarea } from "./model-router";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import type { IntencionClasificada } from "@/lib/supabase/types";
 
@@ -33,7 +34,7 @@ export async function clasificarIntencion(
   const texto = mensajes.join("\n");
 
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model: modeloPorTarea("CLASIFICAR"),
     max_tokens: 15,
     system: `Eres un clasificador de intención de leads para un centro de certificación CONOCER en México.
 Responde ÚNICAMENTE con una de estas palabras exactas (sin espacios adicionales):
