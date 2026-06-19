@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
 import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
 import { registrarUsoIA } from "@/services/alertas-ia";
+import { registrarAccionIA } from "@/services/log-ia";
 import type { PipelineRuta } from "@/lib/supabase/types";
 
 interface ContextoLead {
@@ -83,9 +84,9 @@ INSTRUCCIONES:
     ],
   });
 
-  // S8.8 — Registrar uso de tokens para estimación de costos (fire-and-forget)
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens)
-    .catch(() => {});
+  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
+  void registrarAccionIA({ tipoAccion: "generar_respuesta", resultado: "enviado",
+    metadata: { recursos_usados: recursos.length } }).catch(() => {});
 
   return (response.content[0] as { text: string }).text.trim();
 }

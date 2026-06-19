@@ -1,20 +1,10 @@
 {
   "crons": [
-    {
-      "path": "/api/admin/nurturing",
-      "schedule": "0 14 * * 1-5"
-    },
-    {
-      "path": "/api/admin/gatillos",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/admin/recordatorios",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/admin/smartbuilder",
-      "schedule": "0 12 * * *"
-    }
+    { "path": "/api/admin/nurturing",       "schedule": "0 14 * * 1-5" },
+    { "path": "/api/admin/gatillos",        "schedule": "0 13 * * *" },
+    { "path": "/api/admin/recordatorios",   "schedule": "*/30 * * * *" },
+    { "path": "/api/admin/smartbuilder",    "schedule": "0 12 * * *" },
+    { "path": "/api/admin/health",          "schedule": "*/15 * * * *" },
+    { "path": "/api/admin/resumen-semanal", "schedule": "0 14 * * 1" }
   ]
 }

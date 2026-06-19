@@ -337,6 +337,37 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
         Relationships: Relationship[];
       };
+      log_ia: {
+        Row: {
+          id: string; tipo_accion: string; lead_id: string | null;
+          recurso_kb_id: string | null; resultado: string | null;
+          metadata: Record<string, unknown>; created_at: string;
+        };
+        Insert: {
+          id?: string; tipo_accion: string; lead_id?: string | null;
+          recurso_kb_id?: string | null; resultado?: string | null;
+          metadata?: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["log_ia"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      sugerencias_ia: {
+        Row: {
+          id: string; tipo: "pipeline" | "flujo" | "avatar" | "gatillo" | "general";
+          titulo: string; descripcion: string;
+          prioridad: "urgente" | "importante" | "puede_esperar";
+          aprobado: boolean | null; metadata: Record<string, unknown>;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; tipo: "pipeline" | "flujo" | "avatar" | "gatillo" | "general";
+          titulo: string; descripcion: string;
+          prioridad?: "urgente" | "importante" | "puede_esperar";
+          aprobado?: boolean | null; metadata?: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["sugerencias_ia"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       smartbuilder_accesos: {
         Row: {
           id: string; lead_id: string; candidato_id: string | null;

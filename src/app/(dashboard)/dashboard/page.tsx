@@ -3,6 +3,31 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Rol } from "@/lib/supabase/types";
 
+// S10.5 — KPIs en tiempo real
+async function obtenerKPIs() {
+  const svc = createServiceClient();
+  const inicioSemana = new Date();
+  inicioSemana.setDate(inicioSemana.getDate() - 7);
+  const desde = inicioSemana.toISOString();
+  const inicioMes = new Date();
+  inicioMes.setDate(1);
+
+  const [
+    { count: leadsActivos },
+    { count: leadsNuevos },
+    { count: ticketsAbiertos },
+    { data: pagos },
+  ] = await Promise.all([
+    svc.from("leads").select("id", { count: "exact", head: true }).eq("activo", true),
+    svc.from("leads").select("id", { count: "exact", head: true }).gte("created_at", desde),
+    svc.from("tickets").select("id", { count: "exact", head: true }).eq("estado", "abierto"),
+    svc.from("pagos").select("monto").eq("estado", "completado").gte("created_at", inicioMes.toISOString()),
+  ]);
+
+  const ingresosMes = (pagos ?? []).reduce((s, p) => s + Number(p.monto), 0);
+  return { leadsActivos: leadsActivos ?? 0, leadsNuevos: leadsNuevos ?? 0, ticketsAbiertos: ticketsAbiertos ?? 0, ingresosMes };
+}
+
 export const metadata = { title: "Dashboard · ECMatic" };
 
 interface Modulo {
@@ -96,6 +121,30 @@ const MODULOS: Modulo[] = [
     sprint: "S7",
   },
   {
+    href: "/admin/sistema",
+    titulo: "Estado del sistema",
+    descripcion: "Panel LED de salud de todas las integraciones. Polling cada 60 segundos.",
+    emoji: "🔌",
+    roles: ["admin"],
+    sprint: "S10",
+  },
+  {
+    href: "/admin/aprobaciones",
+    titulo: "Cola de aprobaciones",
+    descripcion: "Sugerencias IA pendientes: KB, Matriz nD y pipeline. Con prioridad visual.",
+    emoji: "✅",
+    roles: ["admin"],
+    sprint: "S10",
+  },
+  {
+    href: "/admin/log-ia",
+    titulo: "Log de IA",
+    descripcion: "Registro consultable de todas las acciones tomadas por la IA.",
+    emoji: "📋",
+    roles: ["admin"],
+    sprint: "S10",
+  },
+  {
     href: "/admin/postventa",
     titulo: "Post-Venta",
     descripcion: "SmartBuilderEC, progreso de candidatos, churn, encuestas y referidos.",
@@ -133,6 +182,8 @@ export default async function DashboardPage() {
 
   const rol = (profile?.rol ?? "vendedor") as Rol;
   const modulos = MODULOS.filter((m) => m.roles.includes(rol));
+  const kpis = rol === "admin" || rol === "admin_financiero" ? await obtenerKPIs() : null;
+  const fmt = (n: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
 
   return (
     <div className="space-y-6">
@@ -141,9 +192,26 @@ export default async function DashboardPage() {
           Bienvenido{profile?.nombre ? `, ${profile.nombre}` : ""}
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          CRM con IA para Centro ECM · Sprints 0–5 activos
+          CRM con IA para Centro ECM · Sprints 0–10 activos
         </p>
       </div>
+
+      {/* S10.5 — KPIs en tiempo real */}
+      {kpis && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Leads activos", value: kpis.leadsActivos },
+            { label: "Nuevos esta semana", value: kpis.leadsNuevos },
+            { label: "Tickets abiertos", value: kpis.ticketsAbiertos },
+            { label: "Ingresos del mes", value: fmt(kpis.ingresosMes) },
+          ].map((k) => (
+            <div key={k.label} className="rounded-lg border bg-card p-4 text-center">
+              <p className="text-xl font-bold">{k.value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{k.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {modulos.map((m) => (
