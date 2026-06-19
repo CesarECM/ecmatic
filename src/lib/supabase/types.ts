@@ -25,6 +25,8 @@ export type IntencionClasificada =
   | "otro";
 
 export type OrigenMatriz = "manual" | "ia_sugerido" | "automatico";
+export type TipoGatillo = "escasez_cupo" | "escasez_evaluadores" | "urgencia_fecha" | "precio_vigente" | "evento_proximo" | "otro";
+export type AudienciaGatillo = "all" | "tripwire" | "premium";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
 
 export interface DimensionesMatriz {
@@ -327,6 +329,32 @@ export interface Database {
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["nurturing_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      gatillos: {
+        Row: {
+          id: string;
+          tipo: TipoGatillo;
+          nombre: string;
+          valor_actual: string;
+          activo: boolean;
+          fecha_expiracion: string | null;
+          audiencia_objetivo: AudienciaGatillo;
+          alerta_enviada: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tipo: TipoGatillo;
+          nombre: string;
+          valor_actual?: string;
+          activo?: boolean;
+          fecha_expiracion?: string | null;
+          audiencia_objetivo?: AudienciaGatillo;
+          alerta_enviada?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["gatillos"]["Insert"]>;
         Relationships: Relationship[];
       };
       matriz_nd: {

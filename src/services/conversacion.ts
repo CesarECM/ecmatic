@@ -61,7 +61,7 @@ export async function procesarConversacion(
   const supabase = createServiceClient();
   const { data: leadActualizado } = await supabase
     .from("leads")
-    .select("nombre, temperamento_inferido, pipeline_stage, compra_previa")
+    .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa")
     .eq("id", lead.id)
     .single();
 
@@ -71,6 +71,7 @@ export async function procesarConversacion(
     pipelineStage: leadActualizado?.pipeline_stage ?? "Nuevo",
     compraPreviaa: leadActualizado?.compra_previa ?? false,
     historial,
+    pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
   });
 
   // 9. S1.10 — Detectar handoff

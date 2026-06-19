@@ -63,6 +63,14 @@ const MODULOS: Modulo[] = [
     roles: ["admin"],
     sprint: "S5",
   },
+  {
+    href: "/admin/gatillos",
+    titulo: "Gatillos mentales",
+    descripcion: "Escasez, urgencia y precio activos. La IA los inyecta en WhatsApp y email automáticamente.",
+    emoji: "⚡",
+    roles: ["admin"],
+    sprint: "S6",
+  },
 ];
 
 export default async function DashboardPage() {

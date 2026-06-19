@@ -1,6 +1,8 @@
 import { anthropic, CLAUDE_MODEL, generarEmbedding } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
+import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
+import type { PipelineRuta } from "@/lib/supabase/types";
 
 interface ContextoLead {
   nombre: string | null;
@@ -8,6 +10,7 @@ interface ContextoLead {
   pipelineStage: string;
   compraPreviaa: boolean;
   historial: string;
+  pipelineRuta?: PipelineRuta;
 }
 
 // ── S1.4: Búsqueda semántica en base de conocimiento ─────────────────────
@@ -30,7 +33,10 @@ export async function generarRespuesta(
   contexto: ContextoLead
 ): Promise<string> {
   const queryParaBusqueda = mensajes.join(" ");
-  const recursos = await buscarRecursos(queryParaBusqueda);
+  const [recursos, gatillos] = await Promise.all([
+    buscarRecursos(queryParaBusqueda),
+    obtenerGatillosActivos(contexto.pipelineRuta),
+  ]);
   void registrarUso(recursos.map((r) => r.id));
   if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
@@ -53,6 +59,8 @@ ${contexto.historial || "(primera interacción)"}
 
 INFORMACIÓN DISPONIBLE:
 ${recursosTexto}
+
+${formatearGatillosParaPrompt(gatillos)}
 
 INSTRUCCIONES:
 - Responde en español, tono cálido y profesional

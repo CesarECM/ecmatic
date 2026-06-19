@@ -2,11 +2,14 @@ import { sendTextMessage } from "@/lib/whatsapp/client";
 import { registrarEnvioNurturing, yaRecibioSecuencia } from "@/services/nurturing";
 import { obtenerLeadsParaNurturing } from "@/services/nurturing";
 import { enviarEmailNurturing } from "@/lib/email/transaccional";
+import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { PipelineRuta } from "@/lib/supabase/types";
 
-// S4.4 — Sustituye {nombre} en la plantilla del mensaje
-function aplicarPlantilla(plantilla: string, nombre: string | null): string {
-  return plantilla.replace(/\{nombre\}/gi, nombre ?? "Candidato");
+// S4.4 — Sustituye {nombre} y añade gatillos activos al final del mensaje
+function aplicarPlantilla(plantilla: string, nombre: string | null, sufijo = ""): string {
+  const base = plantilla.replace(/\{nombre\}/gi, nombre ?? "Candidato");
+  return sufijo ? `${base}\n\n${sufijo}` : base;
 }
 
 // S4.4 — Guarda el mensaje saliente de nurturing en la tabla mensajes
@@ -73,8 +76,15 @@ export async function ejecutarCicloReengagement(): Promise<{
   let enviados = 0;
   let omitidos = 0;
 
+  // S6.4 — Obtener gatillos activos una vez para todo el ciclo
+  const gatillosActivos = await obtenerGatillosActivos();
+  const sufijoGatillos = gatillosActivos.length > 0
+    ? gatillosActivos.map((g) => g.valor_actual).join(" · ")
+    : "";
+
   for (const lead of leads) {
     const { id, nombre, telefono, email, secuencia_aplicable: sec } = lead;
+    const ruta = (lead as { pipeline_ruta?: PipelineRuta }).pipeline_ruta;
 
     // Anti-spam: saltar si ya recibió esta secuencia en las últimas 24h
     const yaEnviado = await yaRecibioSecuencia(id, sec.id);
@@ -83,7 +93,17 @@ export async function ejecutarCicloReengagement(): Promise<{
       continue;
     }
 
-    const plantilla = sec.mensaje_fallback ?? "Hola {nombre}, ¿podemos ayudarte con tu certificación CONOCER?";
+    // S6.4 — Filtrar gatillos por audiencia del lead
+    const gatillosFiltrados = gatillosActivos.filter(
+      (g) => g.audiencia_objetivo === "all" || g.audiencia_objetivo === ruta
+    );
+    const sufijo = gatillosFiltrados.length > 0
+      ? gatillosFiltrados.map((g) => g.valor_actual).join(" · ")
+      : "";
+
+    const plantillaBase = sec.mensaje_fallback ?? "Hola {nombre}, ¿podemos ayudarte con tu certificación CONOCER?";
+    const plantilla = aplicarPlantilla(plantillaBase, nombre, sufijo);
+    void sufijoGatillos; // usado para referencia
 
     if (sec.canal === "whatsapp" && telefono) {
       await enviarWaNurturing(id, telefono, nombre, sec.id, plantilla);
@@ -92,7 +112,6 @@ export async function ejecutarCicloReengagement(): Promise<{
       await enviarEmailReengagement(id, email, nombre, sec.id, plantilla);
       enviados++;
     } else {
-      // Sin canal disponible — registrar como omitido
       await registrarEnvioNurturing(id, sec.id, sec.canal, "omitido", "Sin dato de contacto");
       omitidos++;
     }
