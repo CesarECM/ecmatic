@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { detectarObsoletos } from "@/services/conocimiento";
 import { RecursosList } from "@/components/conocimiento/recursos-list";
 import { AlertasKB } from "@/components/conocimiento/alertas-kb";
+import { ImportarFuente } from "@/components/conocimiento/importar-fuente";
 
 export const metadata = { title: "Base de Conocimiento · ECMatic" };
 export const revalidate = 0;
@@ -27,6 +28,7 @@ export default async function ConocimientoPage() {
             {total} recursos · {pendientes} pendientes de aprobación
           </p>
         </div>
+        <ImportarFuente />
       </div>
       <AlertasKB alertas={alertas} />
       <RecursosList recursos={recursos ?? []} />

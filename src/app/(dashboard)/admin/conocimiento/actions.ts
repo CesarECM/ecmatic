@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { crearRecurso, aprobarRecurso, actualizarRecurso } from "@/services/conocimiento";
+import { crearRecurso, aprobarRecurso, actualizarRecurso, procesarFuenteExterna } from "@/services/conocimiento";
 import type { TipoRecurso } from "@/lib/supabase/types";
 
 export async function crearRecursoAction(formData: FormData) {
@@ -27,5 +27,24 @@ export async function setActivoAction(formData: FormData) {
   const activo = formData.get("activo") === "true";
   if (!id) return;
   await actualizarRecurso(id, { activo });
+  revalidatePath("/admin/conocimiento");
+}
+
+export async function importarFuenteAction(formData: FormData) {
+  const fuente = (formData.get("fuente") as string)?.trim();
+  if (!fuente) return;
+
+  let contenido = fuente;
+  if (fuente.startsWith("http://") || fuente.startsWith("https://")) {
+    try {
+      const res = await fetch(fuente, { signal: AbortSignal.timeout(10000) });
+      const html = await res.text();
+      contenido = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+    } catch {
+      return;
+    }
+  }
+
+  await procesarFuenteExterna(contenido);
   revalidatePath("/admin/conocimiento");
 }

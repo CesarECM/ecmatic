@@ -238,6 +238,30 @@ Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta po
   }
 }
 
+// S2.9 — Extrae y crea recursos desde contenido externo (URL o texto pegado)
+export async function procesarFuenteExterna(contenido: string): Promise<number> {
+  const response = await anthropic.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 1500,
+    system: `Eres un extractor de conocimiento para un centro de certificación CONOCER en México.
+Analiza el contenido y extrae hasta 5 recursos útiles: FAQs, objeciones comunes, descripciones de servicios o prácticas de venta.
+Responde SOLO en JSON con este formato exacto:
+[{"tipo":"faq|objecion|servicio|practica_venta","titulo":"...","contenido":"..."}]
+Si no hay contenido relevante sobre certificaciones laborales, responde: []`,
+    messages: [{ role: "user", content: contenido.slice(0, 6000) }],
+  });
+
+  const raw = (response.content[0] as { text: string }).text.trim();
+  const items = JSON.parse(raw) as { tipo: TipoRecurso; titulo: string; contenido: string }[];
+  let creados = 0;
+  for (const item of items) {
+    if (!item.tipo || !item.titulo || !item.contenido) continue;
+    await crearRecurso(item.tipo, item.titulo, item.contenido, "externo");
+    creados++;
+  }
+  return creados;
+}
+
 // S2.3 — Registra que los recursos contribuyeron a un cierre de venta (llamar desde Sprint 3)
 export async function registrarCierre(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
