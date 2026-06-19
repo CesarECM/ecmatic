@@ -3,13 +3,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { moverLeadDesdePerfilAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
+import { moverLeadDesdePerfilAction, asignarVendedorAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
   pipeline_stage: string; pipeline_ruta: string; temperamento_inferido: string | null;
-  score_salud: number; compra_previa: boolean; created_at: string;
+  score_salud: number; compra_previa: boolean; created_at: string; vendedor_id: string | null;
 };
+type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
 type Movimiento = { id: string; etapa_anterior: string | null; etapa_nueva: string; motivo: string | null; movido_por: string; created_at: string };
 type Mensaje = { id: string; canal: string; direccion: string; contenido: string; intencion_clasificada: string | null; created_at: string };
@@ -19,6 +20,7 @@ interface LeadPerfilProps {
   etapas: Etapa[];
   historial: Movimiento[];
   mensajes: Mensaje[];
+  vendedores: Vendedor[];
 }
 
 const DISC_COLORS: Record<string, string> = {
@@ -30,7 +32,7 @@ const CANAL_ICON: Record<string, string> = {
   whatsapp: "💬", email: "✉️", meet: "📹", interno: "📝",
 };
 
-export function LeadPerfil({ lead, etapas, historial, mensajes }: LeadPerfilProps) {
+export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: LeadPerfilProps) {
   const scoreColor = lead.score_salud >= 67 ? "text-green-600" : lead.score_salud >= 34 ? "text-yellow-600" : "text-red-600";
 
   return (
@@ -83,6 +85,26 @@ export function LeadPerfil({ lead, etapas, historial, mensajes }: LeadPerfilProp
           </CardContent>
         </Card>
       </div>
+
+      {/* Asignar vendedor */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Vendedor asignado</CardTitle></CardHeader>
+        <CardContent>
+          <form action={asignarVendedorAction} className="flex gap-2">
+            <input type="hidden" name="leadId" value={lead.id} />
+            <select name="vendedorId" defaultValue={lead.vendedor_id ?? ""} className="flex-1 text-sm border rounded-md px-3 py-1.5 bg-background">
+              <option value="">Sin asignar</option>
+              {vendedores.map((v) => (
+                <option key={v.id} value={v.id}>{v.nombre} — {v.email}</option>
+              ))}
+            </select>
+            <Button type="submit" size="sm">Asignar</Button>
+          </form>
+          {vendedores.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-2">No hay vendedores registrados aún.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Historial de pipeline */}
       {historial.length > 0 && (
