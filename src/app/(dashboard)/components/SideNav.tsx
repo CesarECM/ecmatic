@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/postventa",       label: "Post-Venta",         emoji: "🎓", roles: ["admin"] },
   { href: "/admin/financiero",      label: "Financiero",         emoji: "💰", roles: ["admin", "admin_financiero"] },
   { href: "/vendedor/comisiones",   label: "Mis comisiones",     emoji: "💵", roles: ["vendedor"] },
+  { href: "/admin/sandbox",         label: "Widget de Pruebas",  emoji: "🧪", roles: ["admin"] },
   { href: "/admin/lanzamiento",     label: "Lanzamiento",        emoji: "🚀", roles: ["admin"] },
 ];
 
