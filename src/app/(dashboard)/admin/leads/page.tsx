@@ -1,4 +1,5 @@
 import { listarLeads, obtenerEtapas } from "@/services/pipeline";
+import { obtenerPipelinesActivosBatch } from "@/services/pipeline-multi";
 import { LeadsList } from "@/components/leads/leads-list";
 import { LeadsKanban } from "@/components/leads/leads-kanban";
 
@@ -18,6 +19,11 @@ export default async function LeadsPage({
     obtenerEtapas("tripwire"),
     obtenerEtapas("premium"),
   ]);
+
+  // S13.6 — Cargar posición multi-pipeline de todos los leads en una sola query
+  const pipelinesActivos = leads.length > 0
+    ? await obtenerPipelinesActivosBatch(leads.map((l) => l.id))
+    : {};
 
   return (
     <div className="space-y-4">
@@ -43,7 +49,12 @@ export default async function LeadsPage({
       </div>
 
       {vista === "kanban" ? (
-        <LeadsKanban leads={leads} etapasTripwire={etapasTripwire} etapasPremium={etapasPremium} />
+        <LeadsKanban
+          leads={leads}
+          etapasTripwire={etapasTripwire}
+          etapasPremium={etapasPremium}
+          pipelinesActivos={pipelinesActivos}
+        />
       ) : (
         <LeadsList leads={leads} etapasTripwire={etapasTripwire} etapasPremium={etapasPremium} />
       )}

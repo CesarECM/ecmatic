@@ -114,6 +114,30 @@ export async function moverLeadEnPipeline(
   });
 }
 
+// S13.6 — Carga los pipelines activos de múltiples leads en una sola query.
+// Devuelve un mapa { leadId → [{ruta, etapa_actual}] } listo para la UI del Kanban.
+export async function obtenerPipelinesActivosBatch(
+  leadIds: string[]
+): Promise<Record<string, { ruta: string; etapa_actual: string }[]>> {
+  if (leadIds.length === 0) return {};
+  const supabase = createServiceClient();
+
+  const { data, error } = await supabase
+    .from("lead_pipelines")
+    .select("lead_id, ruta, etapa_actual")
+    .in("lead_id", leadIds)
+    .eq("activo", true);
+
+  if (error) throw new Error(`[pipeline-multi] Error batch: ${error.message}`);
+
+  const mapa: Record<string, { ruta: string; etapa_actual: string }[]> = {};
+  for (const row of data ?? []) {
+    if (!mapa[row.lead_id]) mapa[row.lead_id] = [];
+    mapa[row.lead_id].push({ ruta: row.ruta, etapa_actual: row.etapa_actual });
+  }
+  return mapa;
+}
+
 // S13.5 — Desactiva la participación de un lead en un pipeline.
 // El lead permanece en el otro/otros pipelines activos.
 export async function salirDePipeline(leadId: string, ruta: string): Promise<void> {
