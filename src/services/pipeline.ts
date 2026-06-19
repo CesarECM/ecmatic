@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { generarEmbedding } from "@/lib/ai/client";
 import { registrarCierre } from "@/services/conocimiento";
+import { actualizarListasAlMoverEtapa, excluirDeNurturing } from "@/lib/email/campanas";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -36,7 +37,7 @@ export async function moverLead(
 
   const { data: lead, error: fetchError } = await supabase
     .from("leads")
-    .select("pipeline_stage, pipeline_ruta")
+    .select("pipeline_stage, pipeline_ruta, email")
     .eq("id", leadId)
     .single();
 
@@ -70,6 +71,18 @@ export async function moverLead(
 
   // S3.6 — Acredita recursos KB cuando el lead compra
   if (nuevaEtapa === "Comprado") void acreditarRecursosAlCerrar(leadId);
+
+  // S4.3 — Sincroniza listas de Brevo al mover etapa
+  void actualizarListasAlMoverEtapa(
+    lead.email ?? null,
+    lead.pipeline_stage,
+    nuevaEtapa
+  ).catch(console.error);
+
+  // S4.3 — Excluye de nurturing al cerrar el ciclo
+  if (nuevaEtapa === "Comprado" || nuevaEtapa === "Perdido") {
+    void excluirDeNurturing(lead.email ?? null, lead.pipeline_ruta).catch(console.error);
+  }
 }
 
 // S3.6 — Busca semánticamente los recursos usados en la conversación y los acredita
