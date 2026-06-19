@@ -3,8 +3,21 @@ import { modeloPorTarea } from "@/lib/ai/model-router";
 import { crearCelda, listarMatriz, buscarEnMatriz } from "./matriz";
 import type { DimensionesMatriz } from "@/lib/supabase/types";
 
-// S5.3 — Cuando no hay celda aprobada, genera respuesta por inferencia IA.
+// Mapa compacto de fase CAGC → nombre (para prompts de inferencia)
+const NOMBRE_FASE_CAGC: Record<number, string> = {
+  0: "Inconsciencia", 1: "Activación", 2: "Definición del problema",
+  3: "Exploración inicial", 4: "Consciencia de soluciones",
+  5: "Construcción de criterios", 6: "Evaluación de opciones",
+  7: "Validación social", 8: "Ansiedad pre-decisión",
+  9: "Decisión de compra", 10: "Acto de compra",
+  11: "Disonancia post-compra", 12: "Evaluación de experiencia",
+  13: "Satisfacción/Insatisfacción", 14: "Retención y uso continuo",
+  15: "Lealtad", 16: "Advocacy",
+};
+
+// S5.3 / S13.3 — Cuando no hay celda aprobada, genera respuesta por inferencia IA.
 // No bloquea nunca: siempre devuelve algo orientado al cierre.
+// La 8ª dimensión (fase_cagc) ajusta el tono y objetivo de la respuesta.
 export async function inferirRespuestaMatriz(
   dimensiones: DimensionesMatriz,
   mensajes: string[],
@@ -12,6 +25,10 @@ export async function inferirRespuestaMatriz(
 ): Promise<string | null> {
   const celda = await buscarEnMatriz(dimensiones);
   if (celda) return celda.respuesta_sugerida;
+
+  const faseCagcTexto = dimensiones.fase_cagc !== undefined
+    ? `Fase CAGC del comprador: ${dimensiones.fase_cagc} (${NOMBRE_FASE_CAGC[dimensiones.fase_cagc] ?? "desconocida"})`
+    : "";
 
   const prompt = `Eres un experto en ventas de certificaciones CONOCER para Centro ECM (México).
 Un lead con el siguiente perfil está preguntando y necesitas una respuesta personalizada orientada al cierre:
@@ -24,11 +41,14 @@ Perfil del lead:
 - Canal: ${dimensiones.canal_origen ?? "whatsapp"}
 - Etapa de atasco: ${dimensiones.etapa_atasco ?? "ninguna"}
 - Temperatura: ${dimensiones.temperatura ?? "tibia"}
+${faseCagcTexto}
 
 Mensajes recientes del lead:
 ${mensajes.join("\n")}
 
 Genera UNA respuesta corta (máx 2 oraciones), cálida, orientada al cierre, adaptada al perfil.
+Ajusta el mensaje al momento del comprador: si está en fases tempranas (0-4) educa sin presionar;
+en fases medias (5-8) resuelve objeciones y genera confianza; en fases de decisión (9-10) facilita el cierre.
 No menciones el perfil internamente. Responde en español.`;
 
   const res = await anthropic.messages.create({
@@ -99,6 +119,8 @@ para el siguiente perfil de lead (máx 2 oraciones, orientada al cierre, en espa
 function generarCombinacionesPrioritarias(): DimensionesMatriz[] {
   const temperamentos: DimensionesMatriz["temperamento"][] = ["D", "I", "S", "C"];
   const objeciones = ["precio", "tiempo", "no_sirva", "titulo", "pensarlo"];
+  // Fases CAGC con mayor impacto en la venta: ansiedad, decisión, validación, exploración
+  const fasesCriticas = [8, 9, 7, 6, 5, 3];
   const combinaciones: DimensionesMatriz[] = [];
 
   for (const t of temperamentos) {
@@ -109,6 +131,15 @@ function generarCombinacionesPrioritarias(): DimensionesMatriz[] {
   for (const t of temperamentos) {
     combinaciones.push({ temperamento: t, temperatura: "caliente" });
     combinaciones.push({ temperamento: t, temperatura: "fria" });
+  }
+  // S13.3 — Combinaciones con fase CAGC para las fases de mayor impacto
+  for (const fase of fasesCriticas) {
+    for (const o of objeciones) {
+      combinaciones.push({ fase_cagc: fase, objecion: o });
+    }
+    for (const t of temperamentos) {
+      combinaciones.push({ temperamento: t, fase_cagc: fase });
+    }
   }
   return combinaciones;
 }

@@ -5,7 +5,8 @@ import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento"
 import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import { registrarAccionIA } from "@/services/log-ia";
-import type { PipelineRuta } from "@/lib/supabase/types";
+import { inferirRespuestaMatriz } from "@/services/matriz-ia";
+import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 
 interface ContextoLead {
   nombre: string | null;
@@ -14,6 +15,7 @@ interface ContextoLead {
   compraPreviaa: boolean;
   historial: string;
   pipelineRuta?: PipelineRuta;
+  faseCAGC?: number; // S13.3 — 8ª dimensión de personalización
 }
 
 // ── S1.4: Búsqueda semántica en base de conocimiento ─────────────────────
@@ -36,9 +38,19 @@ export async function generarRespuesta(
   contexto: ContextoLead
 ): Promise<string> {
   const queryParaBusqueda = mensajes.join(" ");
-  const [recursos, gatillos] = await Promise.all([
+
+  // S13.3 — Armar dimensiones 8D para consultar la matriz de personalización
+  const dims8D: DimensionesMatriz = {
+    canal_origen: "whatsapp",
+    etapa_atasco: contexto.pipelineStage,
+    ...(contexto.temperamento && { temperamento: contexto.temperamento as DimensionesMatriz["temperamento"] }),
+    ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
+  };
+
+  const [recursos, gatillos, sugerenciaMatriz] = await Promise.all([
     buscarRecursos(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
+    inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
   ]);
   void registrarUso(recursos.map((r) => r.id));
   if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
@@ -62,6 +74,14 @@ export async function generarRespuesta(
     ? `\nMEJORES PRÁCTICAS DE VENTA APLICABLES:\n${practicas.map((p) => `• ${p.contenido}`).join("\n")}`
     : "";
 
+  const faseCagcLinea = contexto.faseCAGC !== undefined
+    ? `- Fase de compra CAGC: ${contexto.faseCAGC} — guía el tono y objetivo de tu respuesta según este momento del comprador`
+    : "";
+
+  const matrizLinea = sugerenciaMatriz
+    ? `\nSUGERENCIA DE MATRIZ (usa como guía, adapta a la conversación):\n${sugerenciaMatriz}`
+    : "";
+
   const systemPrompt = `Eres el asistente de ventas de Centro ECM, un centro de certificación CONOCER en México.
 Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.
 
@@ -70,6 +90,7 @@ CONTEXTO DEL LEAD:
 - Etapa en pipeline: ${contexto.pipelineStage}
 - Temperamento inferido: ${contexto.temperamento ?? "no determinado"}
 - Cliente previo: ${contexto.compraPreviaa ? "SÍ — trata con familiaridad" : "NO — es nuevo lead"}
+${faseCagcLinea}
 
 HISTORIAL RECIENTE:
 ${contexto.historial || "(primera interacción)"}
@@ -77,7 +98,7 @@ ${contexto.historial || "(primera interacción)"}
 INFORMACIÓN DISPONIBLE:
 ${recursosTexto}
 ${practicasTexto}
-${formatearGatillosParaPrompt(gatillos)}
+${formatearGatillosParaPrompt(gatillos)}${matrizLinea}
 
 INSTRUCCIONES:
 - Responde en español, tono cálido y profesional

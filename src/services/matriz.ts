@@ -18,6 +18,7 @@ export interface FiltrosMatriz {
   objecion?: string;
   servicio?: string;
   tipo_cliente?: string;
+  fase_cagc?: number;
   aprobado?: boolean;
 }
 
@@ -61,6 +62,7 @@ export async function listarMatriz(filtros?: FiltrosMatriz): Promise<CeldaMatriz
   if (filtros?.objecion) dimFiltro.objecion = filtros.objecion;
   if (filtros?.servicio) dimFiltro.servicio = filtros.servicio;
   if (filtros?.tipo_cliente) dimFiltro.tipo_cliente = filtros.tipo_cliente as DimensionesMatriz["tipo_cliente"];
+  if (filtros?.fase_cagc !== undefined) dimFiltro.fase_cagc = filtros.fase_cagc;
 
   if (Object.keys(dimFiltro).length > 0) {
     query = query.contains("dimensiones", dimFiltro as Record<string, unknown>);

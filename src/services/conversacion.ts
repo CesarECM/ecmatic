@@ -9,7 +9,7 @@ import { detectarPromesas } from "./promesas";
 import { detectarMomentoCierre } from "./momentos-cierre";
 import { generarLinkStripe } from "./pagos";
 import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } from "./privacidad";
-import { inferirYRegistrarFase } from "./cagc";
+import { inferirYRegistrarFase, obtenerFaseLead } from "./cagc";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -75,11 +75,14 @@ export async function procesarConversacion(
 
   // 8. S1.4 — Generar respuesta
   const supabase = createServiceClient();
-  const { data: leadActualizado } = await supabase
-    .from("leads")
-    .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa")
-    .eq("id", lead.id)
-    .single();
+  const [{ data: leadActualizado }, estadoCagc] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa")
+      .eq("id", lead.id)
+      .single(),
+    obtenerFaseLead(lead.id).catch(() => null),
+  ]);
 
   const respuesta = await generarRespuesta(mensajes, {
     nombre: leadActualizado?.nombre ?? null,
@@ -88,6 +91,7 @@ export async function procesarConversacion(
     compraPreviaa: leadActualizado?.compra_previa ?? false,
     historial,
     pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
+    faseCAGC: estadoCagc?.fase_numero,
   });
 
   // 8.5. S8.1 — Si la intención es compra inmediata, generar link Stripe

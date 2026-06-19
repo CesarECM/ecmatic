@@ -47,6 +47,7 @@ export interface DimensionesMatriz {
   canal_origen?: string;
   etapa_atasco?: string;
   temperatura?: "fria" | "tibia" | "caliente";
+  fase_cagc?: number; // S13.3 — 8ª dimensión: fase del comprador (0-16)
 }
 
 type Relationship = {
