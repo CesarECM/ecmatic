@@ -1,0 +1,31 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { crearRecurso, aprobarRecurso, actualizarRecurso } from "@/services/conocimiento";
+import type { TipoRecurso } from "@/lib/supabase/types";
+
+export async function crearRecursoAction(formData: FormData) {
+  const tipo = formData.get("tipo") as TipoRecurso;
+  const titulo = formData.get("titulo") as string;
+  const contenido = formData.get("contenido") as string;
+  if (!tipo || !titulo?.trim() || !contenido?.trim()) return;
+
+  const recurso = await crearRecurso(tipo, titulo.trim(), contenido.trim());
+  await aprobarRecurso(recurso.id);
+  revalidatePath("/admin/conocimiento");
+}
+
+export async function aprobarRecursoAction(formData: FormData) {
+  const id = formData.get("id") as string;
+  if (!id) return;
+  await aprobarRecurso(id);
+  revalidatePath("/admin/conocimiento");
+}
+
+export async function setActivoAction(formData: FormData) {
+  const id = formData.get("id") as string;
+  const activo = formData.get("activo") === "true";
+  if (!id) return;
+  await actualizarRecurso(id, { activo });
+  revalidatePath("/admin/conocimiento");
+}
