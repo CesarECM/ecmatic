@@ -1,4 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { generarEmbedding } from "@/lib/ai/client";
+import { registrarCierre } from "@/services/conocimiento";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -65,6 +67,40 @@ export async function moverLead(
     motivo: motivo ?? null,
     movido_por: movidoPor,
   });
+
+  // S3.6 — Acredita recursos KB cuando el lead compra
+  if (nuevaEtapa === "Comprado") void acreditarRecursosAlCerrar(leadId);
+}
+
+// S3.6 — Busca semánticamente los recursos usados en la conversación y los acredita
+async function acreditarRecursosAlCerrar(leadId: string): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+
+    const { data: mensajes } = await supabase
+      .from("mensajes")
+      .select("contenido")
+      .eq("lead_id", leadId)
+      .eq("direccion", "entrante")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (!mensajes?.length) return;
+
+    const query = mensajes.map((m) => m.contenido).join(" ");
+    const embedding = await generarEmbedding(query);
+
+    const { data: recursos } = await supabase.rpc("buscar_recursos", {
+      query_embedding: embedding,
+      limite: 5,
+      umbral: 0.65,
+    });
+
+    const ids = (recursos ?? []).map((r: { id: string }) => r.id);
+    await registrarCierre(ids);
+  } catch {
+    // No bloquear el flujo principal si falla la acreditación
+  }
 }
 
 // S3.1 — Lista leads con filtros opcionales para el panel admin
