@@ -25,7 +25,7 @@ export async function responderTicketAction(formData: FormData) {
   await cerrarTicket(ticketId, respuesta, sugerencia ?? undefined);
 
   // Marcar ticket en atención primero, luego cerrado
-  revalidatePath("/dashboard/admin/tickets");
+  revalidatePath("/admin/tickets");
 }
 
 export async function tomarTicketAction(formData: FormData) {
@@ -46,7 +46,7 @@ export async function tomarTicketAction(formData: FormData) {
     .update({ estado: "en_atencion", vendedor_id: vendedor?.id ?? null })
     .eq("id", ticketId);
 
-  revalidatePath("/dashboard/admin/tickets");
+  revalidatePath("/admin/tickets");
 }
 
 // S1.12 — Sugiere actualización/creación de recurso en base de conocimiento
