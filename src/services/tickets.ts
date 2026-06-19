@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendTextMessage } from "@/lib/whatsapp/client";
+import { enviarNotificacionTicket } from "@/lib/email/transaccional";
 
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP_PERSONAL ?? "";
 
@@ -18,20 +19,29 @@ export async function crearTicketHandoff(leadId: string, motivo: string) {
     return null;
   }
 
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("nombre, telefono")
+    .eq("id", leadId)
+    .single();
+
+  const nombreLead = lead?.nombre ?? lead?.telefono ?? "Lead desconocido";
+
   // Notifica al admin por WhatsApp personal si está configurado
   if (ADMIN_WHATSAPP) {
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("nombre, telefono")
-      .eq("id", leadId)
-      .single();
-
-    const nombreLead = lead?.nombre ?? lead?.telefono ?? "Lead desconocido";
     await sendTextMessage(
       ADMIN_WHATSAPP,
       `⚠️ ECMatic necesita tu atención\n\nLead: ${nombreLead}\nMotivo: ${motivo}\n\nAbre el panel para responder.`
     ).catch(console.error);
   }
+
+  // S4.2 — Notificación por email al admin (fire-and-forget)
+  void enviarNotificacionTicket({
+    id: ticket.id,
+    motivo,
+    lead_nombre: lead?.nombre ?? null,
+    lead_telefono: lead?.telefono ?? null,
+  }).catch(console.error);
 
   return ticket;
 }

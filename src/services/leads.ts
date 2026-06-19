@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { anthropic, CLAUDE_MODEL } from "@/lib/ai/client";
+import { enviarBienvenida } from "@/lib/email/transaccional";
 import type { Temperamento, IntencionClasificada } from "@/lib/supabase/types";
 
 // ── S1.7: Busca o crea el lead por número de teléfono ───────────────────
@@ -21,6 +22,10 @@ export async function obtenerOCrearLead(telefono: string) {
     .single();
 
   if (error) throw new Error(`Error creando lead: ${error.message}`);
+
+  // S4.2 — Bienvenida por email al primer contacto (fire-and-forget)
+  if (nuevo.email) void enviarBienvenida({ nombre: nuevo.nombre, email: nuevo.email });
+
   return nuevo;
 }
 
