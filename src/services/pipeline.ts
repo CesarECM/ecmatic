@@ -6,6 +6,7 @@ import { actualizarScoreMatriz } from "@/services/matriz";
 import { clasificarLead } from "@/services/avatares";
 import { calcularCalidadConversacion } from "@/services/calidad-conversacional";
 import { registrarConversionExperimento } from "@/services/experimentos";
+import { obtenerFaseLead } from "@/services/cagc";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -15,19 +16,43 @@ export interface FiltrosLeads {
   activo?: boolean;
 }
 
-// S3.1 — Obtiene etapas ordenadas de una ruta de pipeline
-export async function obtenerEtapas(ruta: PipelineRuta) {
+export interface EtapaPipeline {
+  id: string;
+  nombre: string;
+  orden: number;
+  ruta: string;
+  fases_cagc: number[];
+}
+
+// S3.1 — Obtiene etapas ordenadas de una ruta de pipeline (incluye mapeo CAGC)
+export async function obtenerEtapas(ruta: PipelineRuta): Promise<EtapaPipeline[]> {
   const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from("pipeline_etapas")
-    .select("id, nombre, orden, ruta")
+    .select("id, nombre, orden, ruta, fases_cagc")
     .eq("ruta", ruta)
     .eq("activo", true)
     .order("orden");
 
   if (error) throw new Error(`[pipeline] Error obteniendo etapas: ${error.message}`);
-  return data ?? [];
+  return (data ?? []) as EtapaPipeline[];
+}
+
+// S13.4 — Devuelve las fases CAGC asociadas a una etapa de pipeline concreta.
+// Útil para inferir el estado del comprador a partir de su posición en el pipeline.
+export async function fasesCAGCDeEtapa(
+  etapaNombre: string,
+  ruta: PipelineRuta
+): Promise<number[]> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("pipeline_etapas")
+    .select("fases_cagc")
+    .eq("nombre", etapaNombre)
+    .eq("ruta", ruta)
+    .maybeSingle();
+  return (data?.fases_cagc as number[] | null) ?? [];
 }
 
 // S3.1 — Mueve un lead a una nueva etapa y registra el movimiento
@@ -107,15 +132,18 @@ export async function moverLead(
   void clasificarLead(leadId).catch(console.error);
 }
 
-// S5.4 — Lee dimensiones del lead y actualiza score de matriz al cerrar
+// S5.4 / S13.4 — Lee dimensiones 8D del lead y actualiza score de matriz al cerrar
 async function actualizarDimensionesAlCerrar(leadId: string, cerrado: boolean): Promise<void> {
   try {
     const supabase = createServiceClient();
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("temperamento_inferido, canal_origen, pipeline_ruta, pipeline_stage")
-      .eq("id", leadId)
-      .single();
+    const [{ data: lead }, estadoCagc] = await Promise.all([
+      supabase
+        .from("leads")
+        .select("temperamento_inferido, canal_origen, pipeline_ruta, pipeline_stage")
+        .eq("id", leadId)
+        .single(),
+      obtenerFaseLead(leadId).catch(() => null),
+    ]);
     if (!lead) return;
 
     await actualizarScoreMatriz(
@@ -123,6 +151,7 @@ async function actualizarDimensionesAlCerrar(leadId: string, cerrado: boolean): 
         temperamento: lead.temperamento_inferido ?? undefined,
         canal_origen: lead.canal_origen ?? undefined,
         etapa_atasco: lead.pipeline_stage ?? undefined,
+        fase_cagc: estadoCagc?.fase_numero,
       },
       cerrado
     );

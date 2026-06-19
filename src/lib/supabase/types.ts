@@ -207,6 +207,7 @@ export interface Database {
           orden: number;
           ruta: PipelineRuta;
           activo: boolean;
+          fases_cagc: number[];
           created_at: string;
         };
         Insert: {
@@ -215,6 +216,7 @@ export interface Database {
           orden: number;
           ruta: PipelineRuta;
           activo?: boolean;
+          fases_cagc?: number[];
         };
         Update: Partial<Database["public"]["Tables"]["pipeline_etapas"]["Insert"]>;
         Relationships: Relationship[];
