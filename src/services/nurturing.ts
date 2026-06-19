@@ -64,8 +64,9 @@ export async function actualizarSecuencia(
   if (error) throw new Error(`[nurturing] Error actualizando secuencia: ${error.message}`);
 }
 
-// S4.1 — Identifica leads que califican para nurturing
-// Excluye: etapas terminales, leads con ticket abierto, leads inactivos (activo=false)
+// S4.1/S4.6 — Identifica leads que califican para nurturing
+// Excluye: etapas terminales, ticket abierto/en_atencion, pausados manualmente,
+//          > 3 envíos en últimos 7 días, ticket cerrado hace < 48h
 export async function obtenerLeadsParaNurturing(): Promise<LeadParaNurturing[]> {
   const supabase = createServiceClient();
   const secuencias = await listarSecuencias(true);
@@ -73,19 +74,40 @@ export async function obtenerLeadsParaNurturing(): Promise<LeadParaNurturing[]> 
 
   const { data: leads, error } = await supabase
     .from("leads")
-    .select("id, nombre, telefono, email, pipeline_stage, pipeline_ruta, updated_at")
+    .select("id, nombre, telefono, email, pipeline_stage, pipeline_ruta, updated_at, metadata")
     .eq("activo", true)
     .not("pipeline_stage", "in", '("Comprado","Perdido")');
 
   if (error) throw new Error(`[nurturing] Error obteniendo leads: ${error.message}`);
   if (!leads?.length) return [];
 
+  // S4.6 — Exclusión 1: leads con ticket abierto o en atención
   const { data: ticketsAbiertos } = await supabase
     .from("tickets")
     .select("lead_id")
     .in("estado", ["abierto", "en_atencion"]);
-
   const idsConTicket = new Set((ticketsAbiertos ?? []).map((t) => t.lead_id));
+
+  // S4.6 — Exclusión 2: leads con ticket cerrado hace < 48h (recién salidos de handoff)
+  const hace48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const { data: ticketsCerradosRecientes } = await supabase
+    .from("tickets")
+    .select("lead_id")
+    .eq("estado", "cerrado")
+    .gte("updated_at", hace48h);
+  const idsTicketReciente = new Set((ticketsCerradosRecientes ?? []).map((t) => t.lead_id));
+
+  // S4.6 — Exclusión 3: leads con > 3 envíos nurturing en los últimos 7 días
+  const hace7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: enviosRecientes } = await supabase
+    .from("nurturing_envios")
+    .select("lead_id")
+    .eq("estado", "enviado")
+    .gte("created_at", hace7d);
+  const conteoSemanal = new Map<string, number>();
+  for (const e of enviosRecientes ?? []) {
+    conteoSemanal.set(e.lead_id, (conteoSemanal.get(e.lead_id) ?? 0) + 1);
+  }
 
   const { data: ultimosMensajes } = await supabase
     .from("mensajes")
@@ -106,6 +128,11 @@ export async function obtenerLeadsParaNurturing(): Promise<LeadParaNurturing[]> 
 
   for (const lead of leads) {
     if (idsConTicket.has(lead.id)) continue;
+    if (idsTicketReciente.has(lead.id)) continue;
+    if ((conteoSemanal.get(lead.id) ?? 0) >= 3) continue;
+    // S4.6 — Exclusión 4: pausa manual en metadata del lead
+    const meta = lead.metadata as Record<string, unknown> | null;
+    if (meta?.nurturing_pausado === true) continue;
 
     const fechaRef = ultimoContacto.get(lead.id) ?? new Date(lead.updated_at);
     const diasInactivo = Math.floor(
@@ -171,6 +198,23 @@ export async function yaRecibioSecuencia(leadId: string, secuenciaId: string): P
     .gte("created_at", hace24h)
     .maybeSingle();
   return data !== null;
+}
+
+// S4.6 — Pausa manualmente el nurturing de un lead (persiste en metadata)
+export async function pausarNurturing(leadId: string): Promise<void> {
+  const supabase = createServiceClient();
+  const { data: lead } = await supabase.from("leads").select("metadata").eq("id", leadId).single();
+  const meta = (lead?.metadata as Record<string, unknown>) ?? {};
+  await supabase.from("leads").update({ metadata: { ...meta, nurturing_pausado: true } }).eq("id", leadId);
+}
+
+// S4.6 — Reanuda el nurturing de un lead pausado
+export async function reanudarNurturing(leadId: string): Promise<void> {
+  const supabase = createServiceClient();
+  const { data: lead } = await supabase.from("leads").select("metadata").eq("id", leadId).single();
+  const meta = (lead?.metadata as Record<string, unknown>) ?? {};
+  delete meta.nurturing_pausado;
+  await supabase.from("leads").update({ metadata: meta }).eq("id", leadId);
 }
 
 export type HistorialNurturing = Awaited<ReturnType<typeof obtenerHistorialNurturing>>[number];

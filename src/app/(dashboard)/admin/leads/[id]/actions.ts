@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { moverLead, asignarVendedor } from "@/services/pipeline";
+import { pausarNurturing, reanudarNurturing } from "@/services/nurturing";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -19,4 +20,15 @@ export async function asignarVendedorAction(formData: FormData) {
   await asignarVendedor(leadId, vendedorId || null);
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/leads");
+}
+
+// S4.6 — Pausa o reanuda nurturing desde el perfil del lead
+export async function toggleNurturingAction(formData: FormData) {
+  const leadId = formData.get("leadId") as string;
+  const pausado = formData.get("pausado") === "true";
+  if (!leadId) return;
+  if (pausado) await reanudarNurturing(leadId);
+  else await pausarNurturing(leadId);
+  revalidatePath(`/admin/leads/${leadId}`);
+  revalidatePath("/admin/nurturing");
 }

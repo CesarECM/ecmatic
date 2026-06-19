@@ -3,12 +3,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { moverLeadDesdePerfilAction, asignarVendedorAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
+import { moverLeadDesdePerfilAction, asignarVendedorAction, toggleNurturingAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
   pipeline_stage: string; pipeline_ruta: string; temperamento_inferido: string | null;
   score_salud: number; compra_previa: boolean; created_at: string; vendedor_id: string | null;
+  metadata: Record<string, unknown> | null;
 };
 type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
@@ -103,6 +104,25 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
           {vendedores.length === 0 && (
             <p className="text-xs text-muted-foreground mt-2">No hay vendedores registrados aún.</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* S4.6 — Pausa de nurturing */}
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Nurturing automático</CardTitle></CardHeader>
+        <CardContent>
+          <form action={toggleNurturingAction} className="flex items-center gap-3">
+            <input type="hidden" name="leadId" value={lead.id} />
+            <input type="hidden" name="pausado" value={lead.metadata?.nurturing_pausado === true ? "true" : "false"} />
+            <p className="text-sm text-muted-foreground flex-1">
+              {lead.metadata?.nurturing_pausado === true
+                ? "Nurturing pausado manualmente para este lead."
+                : "Este lead recibe mensajes de seguimiento automáticos."}
+            </p>
+            <Button type="submit" size="sm" variant={lead.metadata?.nurturing_pausado === true ? "default" : "outline"}>
+              {lead.metadata?.nurturing_pausado === true ? "Reanudar" : "Pausar"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
