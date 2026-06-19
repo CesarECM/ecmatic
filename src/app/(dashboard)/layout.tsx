@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { Rol } from "@/lib/supabase/types";
 
 interface DashboardLayoutProps {
@@ -15,7 +16,8 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  // Service client para evitar bloqueos de RLS en la lectura del propio perfil
+  const { data: profile } = await createServiceClient()
     .from("profiles")
     .select("*")
     .eq("id", user.id)
