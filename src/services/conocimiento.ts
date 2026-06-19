@@ -169,6 +169,51 @@ export async function registrarUso(ids: string[]): Promise<void> {
   }
 }
 
+// S2.7 — Tipos de alerta del monitor
+export type MotivoAlerta = "sin_uso" | "baja_confianza" | "pendiente_antiguo";
+
+export interface AlertaRecurso {
+  id: string;
+  titulo: string;
+  tipo: string;
+  motivo: MotivoAlerta;
+}
+
+// S2.7 — Detecta recursos que necesitan atención del administrador
+export async function detectarObsoletos(): Promise<AlertaRecurso[]> {
+  const supabase = createServiceClient();
+  const hace30dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const hace7dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const alertas: AlertaRecurso[] = [];
+
+  const { data: sinUso } = await supabase
+    .from("recursos_conocimiento")
+    .select("id, titulo, tipo")
+    .eq("activo", true)
+    .eq("score_uso", 0)
+    .lt("created_at", hace30dias);
+  for (const r of sinUso ?? []) alertas.push({ ...r, motivo: "sin_uso" });
+
+  const { data: bajaConfianza } = await supabase
+    .from("recursos_conocimiento")
+    .select("id, titulo, tipo")
+    .eq("activo", true)
+    .eq("aprobado", true)
+    .gte("score_uso", 10)
+    .lt("score_confianza", 0.3);
+  for (const r of bajaConfianza ?? []) alertas.push({ ...r, motivo: "baja_confianza" });
+
+  const { data: pendientes } = await supabase
+    .from("recursos_conocimiento")
+    .select("id, titulo, tipo")
+    .eq("activo", true)
+    .eq("aprobado", false)
+    .lt("created_at", hace7dias);
+  for (const r of pendientes ?? []) alertas.push({ ...r, motivo: "pendiente_antiguo" });
+
+  return alertas;
+}
+
 // S2.3 — Registra que los recursos contribuyeron a un cierre de venta (llamar desde Sprint 3)
 export async function registrarCierre(ids: string[]): Promise<void> {
   if (ids.length === 0) return;

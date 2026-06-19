@@ -1,14 +1,19 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { detectarObsoletos } from "@/services/conocimiento";
 import { RecursosList } from "@/components/conocimiento/recursos-list";
+import { AlertasKB } from "@/components/conocimiento/alertas-kb";
 
 export const metadata = { title: "Base de Conocimiento · ECMatic" };
 export const revalidate = 0;
 
 export default async function ConocimientoPage() {
-  const { data: recursos } = await createServiceClient()
-    .from("recursos_conocimiento")
-    .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at")
-    .order("created_at", { ascending: false });
+  const [{ data: recursos }, alertas] = await Promise.all([
+    createServiceClient()
+      .from("recursos_conocimiento")
+      .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at")
+      .order("created_at", { ascending: false }),
+    detectarObsoletos(),
+  ]);
 
   const total = recursos?.length ?? 0;
   const pendientes = recursos?.filter((r) => !r.aprobado).length ?? 0;
@@ -23,6 +28,7 @@ export default async function ConocimientoPage() {
           </p>
         </div>
       </div>
+      <AlertasKB alertas={alertas} />
       <RecursosList recursos={recursos ?? []} />
     </div>
   );
