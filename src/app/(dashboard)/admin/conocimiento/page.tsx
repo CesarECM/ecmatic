@@ -11,7 +11,7 @@ export default async function ConocimientoPage() {
   const [{ data: recursos }, alertas] = await Promise.all([
     createServiceClient()
       .from("recursos_conocimiento")
-      .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at")
+      .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at, versiones_previas")
       .order("created_at", { ascending: false }),
     detectarObsoletos(),
   ]);

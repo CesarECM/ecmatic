@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { crearRecurso, aprobarRecurso, actualizarRecurso, procesarFuenteExterna } from "@/services/conocimiento";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { TipoRecurso } from "@/lib/supabase/types";
 
 export async function crearRecursoAction(formData: FormData) {
@@ -27,6 +28,26 @@ export async function setActivoAction(formData: FormData) {
   const activo = formData.get("activo") === "true";
   if (!id) return;
   await actualizarRecurso(id, { activo });
+  revalidatePath("/admin/conocimiento");
+}
+
+export async function editarRecursoAction(formData: FormData) {
+  const id = formData.get("id") as string;
+  const titulo = (formData.get("titulo") as string)?.trim();
+  const contenido = (formData.get("contenido") as string)?.trim();
+  if (!id || !titulo || !contenido) return;
+  await actualizarRecurso(id, { titulo, contenido });
+  revalidatePath("/admin/conocimiento");
+}
+
+export async function restaurarVersionAction(id: string, titulo: string, contenido: string) {
+  await actualizarRecurso(id, { titulo, contenido });
+  revalidatePath("/admin/conocimiento");
+}
+
+export async function eliminarRecursoAction(id: string) {
+  const supabase = createServiceClient();
+  await supabase.from("recursos_conocimiento").delete().eq("id", id);
   revalidatePath("/admin/conocimiento");
 }
 

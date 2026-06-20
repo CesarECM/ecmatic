@@ -3,28 +3,13 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  crearRecursoAction,
-  aprobarRecursoAction,
-  setActivoAction,
-} from "@/app/(dashboard)/admin/conocimiento/actions";
+import { crearRecursoAction } from "@/app/(dashboard)/admin/conocimiento/actions";
+import { RecursoCard, type RecursoRow } from "./RecursoCard";
 
-export type RecursoRow = {
-  id: string;
-  tipo: string;
-  titulo: string;
-  contenido: string;
-  score_confianza: number;
-  score_uso: number;
-  aprobado: boolean;
-  activo: boolean;
-  origen: string;
-  created_at: string;
-};
+export type { RecursoRow };
 
 const TIPOS = [
   { value: "faq", label: "FAQ" },
@@ -35,19 +20,9 @@ const TIPOS = [
   { value: "practica_venta", label: "Práctica de venta" },
 ] as const;
 
-const TIPO_COLORS: Record<string, string> = {
-  faq: "bg-blue-100 text-blue-800",
-  objecion: "bg-orange-100 text-orange-800",
-  servicio: "bg-green-100 text-green-800",
-  template_wa: "bg-purple-100 text-purple-800",
-  template_email: "bg-pink-100 text-pink-800",
-  practica_venta: "bg-yellow-100 text-yellow-800",
-};
-
 export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [soloPendientes, setSoloPendientes] = useState(false);
-  const [expandido, setExpandido] = useState<string | null>(null);
   const [mostrarForm, setMostrarForm] = useState(false);
 
   const filtrados = recursos.filter((r) => {
@@ -58,7 +33,6 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Barra de filtros y acción */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div className="flex gap-2 items-center flex-wrap">
           <select
@@ -85,7 +59,6 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
         </Button>
       </div>
 
-      {/* Formulario de creación */}
       {mostrarForm && (
         <Card className="border-primary/30">
           <CardHeader className="pb-2">
@@ -123,7 +96,6 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
         </Card>
       )}
 
-      {/* Lista de recursos */}
       {filtrados.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
@@ -132,51 +104,7 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filtrados.map((r) => (
-            <Card key={r.id} className={!r.activo ? "opacity-50" : ""}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TIPO_COLORS[r.tipo] ?? "bg-gray-100 text-gray-800"}`}>
-                      {TIPOS.find((t) => t.value === r.tipo)?.label ?? r.tipo}
-                    </span>
-                    {!r.aprobado && <Badge variant="secondary">Pendiente</Badge>}
-                    {!r.activo && <Badge variant="outline">Inactivo</Badge>}
-                  </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    score {(r.score_confianza * 100).toFixed(0)}% · {r.score_uso} usos
-                  </span>
-                </div>
-                <CardTitle
-                  className="text-sm font-medium cursor-pointer hover:text-primary"
-                  onClick={() => setExpandido(expandido === r.id ? null : r.id)}
-                >
-                  {r.titulo}
-                </CardTitle>
-              </CardHeader>
-
-              {expandido === r.id && (
-                <CardContent className="pt-0 space-y-3">
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{r.contenido}</p>
-                  <div className="flex gap-2">
-                    {!r.aprobado && (
-                      <form action={aprobarRecursoAction}>
-                        <input type="hidden" name="id" value={r.id} />
-                        <Button type="submit" size="sm">Aprobar</Button>
-                      </form>
-                    )}
-                    <form action={setActivoAction}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <input type="hidden" name="activo" value={String(!r.activo)} />
-                      <Button type="submit" size="sm" variant="outline">
-                        {r.activo ? "Desactivar" : "Activar"}
-                      </Button>
-                    </form>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
+          {filtrados.map((r) => <RecursoCard key={r.id} r={r} />)}
         </div>
       )}
     </div>
