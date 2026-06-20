@@ -17,6 +17,7 @@ import { evaluarYAsignarTarea } from "./motor-tareas";
 import { generarOfertaConsultiva } from "./oferta-consultiva";
 import { ofrecerLeadmagnet } from "./selector-leadmagnet";
 import { encolarRespuesta } from "./mensajes-aprobacion";
+import { capturarContactoPasivo } from "./captura-contacto";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -89,6 +90,9 @@ export async function procesarConversacion(
       waMessageId: i === 0 ? waMessageId : undefined,
     });
   }
+
+  // S20.5 — Captura pasiva de email/nombre desde el texto entrante (fire-and-forget)
+  void capturarContactoPasivo(lead.id, mensajes).catch(console.error);
 
   // 6. S1.8 — Inferir y actualizar etapa de pipeline
   await inferirEtapaPipeline(lead.id, historial, intencion);
