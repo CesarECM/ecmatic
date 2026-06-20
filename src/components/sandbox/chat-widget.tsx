@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { VotoBotones } from "@/components/ui/voto-botones";
+import { SesionesSandbox } from "./sesiones-sandbox";
+import type { SesionGuardada } from "./sesiones-sandbox";
 
 interface MensajeChat {
   rol: "usuario" | "ia";
@@ -13,21 +15,6 @@ interface MensajeChat {
     etiquetas: string[];
     handoff: boolean;
   };
-}
-
-interface SesionGuardada {
-  sessionId: string;
-  inicio: string;
-  preview: string;
-  total: number;
-}
-
-function formatFecha(iso: string) {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return "Ahora";
-  if (mins < 60) return `Hace ${mins}m`;
-  if (mins < 1440) return `Hace ${Math.floor(mins / 60)}h`;
-  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 }
 
 export function ChatWidget() {
@@ -51,7 +38,6 @@ export function ChatWidget() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensajes, cargando]);
 
-  // Persiste la sesión activa en localStorage cada vez que mensajes cambia
   useEffect(() => {
     const firstUser = mensajes.find((m) => m.rol === "usuario");
     if (!firstUser) return;
@@ -90,12 +76,7 @@ export function ChatWidget() {
           rol: "ia",
           texto: data.respuesta,
           mensajeId: data.mensajeId ?? null,
-          meta: {
-            intencion: data.intencion,
-            faseCAGC: data.faseCAGC,
-            etiquetas: data.etiquetas ?? [],
-            handoff: data.handoff,
-          },
+          meta: { intencion: data.intencion, faseCAGC: data.faseCAGC, etiquetas: data.etiquetas ?? [], handoff: data.handoff },
         },
       ]);
     } catch (e) {
@@ -136,46 +117,27 @@ export function ChatWidget() {
     setError(null);
   }
 
+  function eliminarSesion(id: string) {
+    setSesiones((prev) => {
+      const next = prev.filter((s) => s.sessionId !== id);
+      localStorage.setItem("sandbox_sesiones", JSON.stringify(next));
+      return next;
+    });
+    if (id === sessionId) nuevaSesion();
+  }
+
   const ultimaMeta = [...mensajes].reverse().find((m) => m.rol === "ia" && m.meta)?.meta;
 
   return (
     <div className="flex gap-4" style={{ height: "calc(100vh - 180px)" }}>
-      {/* Panel izquierdo — historial de sesiones */}
-      <div className="w-48 shrink-0 border rounded-lg bg-card p-3 flex flex-col gap-2 overflow-hidden">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Sesiones</h3>
-          <button
-            onClick={nuevaSesion}
-            className="text-xs text-muted-foreground border rounded px-2 py-0.5 hover:bg-muted transition-colors"
-          >
-            + Nueva
-          </button>
-        </div>
-
-        {sesiones.length === 0 ? (
-          <p className="text-xs text-muted-foreground flex-1 flex items-center text-center px-1">
-            Se guardan automáticamente al primer mensaje.
-          </p>
-        ) : (
-          <div className="flex-1 overflow-y-auto space-y-1">
-            {sesiones.map((s) => (
-              <button
-                key={s.sessionId}
-                onClick={() => cargarSesion(s.sessionId)}
-                disabled={cargandoSesion}
-                className={`w-full text-left rounded-md px-2 py-2 text-xs transition-colors hover:bg-muted disabled:opacity-50 ${
-                  s.sessionId === sessionId ? "bg-muted ring-1 ring-primary/40" : ""
-                }`}
-              >
-                <p className="font-medium truncate leading-tight">{s.preview}</p>
-                <p className="text-muted-foreground mt-0.5">
-                  {s.total} msgs · {formatFecha(s.inicio)}
-                </p>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <SesionesSandbox
+        sessionId={sessionId}
+        sesiones={sesiones}
+        onNuevaSesion={nuevaSesion}
+        onCargarSesion={cargarSesion}
+        onEliminarSesion={eliminarSesion}
+        cargandoSesion={cargandoSesion}
+      />
 
       {/* Área de chat */}
       <div className="flex flex-col flex-1 border rounded-lg bg-card overflow-hidden">
@@ -219,7 +181,6 @@ export function ChatWidget() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
         <div className="border-t p-3 flex gap-2">
           <input
             value={input}
@@ -250,29 +211,24 @@ export function ChatWidget() {
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Intención</p>
               <p className="text-sm font-medium">{ultimaMeta.intencion.replace(/_/g, " ")}</p>
             </div>
-
             <div className="space-y-0.5">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Fase CAGC</p>
               <p className="text-sm font-medium">
                 {ultimaMeta.faseCAGC !== null ? `Fase ${ultimaMeta.faseCAGC}` : "No detectada"}
               </p>
             </div>
-
             <div className="space-y-1">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Etiquetas</p>
               {ultimaMeta.etiquetas.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {ultimaMeta.etiquetas.map((e) => (
-                    <span key={e} className="text-xs bg-muted px-2 py-0.5 rounded-full border">
-                      {e}
-                    </span>
+                    <span key={e} className="text-xs bg-muted px-2 py-0.5 rounded-full border">{e}</span>
                   ))}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">Ninguna aún</p>
               )}
             </div>
-
             <div className="space-y-0.5">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Handoff</p>
               <p className={`text-sm font-medium ${ultimaMeta.handoff ? "text-red-600" : "text-green-600"}`}>
