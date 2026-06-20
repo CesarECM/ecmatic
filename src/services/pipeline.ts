@@ -26,15 +26,17 @@ export interface EtapaPipeline {
   orden: number;
   ruta: string;
   fases_cagc: number[];
+  es_tronco: boolean;
+  etapas_siguientes: string[];
 }
 
-// S3.1 — Obtiene etapas ordenadas de una ruta de pipeline (incluye mapeo CAGC)
+// S3.1 — Obtiene etapas ordenadas de una ruta de pipeline (incluye mapeo CAGC y ramas)
 export async function obtenerEtapas(ruta: PipelineRuta): Promise<EtapaPipeline[]> {
   const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from("pipeline_etapas")
-    .select("id, nombre, orden, ruta, fases_cagc")
+    .select("id, nombre, orden, ruta, fases_cagc, es_tronco, etapas_siguientes")
     .eq("ruta", ruta)
     .eq("activo", true)
     .order("orden");
