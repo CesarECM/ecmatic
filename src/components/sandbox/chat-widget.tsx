@@ -6,7 +6,7 @@ import { VotoBotones } from "@/components/ui/voto-botones";
 interface MensajeChat {
   rol: "usuario" | "ia";
   texto: string;
-  mensajeId?: string | null; // S21.1 — para votos de calidad
+  mensajeId?: string | null;
   meta?: {
     intencion: string;
     faseCAGC: number | null;
@@ -15,17 +15,59 @@ interface MensajeChat {
   };
 }
 
+interface SesionGuardada {
+  sessionId: string;
+  inicio: string;
+  preview: string;
+  total: number;
+}
+
+function formatFecha(iso: string) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "Ahora";
+  if (mins < 60) return `Hace ${mins}m`;
+  if (mins < 1440) return `Hace ${Math.floor(mins / 60)}h`;
+  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+}
+
 export function ChatWidget() {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
+  const [sesiones, setSesiones] = useState<SesionGuardada[]>([]);
   const [input, setInput] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [cargandoSesion, setCargandoSesion] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem("sandbox_sesiones");
+      if (raw) setSesiones(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensajes, cargando]);
+
+  // Persiste la sesión activa en localStorage cada vez que mensajes cambia
+  useEffect(() => {
+    const firstUser = mensajes.find((m) => m.rol === "usuario");
+    if (!firstUser) return;
+    setSesiones((prev) => {
+      const existing = prev.find((s) => s.sessionId === sessionId);
+      const entry: SesionGuardada = {
+        sessionId,
+        inicio: existing?.inicio ?? new Date().toISOString(),
+        preview: firstUser.texto.slice(0, 45),
+        total: mensajes.length,
+      };
+      const next = [entry, ...prev.filter((s) => s.sessionId !== sessionId)].slice(0, 10);
+      localStorage.setItem("sandbox_sesiones", JSON.stringify(next));
+      return next;
+    });
+  }, [mensajes, sessionId]);
 
   async function enviar() {
     const texto = input.trim();
@@ -34,7 +76,6 @@ export function ChatWidget() {
     setError(null);
     setMensajes((prev) => [...prev, { rol: "usuario", texto }]);
     setCargando(true);
-
     try {
       const res = await fetch("/api/admin/sandbox", {
         method: "POST",
@@ -64,6 +105,30 @@ export function ChatWidget() {
     }
   }
 
+  async function cargarSesion(targetId: string) {
+    if (targetId === sessionId || cargandoSesion) return;
+    setCargandoSesion(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/sandbox?sessionId=${targetId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al cargar");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msgs: MensajeChat[] = (data.mensajes ?? []).map((m: any) => ({
+        rol: m.direccion === "entrante" ? "usuario" : "ia",
+        texto: m.contenido,
+        mensajeId: m.direccion === "saliente" ? m.id : undefined,
+      }));
+      setSessionId(targetId);
+      setMensajes(msgs);
+      setInput("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al cargar sesión");
+    } finally {
+      setCargandoSesion(false);
+    }
+  }
+
   function nuevaSesion() {
     setSessionId(crypto.randomUUID());
     setMensajes([]);
@@ -75,6 +140,43 @@ export function ChatWidget() {
 
   return (
     <div className="flex gap-4" style={{ height: "calc(100vh - 180px)" }}>
+      {/* Panel izquierdo — historial de sesiones */}
+      <div className="w-48 shrink-0 border rounded-lg bg-card p-3 flex flex-col gap-2 overflow-hidden">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Sesiones</h3>
+          <button
+            onClick={nuevaSesion}
+            className="text-xs text-muted-foreground border rounded px-2 py-0.5 hover:bg-muted transition-colors"
+          >
+            + Nueva
+          </button>
+        </div>
+
+        {sesiones.length === 0 ? (
+          <p className="text-xs text-muted-foreground flex-1 flex items-center text-center px-1">
+            Se guardan automáticamente al primer mensaje.
+          </p>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-1">
+            {sesiones.map((s) => (
+              <button
+                key={s.sessionId}
+                onClick={() => cargarSesion(s.sessionId)}
+                disabled={cargandoSesion}
+                className={`w-full text-left rounded-md px-2 py-2 text-xs transition-colors hover:bg-muted disabled:opacity-50 ${
+                  s.sessionId === sessionId ? "bg-muted ring-1 ring-primary/40" : ""
+                }`}
+              >
+                <p className="font-medium truncate leading-tight">{s.preview}</p>
+                <p className="text-muted-foreground mt-0.5">
+                  {s.total} msgs · {formatFecha(s.inicio)}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Área de chat */}
       <div className="flex flex-col flex-1 border rounded-lg bg-card overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -96,7 +198,6 @@ export function ChatWidget() {
               >
                 {m.texto}
               </div>
-              {/* S21.1 — Votos de calidad solo en respuestas IA */}
               {m.rol === "ia" && m.mensajeId && (
                 <div className="mt-0.5 px-1">
                   <VotoBotones mensajeId={m.mensajeId} />
@@ -111,9 +212,10 @@ export function ChatWidget() {
               </div>
             </div>
           )}
-          {error && (
-            <div className="text-center text-xs text-red-600 py-1">{error}</div>
+          {cargandoSesion && (
+            <p className="text-center text-xs text-muted-foreground py-2 animate-pulse">Cargando sesión…</p>
           )}
+          {error && <p className="text-center text-xs text-red-600 py-1">{error}</p>}
           <div ref={bottomRef} />
         </div>
 
@@ -125,12 +227,12 @@ export function ChatWidget() {
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
             placeholder="Escribe como si fueras un lead de WhatsApp…"
             className="flex-1 rounded-md border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-            disabled={cargando}
+            disabled={cargando || cargandoSesion}
             autoFocus
           />
           <button
             onClick={enviar}
-            disabled={cargando || !input.trim()}
+            disabled={cargando || cargandoSesion || !input.trim()}
             className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 transition-opacity"
           >
             Enviar
@@ -140,15 +242,7 @@ export function ChatWidget() {
 
       {/* Panel de diagnóstico IA */}
       <div className="w-60 shrink-0 border rounded-lg bg-card p-4 space-y-5 overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Diagnóstico IA</h3>
-          <button
-            onClick={nuevaSesion}
-            className="text-xs text-muted-foreground border rounded px-2 py-0.5 hover:bg-muted transition-colors"
-          >
-            Nueva sesión
-          </button>
-        </div>
+        <h3 className="text-sm font-semibold">Diagnóstico IA</h3>
 
         {ultimaMeta ? (
           <>
@@ -188,7 +282,7 @@ export function ChatWidget() {
           </>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Los diagnósticos aparecen aquí después de la primera respuesta.
+            Los diagnósticos aparecen aquí después de la primera respuesta de esta sesión.
           </p>
         )}
 
