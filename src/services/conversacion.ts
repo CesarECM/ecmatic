@@ -12,6 +12,8 @@ import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } 
 import { inferirYRegistrarFase, obtenerFaseLead } from "./cagc";
 import { generarSolicitudDatosFaltantes } from "./limpieza-leads";
 import { obtenerEtiquetasLead } from "./etiquetas";
+import { obtenerModo } from "./sistema";
+import { encolarRespuesta } from "./mensajes-aprobacion";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -122,8 +124,17 @@ export async function procesarConversacion(
     await crearTicketHandoff(lead.id, mensajes.join("\n"));
   }
 
-  // 10. S1.5 + S1.6 — Enviar respuesta con delay natural
+  // 10. S1.5 + S1.6 — Enviar respuesta (o encolar según modo S17.3)
   const bloques = dividirRespuesta(respuesta);
+  const modo = await obtenerModo().catch(() => "automatico" as const);
+
+  if (modo === "seguro") {
+    // S17.3 — Modo Seguro: encolar para aprobación manual, no enviar
+    await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques });
+    await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
+    return;
+  }
+
   await enviarRespuestaWhatsApp(telefono, bloques);
 
   // 11. Guardar respuesta saliente

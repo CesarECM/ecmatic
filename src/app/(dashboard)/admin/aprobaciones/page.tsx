@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { revalidatePath } from "next/cache";
 import { listarPendientes, aprobarEtiqueta, archivarEtiqueta } from "@/services/etiquetas";
+import { listarMensajesPendientes, marcarMensajeEnviado, rechazarMensaje } from "@/services/mensajes-aprobacion";
+import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 
 export const metadata = { title: "Cola de Aprobaciones · ECMatic" };
 export const revalidate = 0;
@@ -53,10 +55,23 @@ async function archivarEtiquetaAction(id: string) {
   revalidatePath("/admin/aprobaciones");
 }
 
+async function aprobarMensajeAction(id: string, telefono: string, bloques: string[]) {
+  "use server";
+  await enviarRespuestaWhatsApp(telefono, bloques);
+  await marcarMensajeEnviado(id);
+  revalidatePath("/admin/aprobaciones");
+}
+
+async function rechazarMensajeAction(id: string) {
+  "use server";
+  await rechazarMensaje(id);
+  revalidatePath("/admin/aprobaciones");
+}
+
 export default async function AprobacionesPage() {
   const supabase = createServiceClient();
 
-  const [{ data: kb }, { data: matriz }, { data: sugerencias }, etiquetasPendientes] = await Promise.all([
+  const [{ data: kb }, { data: matriz }, { data: sugerencias }, etiquetasPendientes, mensajesPendientes] = await Promise.all([
     supabase.from("recursos_conocimiento")
       .select("id, tipo, titulo, contenido, origen, created_at")
       .eq("aprobado", false).order("created_at"),
@@ -67,10 +82,12 @@ export default async function AprobacionesPage() {
       .select("id, tipo, titulo, descripcion, prioridad, created_at")
       .is("aprobado", null).order("prioridad").order("created_at"),
     listarPendientes(),
+    listarMensajesPendientes(),
   ]);
 
   const totalPendientes =
-    (kb?.length ?? 0) + (matriz?.length ?? 0) + (sugerencias?.length ?? 0) + etiquetasPendientes.length;
+    (kb?.length ?? 0) + (matriz?.length ?? 0) + (sugerencias?.length ?? 0) +
+    etiquetasPendientes.length + mensajesPendientes.length;
 
   function diasDesde(fecha: string) {
     return Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
@@ -185,6 +202,40 @@ export default async function AprobacionesPage() {
                   <form action={archivarEtiquetaAction.bind(null, item.id)}>
                     <button type="submit" className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
                       Archivar
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* S17.3 — Mensajes en cola (Modo Seguro) */}
+      {mensajesPendientes.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-sm font-medium flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-teal-500" />
+            Respuestas pendientes — Modo Seguro ({mensajesPendientes.length})
+          </p>
+          {mensajesPendientes.map((item) => (
+            <div key={item.id} className="rounded-lg border border-teal-200 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    {item.lead_nombre ?? item.telefono} · hace {diasDesde(item.created_at)}d
+                  </p>
+                  <p className="text-sm mt-1 whitespace-pre-wrap line-clamp-3">{item.respuesta}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <form action={aprobarMensajeAction.bind(null, item.id, item.telefono, item.bloques)}>
+                    <button type="submit" className="rounded bg-teal-600 px-3 py-1 text-xs text-white hover:bg-teal-700">
+                      Enviar
+                    </button>
+                  </form>
+                  <form action={rechazarMensajeAction.bind(null, item.id)}>
+                    <button type="submit" className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
+                      Rechazar
                     </button>
                   </form>
                 </div>
