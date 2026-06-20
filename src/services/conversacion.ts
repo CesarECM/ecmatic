@@ -14,6 +14,7 @@ import { generarSolicitudDatosFaltantes } from "./limpieza-leads";
 import { obtenerEtiquetasLead } from "./etiquetas";
 import { obtenerConfig } from "./sistema";
 import { evaluarYAsignarTarea } from "./motor-tareas";
+import { generarOfertaConsultiva } from "./oferta-consultiva";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -184,6 +185,12 @@ export async function procesarConversacion(
 
   // S13.2 — Inferir y actualizar fase CAGC del lead (fire-and-forget, silencioso)
   void inferirYRegistrarFase(lead.id, mensajes, historial).catch(console.error);
+
+  // S19.6/S19.7 — Escáner de señales situacionales + oferta consultiva (fire-and-forget)
+  // Solo actúa si hay historial y el lead ya definió su problema (fase ≥ 3)
+  if (historial && (estadoCagc?.fase_numero ?? 0) >= 3) {
+    void generarOfertaConsultiva(lead.id, telefono).catch(console.error);
+  }
 
   // S14.2 — Sugerir etiquetas (fire-and-forget, solo si hay historial)
   if (historial) {
