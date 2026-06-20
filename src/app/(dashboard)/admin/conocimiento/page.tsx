@@ -8,16 +8,18 @@ export const metadata = { title: "Base de Conocimiento · ECMatic" };
 export const revalidate = 0;
 
 export default async function ConocimientoPage() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [{ data: recursos }, alertas] = await Promise.all([
-    createServiceClient()
+    (createServiceClient() as any)
       .from("recursos_conocimiento")
-      .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at, versiones_previas")
+      .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at, versiones_previas, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es")
       .order("created_at", { ascending: false }),
     detectarObsoletos(),
   ]);
 
-  const total = recursos?.length ?? 0;
-  const pendientes = recursos?.filter((r) => !r.aprobado).length ?? 0;
+  const total = (recursos?.length ?? 0) as number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pendientes = recursos?.filter((r: any) => !r.aprobado).length ?? 0;
 
   return (
     <div className="space-y-4">

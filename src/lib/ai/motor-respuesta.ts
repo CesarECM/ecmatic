@@ -20,6 +20,25 @@ interface ContextoLead {
   etiquetas?: string[]; // S14.5 — etiquetas activas del lead
 }
 
+// S22.4 — Tipo de recurso enriquecido (incluye ficha de servicio)
+interface RecursoKB {
+  id: string; tipo: string; titulo: string; contenido: string;
+  caracteristicas?: string | null; beneficios?: string | null;
+  ventajas?: string | null; para_quien_es?: string | null; para_quien_no_es?: string | null;
+}
+
+// S22.5 — Formato enriquecido para recursos tipo servicio
+function formatearRecursoKB(r: RecursoKB): string {
+  if (r.tipo !== "servicio") return `[${r.tipo.toUpperCase()}] ${r.titulo}:\n${r.contenido}`;
+  const partes = [`[SERVICIO] ${r.titulo}:\n${r.contenido}`];
+  if (r.caracteristicas) partes.push(`Características: ${r.caracteristicas}`);
+  if (r.beneficios) partes.push(`Beneficios: ${r.beneficios}`);
+  if (r.ventajas) partes.push(`Ventajas: ${r.ventajas}`);
+  if (r.para_quien_es) partes.push(`Ideal para: ${r.para_quien_es}`);
+  if (r.para_quien_no_es) partes.push(`NO recomendado para: ${r.para_quien_no_es}`);
+  return partes.join("\n");
+}
+
 // ── S1.4: Búsqueda semántica en base de conocimiento ─────────────────────
 async function buscarRecursos(query: string, limite = 4) {
   const supabase = createServiceClient();
@@ -31,7 +50,7 @@ async function buscarRecursos(query: string, limite = 4) {
     umbral: 0.65,
   });
 
-  return (data ?? []) as { id: string; titulo: string; contenido: string; tipo: string }[];
+  return (data ?? []) as RecursoKB[];
 }
 
 export interface RespuestaIA {
@@ -77,9 +96,10 @@ export async function generarRespuesta(
   void registrarUso(recursos.map((r) => r.id));
   if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
+  // S22.5 — Usar formato enriquecido para recursos tipo servicio
   const recursosTexto =
     recursos.length > 0
-      ? recursos.map((r) => `[${r.tipo.toUpperCase()}] ${r.titulo}:\n${r.contenido}`).join("\n\n")
+      ? recursos.map(formatearRecursoKB).join("\n\n")
       : "No se encontraron recursos específicos. Responde con información general del Centro ECM.";
 
   // S11.8 — Inyectar mejores prácticas aprobadas en el contexto
@@ -137,7 +157,9 @@ INSTRUCCIONES:
 - NO expliques que eres IA
 - Si no tienes información suficiente para responder, pregunta por más detalles
 - Si detectas intención de compra, ofrece el link de pago de forma natural
-- Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto`;
+- Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto
+- Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
+- Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad`;
 
   const response = await anthropic.messages.create({
     model: modeloPorTarea("RESPUESTA"),

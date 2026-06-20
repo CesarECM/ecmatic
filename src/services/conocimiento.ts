@@ -10,6 +10,9 @@ interface VersionRecurso {
   fecha: string;
 }
 
+// S22.4 — Campos enriquecidos para recursos tipo 'servicio'
+export type FichaServicio = { caracteristicas?: string | null; beneficios?: string | null; ventajas?: string | null; para_quien_es?: string | null; para_quien_no_es?: string | null };
+
 export interface FiltrosRecursos {
   tipo?: TipoRecurso;
   aprobado?: boolean;
@@ -21,14 +24,15 @@ export async function crearRecurso(
   tipo: TipoRecurso,
   titulo: string,
   contenido: string,
-  origen: OrigenRecurso = "interno"
+  origen: OrigenRecurso = "interno",
+  ficha?: FichaServicio
 ) {
   const supabase = createServiceClient();
   const embedding = await generarEmbedding(`${titulo}\n${contenido}`);
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .from("recursos_conocimiento")
-    .insert({ tipo, titulo, contenido, embedding, origen })
+    .insert({ tipo, titulo, contenido, embedding, origen, ...(ficha ?? {}) })
     .select()
     .single();
 
@@ -39,7 +43,7 @@ export async function crearRecurso(
 // S2.2 + S2.4 — Actualiza un recurso; guarda versión previa y regenera embedding si cambia el contenido
 export async function actualizarRecurso(
   id: string,
-  campos: { titulo?: string; contenido?: string; aprobado?: boolean; activo?: boolean }
+  campos: { titulo?: string; contenido?: string; aprobado?: boolean; activo?: boolean } & Partial<FichaServicio>
 ) {
   const supabase = createServiceClient();
 
@@ -52,11 +56,12 @@ export async function actualizarRecurso(
   if (fetchError || !actual) throw new Error(`[conocimiento] Recurso no encontrado: ${id}`);
 
   const cambiaContenido = campos.titulo !== undefined || campos.contenido !== undefined;
+  const { titulo: _t, contenido: _c, aprobado: _a, activo: _ac, ...fichaUpdate } = campos;
 
   if (!cambiaContenido) {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
       .from("recursos_conocimiento")
-      .update({ aprobado: campos.aprobado, activo: campos.activo })
+      .update({ aprobado: campos.aprobado, activo: campos.activo, ...fichaUpdate })
       .eq("id", id)
       .select()
       .single();
@@ -79,7 +84,7 @@ export async function actualizarRecurso(
     `${campos.titulo ?? actual.titulo}\n${campos.contenido ?? actual.contenido}`
   );
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .from("recursos_conocimiento")
     .update({
       titulo: campos.titulo,
@@ -88,6 +93,7 @@ export async function actualizarRecurso(
       activo: campos.activo,
       embedding: nuevoEmbedding,
       versiones_previas: nuevasVersiones,
+      ...fichaUpdate,
     })
     .eq("id", id)
     .select()
@@ -139,11 +145,9 @@ export async function desactivarRecurso(id: string) {
   return actualizarRecurso(id, { activo: false });
 }
 
-// S2.3 — Algoritmo de confianza: 60% tasa de cierre + 40% volumen de uso (cap 50)
+// 60% tasa de cierre + 40% volumen de uso (cap 50)
 function calcularScoreConfianza(uso: number, cierre: number): number {
-  const ratio = cierre / Math.max(uso, 1);
-  const factorUso = Math.min(uso / 50, 1);
-  return Math.round((ratio * 0.6 + factorUso * 0.4) * 100) / 100;
+  return Math.round((cierre / Math.max(uso, 1) * 0.6 + Math.min(uso / 50, 1) * 0.4) * 100) / 100;
 }
 
 // S2.3 — Registra que los recursos fueron servidos en una respuesta de IA

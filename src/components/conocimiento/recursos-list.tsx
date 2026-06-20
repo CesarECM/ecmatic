@@ -24,6 +24,7 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [tipoForm, setTipoForm] = useState<string>("faq");
 
   const filtrados = recursos.filter((r) => {
     if (filtroTipo !== "todos" && r.tipo !== filtroTipo) return false;
@@ -75,7 +76,9 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="tipo">Tipo</Label>
-                  <select name="tipo" id="tipo" required className="w-full text-sm border rounded-md px-3 py-1.5 bg-background">
+                  <select name="tipo" id="tipo" required value={tipoForm}
+                    onChange={(e) => setTipoForm(e.target.value)}
+                    className="w-full text-sm border rounded-md px-3 py-1.5 bg-background">
                     {TIPOS.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
@@ -90,6 +93,17 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
                 <Label htmlFor="contenido">Contenido</Label>
                 <Textarea id="contenido" name="contenido" required rows={4} placeholder="Contenido completo del recurso..." />
               </div>
+              {tipoForm === "servicio" && (
+                <div className="space-y-2 border-t pt-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ficha de servicio</p>
+                  {(["caracteristicas","beneficios","ventajas","para_quien_es","para_quien_no_es"] as const).map((campo) => (
+                    <div key={campo} className="space-y-1">
+                      <Label className="text-xs">{campo.replace(/_/g, " ")}</Label>
+                      <Textarea name={campo} rows={2} placeholder={`${campo.replace(/_/g, " ")}…`} />
+                    </div>
+                  ))}
+                </div>
+              )}
               <Button type="submit" size="sm">Crear y aprobar</Button>
             </form>
           </CardContent>

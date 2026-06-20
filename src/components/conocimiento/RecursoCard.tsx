@@ -29,6 +29,12 @@ export type RecursoRow = {
   origen: string;
   created_at: string;
   versiones_previas: unknown[];
+  // S22.4 — Ficha de servicio enriquecida
+  caracteristicas?: string | null;
+  beneficios?: string | null;
+  ventajas?: string | null;
+  para_quien_es?: string | null;
+  para_quien_no_es?: string | null;
 };
 
 const TIPOS = [
@@ -146,6 +152,17 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
                 <Label htmlFor={`contenido-${r.id}`} className="text-xs">Contenido</Label>
                 <Textarea id={`contenido-${r.id}`} name="contenido" defaultValue={r.contenido} required rows={5} />
               </div>
+              {r.tipo === "servicio" && (
+                <div className="space-y-2 border-t pt-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ficha de servicio</p>
+                  {(["caracteristicas","beneficios","ventajas","para_quien_es","para_quien_no_es"] as const).map((campo) => (
+                    <div key={campo} className="space-y-1">
+                      <Label className="text-xs">{campo.replace(/_/g, " ")}</Label>
+                      <Textarea name={campo} defaultValue={r[campo] ?? ""} rows={2} placeholder={`${campo.replace(/_/g, " ")}…`} />
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button type="submit" size="sm">Guardar versión</Button>
                 <Button type="button" size="sm" variant="outline" onClick={() => setEditando(false)}>Cancelar</Button>
@@ -154,6 +171,13 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
           ) : (
             <>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{r.contenido}</p>
+              {r.tipo === "servicio" && (r.caracteristicas || r.beneficios || r.ventajas || r.para_quien_es || r.para_quien_no_es) && (
+                <div className="border-t pt-2 space-y-1.5 text-xs">
+                  {([["caracteristicas","Características"],["beneficios","Beneficios"],["ventajas","Ventajas"],["para_quien_es","Para quién es"],["para_quien_no_es","Para quién NO es"]] as const).map(([k, label]) =>
+                    r[k] ? <div key={k}><span className="font-medium text-muted-foreground">{label}: </span>{r[k]}</div> : null
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 flex-wrap">
                 {!r.aprobado && (
                   <form action={aprobarRecursoAction}>

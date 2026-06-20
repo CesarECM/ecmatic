@@ -2,8 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { crearRecurso, aprobarRecurso, actualizarRecurso, procesarFuenteExterna } from "@/services/conocimiento";
+import type { FichaServicio } from "@/services/conocimiento";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { TipoRecurso } from "@/lib/supabase/types";
+
+function extraerFicha(formData: FormData): FichaServicio {
+  const get = (k: string) => (formData.get(k) as string)?.trim() || null;
+  return {
+    caracteristicas: get("caracteristicas"),
+    beneficios: get("beneficios"),
+    ventajas: get("ventajas"),
+    para_quien_es: get("para_quien_es"),
+    para_quien_no_es: get("para_quien_no_es"),
+  };
+}
 
 export async function crearRecursoAction(formData: FormData) {
   const tipo = formData.get("tipo") as TipoRecurso;
@@ -11,7 +23,8 @@ export async function crearRecursoAction(formData: FormData) {
   const contenido = formData.get("contenido") as string;
   if (!tipo || !titulo?.trim() || !contenido?.trim()) return;
 
-  const recurso = await crearRecurso(tipo, titulo.trim(), contenido.trim());
+  const ficha = tipo === "servicio" ? extraerFicha(formData) : undefined;
+  const recurso = await crearRecurso(tipo, titulo.trim(), contenido.trim(), "interno", ficha);
   await aprobarRecurso(recurso.id);
   revalidatePath("/admin/conocimiento");
 }
@@ -36,7 +49,9 @@ export async function editarRecursoAction(formData: FormData) {
   const titulo = (formData.get("titulo") as string)?.trim();
   const contenido = (formData.get("contenido") as string)?.trim();
   if (!id || !titulo || !contenido) return;
-  await actualizarRecurso(id, { titulo, contenido });
+  // S22.4 — Incluir ficha de servicio si vienen los campos
+  const ficha = formData.has("caracteristicas") ? extraerFicha(formData) : {};
+  await actualizarRecurso(id, { titulo, contenido, ...ficha });
   revalidatePath("/admin/conocimiento");
 }
 
