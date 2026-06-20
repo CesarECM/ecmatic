@@ -369,6 +369,8 @@ export interface Database {
           canal: CanalNurturing;
           etapa_pipeline: string | null;
           ruta: PipelineRuta | null;
+          fase_cagc_min: number | null;
+          fase_cagc_max: number | null;
           dias_sin_respuesta: number;
           plantilla_id: string | null;
           mensaje_fallback: string | null;
@@ -383,6 +385,8 @@ export interface Database {
           canal: CanalNurturing;
           etapa_pipeline?: string | null;
           ruta?: PipelineRuta | null;
+          fase_cagc_min?: number | null;
+          fase_cagc_max?: number | null;
           dias_sin_respuesta?: number;
           plantilla_id?: string | null;
           mensaje_fallback?: string | null;

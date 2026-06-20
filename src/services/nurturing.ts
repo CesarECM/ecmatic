@@ -10,6 +10,8 @@ export interface Secuencia {
   canal: CanalNurturing;
   etapa_pipeline: string | null;
   ruta: PipelineRuta | null;
+  fase_cagc_min: number | null;  // S20.7 — fase mínima (inclusive); null = sin filtro
+  fase_cagc_max: number | null;  // S20.7 — fase máxima (inclusive); null = sin filtro
   dias_sin_respuesta: number;
   plantilla_id: string | null;
   mensaje_fallback: string | null;
@@ -95,13 +97,24 @@ export async function obtenerLeadsParaNurturing(): Promise<LeadParaNurturing[]> 
   if (error) throw new Error(`[nurturing] Error obteniendo leads: ${error.message}`);
   if (!leads?.length) return [];
 
-  // Ronda 2: mensajes del último contacto — filtrando por IDs ya conocidos
-  const { data: ultimosMensajes } = await supabase
-    .from("mensajes")
-    .select("lead_id, created_at")
-    .in("lead_id", leads.map((l) => l.id))
-    .eq("direccion", "saliente")
-    .order("created_at", { ascending: false });
+  // Ronda 2: mensajes del último contacto + fases CAGC — en paralelo
+  const leadIds = leads.map((l) => l.id);
+  const [{ data: ultimosMensajes }, { data: cagcEstados }] = await Promise.all([
+    supabase
+      .from("mensajes")
+      .select("lead_id, created_at")
+      .in("lead_id", leadIds)
+      .eq("direccion", "saliente")
+      .order("created_at", { ascending: false }),
+    (supabase as any)
+      .from("lead_cagc_estado")
+      .select("lead_id, fase_numero")
+      .in("lead_id", leadIds),
+  ]);
+
+  const cagcPorLead = new Map<string, number>(
+    (cagcEstados ?? []).map((c: { lead_id: string; fase_numero: number }) => [c.lead_id, c.fase_numero])
+  );
 
   const idsConTicket     = new Set((ticketsAbiertos ?? []).map((t) => t.lead_id));
   const idsTicketReciente = new Set((ticketsCerradosRecientes ?? []).map((t) => t.lead_id));
@@ -133,11 +146,19 @@ export async function obtenerLeadsParaNurturing(): Promise<LeadParaNurturing[]> 
       (ahora.getTime() - fechaRef.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Encuentra la secuencia más específica que aplica (ruta + etapa > solo etapa > general)
+    // Encuentra la secuencia más específica que aplica (ruta + etapa + fase CAGC > general)
+    const faseCagc = cagcPorLead.get(lead.id) ?? null;
     const secuenciaAplicable = secuencias.find((s) => {
-      const rutaOk = s.ruta === null || s.ruta === lead.pipeline_ruta;
+      const rutaOk  = s.ruta === null || s.ruta === lead.pipeline_ruta;
       const etapaOk = s.etapa_pipeline === null || s.etapa_pipeline === lead.pipeline_stage;
-      return rutaOk && etapaOk && diasInactivo >= s.dias_sin_respuesta;
+      // S20.7 — filtro CAGC: si la secuencia define rango, el lead debe tener fase conocida y dentro del rango
+      const sinFiltroCagc = s.fase_cagc_min === null && s.fase_cagc_max === null;
+      const cagcOk = sinFiltroCagc || (
+        faseCagc !== null &&
+        (s.fase_cagc_min === null || faseCagc >= s.fase_cagc_min) &&
+        (s.fase_cagc_max === null || faseCagc <= s.fase_cagc_max)
+      );
+      return rutaOk && etapaOk && cagcOk && diasInactivo >= s.dias_sin_respuesta;
     });
 
     if (secuenciaAplicable) {
