@@ -1,7 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import type { IncomingMessage } from "@/lib/whatsapp/client";
+import { descargarMediaWA } from "@/lib/whatsapp/client";
 import type { IntencionClasificada } from "@/lib/supabase/types";
 import { procesarConversacion } from "@/services/conversacion";
+import { transcribirAudio } from "@/lib/ai/audio";
 
 const BUFFER_WINDOW_MS = 8_000;
 
@@ -18,10 +20,23 @@ export async function procesarMensajeEntrante(msg: IncomingMessage) {
 
   if (existente) return;
 
+  // Transcribir audio antes de entrar al buffer
+  let body = msg.body;
+  if (msg.mediaId) {
+    try {
+      const { buffer, mimeType } = await descargarMediaWA(msg.mediaId);
+      const texto = await transcribirAudio(buffer, mimeType);
+      body = `[Audio]: ${texto}`;
+    } catch (err) {
+      console.error("[mensajes] error transcribiendo audio:", err);
+      body = "[Audio no pudo transcribirse]";
+    }
+  }
+
   // Guardar en buffer
   await supabase.from("mensajes_buffer").insert({
     telefono: msg.from,
-    contenido: msg.body,
+    contenido: body,
     wa_message_id: msg.messageId,
   });
 

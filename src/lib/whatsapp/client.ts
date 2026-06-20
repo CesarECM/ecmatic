@@ -71,6 +71,8 @@ export interface IncomingMessage {
   messageId: string;
   body: string;
   timestamp: number;
+  mediaId?: string;      // presente solo en mensajes de audio
+  mimeType?: string;
 }
 
 export function parseWebhookPayload(body: unknown): IncomingMessage[] {
@@ -87,9 +89,45 @@ export function parseWebhookPayload(body: unknown): IncomingMessage[] {
             body: msg.text?.body ?? "",
             timestamp: Number(msg.timestamp),
           });
+        } else if (msg.type === "audio") {
+          messages.push({
+            from: msg.from,
+            messageId: msg.id,
+            body: "",
+            timestamp: Number(msg.timestamp),
+            mediaId: msg.audio?.id,
+            mimeType: msg.audio?.mime_type,
+          });
         }
       }
     }
   }
   return messages;
+}
+
+// Descarga el binario de un media de WhatsApp en dos pasos:
+// 1) obtiene la URL temporal de descarga, 2) descarga el archivo
+export async function descargarMediaWA(
+  mediaId: string
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const metaRes = await fetch(`${BASE_URL}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!metaRes.ok) {
+    throw new Error(`Meta media info error ${metaRes.status}`);
+  }
+  const { url, mime_type } = (await metaRes.json()) as {
+    url: string;
+    mime_type: string;
+  };
+
+  const audioRes = await fetch(url, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!audioRes.ok) {
+    throw new Error(`Media download error ${audioRes.status}`);
+  }
+
+  const arrayBuffer = await audioRes.arrayBuffer();
+  return { buffer: Buffer.from(arrayBuffer), mimeType: mime_type };
 }
