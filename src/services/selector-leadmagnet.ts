@@ -1,10 +1,14 @@
-// S20.2 — Motor de selección y oferta de leadmagnet según fase CAGC y contexto.
-// Elige el leadmagnet más efectivo para la fase actual y encola el mensaje de oferta.
+// S20.2/S20.4 — Motor de selección y oferta de leadmagnet según fase CAGC y contexto.
+// Elige el leadmagnet más efectivo para la fase actual.
+// · pre-creado / generable-ia → encola mensaje de oferta para aprobación del admin.
+// · requiere-humano           → arma brief contextual y asigna tarea urgente (S20.4).
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { listarLeadmagnets, registrarOfrecimiento, type Leadmagnet } from "@/services/leadmagnets";
 import { generarMensajeOfertaLeadmagnet } from "@/lib/ai/oferta-leadmagnet";
 import { encolarRespuesta } from "@/services/mensajes-aprobacion";
+import { asignarTarea } from "@/services/tareas";
+import { obtenerHistorial } from "@/services/mensajes";
 
 const SCORE_MINIMO       = 0.30;  // no ofrecer leadmagnets con histórico muy malo
 const COOLDOWN_HORAS     = 24;    // no ofrecer más de uno por lead cada 24 h
@@ -50,15 +54,20 @@ export async function ofrecerLeadmagnet(
       return { ofrecido: false, leadmagnet: lm, motivo: "score_bajo" };
     }
 
-    // 3. Nombre del lead
+    // 3. Datos del lead
     const supabase = createServiceClient();
     const { data: lead } = await supabase
       .from("leads")
-      .select("nombre")
+      .select("nombre, pipeline_stage")
       .eq("id", leadId)
       .single();
 
-    // 4. Generar mensaje de oferta
+    // S20.4 — Leadmagnet humano: brief contextual + tarea urgente en lugar de cola WA
+    if (lm.tipo === "requiere-humano") {
+      return await gestionarLeadmagnetHumano(leadId, lm, lead, faseCagc);
+    }
+
+    // 4. Generar mensaje de oferta (pre-creado / generable-ia)
     const mensaje = await generarMensajeOfertaLeadmagnet({
       nombreLead:           lead?.nombre ?? null,
       tituloLeadmagnet:     lm.titulo,
@@ -85,6 +94,36 @@ export async function ofrecerLeadmagnet(
   } catch (err) {
     console.error("[selector-leadmagnet] Error:", err);
     return { ofrecido: false, leadmagnet: null, motivo: "error" };
+  }
+}
+
+// S20.4 — Gestiona leadmagnets de tipo requiere-humano.
+// Ensambla un brief con contexto completo y asigna una tarea urgente de tipo "informacion".
+async function gestionarLeadmagnetHumano(
+  leadId: string,
+  lm: Leadmagnet,
+  lead: { nombre: string | null; pipeline_stage: string } | null,
+  faseCagc: number
+): Promise<ResultadoSeleccion> {
+  try {
+    // Últimas 4 líneas del historial como contexto para el vendedor
+    const historialTexto = await obtenerHistorial(leadId, 4).catch(() => "");
+
+    const brief = [
+      `🎯 LEADMAGNET HUMANO: ${lm.titulo}`,
+      `Lead: ${lead?.nombre ?? "Sin nombre"} | Fase CAGC: ${faseCagc} | Stage: ${lead?.pipeline_stage ?? "—"}`,
+      `Qué entregar: ${lm.descripcion}`,
+      `Acción: Contactar al lead y entregar este material personalmente.`,
+      historialTexto ? `Contexto reciente:\n${historialTexto}` : "",
+    ].filter(Boolean).join("\n");
+
+    await asignarTarea(leadId, "informacion", brief);
+    await registrarOfrecimiento(lm.id, false);
+
+    return { ofrecido: true, leadmagnet: lm, motivo: "ofrecido" };
+  } catch (err) {
+    console.error("[selector-leadmagnet] Error en leadmagnet humano:", err);
+    return { ofrecido: false, leadmagnet: lm, motivo: "error" };
   }
 }
 
