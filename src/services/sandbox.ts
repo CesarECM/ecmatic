@@ -14,6 +14,7 @@ export interface SandboxResult {
   faseCAGC: number | null;
   etiquetas: string[];
   handoff: boolean;
+  mensajeId: string | null; // S21.1 — ID del mensaje saliente para votos de calidad
 }
 
 export async function procesarSandbox(
@@ -71,8 +72,8 @@ export async function procesarSandbox(
   // Detectar si la respuesta activaría handoff
   const handoff = await necesitaHandoff([mensaje], respuesta);
 
-  // Guardar respuesta para el turno siguiente (sin enviar por WhatsApp)
-  await guardarMensaje({
+  // S21.1 — Guardar respuesta y capturar ID para votos de calidad
+  const msgSaliente = await guardarMensaje({
     leadId: lead.id,
     contenido: respuesta,
     direccion: "saliente",
@@ -85,5 +86,6 @@ export async function procesarSandbox(
     faseCAGC: estadoCagc?.fase_numero ?? null,
     etiquetas: etiquetasLead.map((e) => e.nombre),
     handoff,
+    mensajeId: msgSaliente?.id ?? null,
   };
 }

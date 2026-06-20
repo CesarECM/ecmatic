@@ -872,6 +872,23 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["lead_cagc_estado"]["Insert"]>;
         Relationships: Relationship[];
       };
+      votos_respuesta: {
+        Row: {
+          id: string;
+          mensaje_id: string;
+          voto: "bueno" | "malo";
+          comentario: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          mensaje_id: string;
+          voto: "bueno" | "malo";
+          comentario?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["votos_respuesta"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       leadmagnets: {
         Row: {
           id: string;

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { VotoBotones } from "@/components/ui/voto-botones";
 
 interface MensajeChat {
   rol: "usuario" | "ia";
   texto: string;
+  mensajeId?: string | null; // S21.1 — para votos de calidad
   meta?: {
     intencion: string;
     faseCAGC: number | null;
@@ -46,6 +48,7 @@ export function ChatWidget() {
         {
           rol: "ia",
           texto: data.respuesta,
+          mensajeId: data.mensajeId ?? null,
           meta: {
             intencion: data.intencion,
             faseCAGC: data.faseCAGC,
@@ -83,7 +86,7 @@ export function ChatWidget() {
             </p>
           )}
           {mensajes.map((m, i) => (
-            <div key={i} className={`flex ${m.rol === "usuario" ? "justify-end" : "justify-start"}`}>
+            <div key={i} className={`flex flex-col ${m.rol === "usuario" ? "items-end" : "items-start"}`}>
               <div
                 className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
                   m.rol === "usuario"
@@ -93,6 +96,12 @@ export function ChatWidget() {
               >
                 {m.texto}
               </div>
+              {/* S21.1 — Votos de calidad solo en respuestas IA */}
+              {m.rol === "ia" && m.mensajeId && (
+                <div className="mt-0.5 px-1">
+                  <VotoBotones mensajeId={m.mensajeId} />
+                </div>
+              )}
             </div>
           ))}
           {cargando && (

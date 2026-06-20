@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { moverLeadDesdePerfilAction, asignarVendedorAction, toggleNurturingAction, actualizarDatosB2BAction, emitirFacturaAction, marcarPrivacidadManualAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
+import { MensajesLead } from "@/components/leads/mensajes-lead";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
@@ -31,9 +32,6 @@ const DISC_COLORS: Record<string, string> = {
   S: "bg-green-100 text-green-800", C: "bg-blue-100 text-blue-800",
 };
 
-const CANAL_ICON: Record<string, string> = {
-  whatsapp: "💬", email: "✉️", meet: "📹", interno: "📝",
-};
 
 export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: LeadPerfilProps) {
   const scoreColor = lead.score_salud >= 67 ? "text-green-600" : lead.score_salud >= 34 ? "text-yellow-600" : "text-red-600";
@@ -287,26 +285,8 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
         </Card>
       )}
 
-      {/* Mensajes recientes */}
-      {mensajes.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Mensajes recientes</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {mensajes.map((m) => (
-                <div key={m.id} className={`text-sm p-2 rounded-md ${m.direccion === "entrante" ? "bg-muted" : "bg-primary/5 text-right"}`}>
-                  <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <span>{CANAL_ICON[m.canal] ?? "📨"}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}</span>
-                    {m.intencion_clasificada && <Badge variant="outline" className="text-xs py-0">{m.intencion_clasificada}</Badge>}
-                  </div>
-                  <p className="text-sm">{m.contenido}</p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* S21.1 — Mensajes recientes con votación de calidad */}
+      <MensajesLead mensajes={mensajes} />
     </div>
   );
 }
