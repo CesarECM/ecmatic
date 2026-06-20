@@ -12,7 +12,8 @@ export type TareaIA =
   | "CHURN"
   | "CAGC_INFERIR"
   | "VISION"
-  | "SENALES";
+  | "SENALES"
+  | "LEADMAGNET";
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -34,6 +35,7 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   COACHING:      "sonnet",  // coaching de vendedores
   VISION:        "sonnet",  // clasificación de imágenes (requiere visión)
   SENALES:       "haiku",   // extracción de señales situacionales
+  LEADMAGNET:    "haiku",   // mensaje de oferta de leadmagnet (simple, conversacional)
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.

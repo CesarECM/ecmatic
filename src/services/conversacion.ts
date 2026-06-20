@@ -15,6 +15,7 @@ import { obtenerEtiquetasLead } from "./etiquetas";
 import { obtenerConfig } from "./sistema";
 import { evaluarYAsignarTarea } from "./motor-tareas";
 import { generarOfertaConsultiva } from "./oferta-consultiva";
+import { ofrecerLeadmagnet } from "./selector-leadmagnet";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -190,6 +191,12 @@ export async function procesarConversacion(
   // Solo actúa si hay historial y el lead ya definió su problema (fase ≥ 3)
   if (historial && (estadoCagc?.fase_numero ?? 0) >= 3) {
     void generarOfertaConsultiva(lead.id, telefono).catch(console.error);
+  }
+
+  // S20.2 — Motor de selección y oferta de leadmagnet (fire-and-forget)
+  // Solo si hay historial y fase CAGC conocida (el leadmagnet filtra por fase internamente)
+  if (historial && estadoCagc !== null) {
+    void ofrecerLeadmagnet(lead.id, telefono, estadoCagc.fase_numero).catch(console.error);
   }
 
   // S14.2 — Sugerir etiquetas (fire-and-forget, solo si hay historial)
