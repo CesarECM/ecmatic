@@ -39,6 +39,7 @@ export type ResultadoCita = "show" | "noshow" | "seguimiento";
 export type TemperaturaCierre = "fria" | "tibia" | "caliente";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
 export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento" | "cierre";
+export type TipoLeadmagnet = "pre-creado" | "generable-ia" | "requiere-humano";
 
 export interface DimensionesMatriz {
   temperamento?: "D" | "I" | "S" | "C";
@@ -865,6 +866,36 @@ export interface Database {
           historial?: import("@/services/cagc").TransicionCAGC[];
         };
         Update: Partial<Database["public"]["Tables"]["lead_cagc_estado"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      leadmagnets: {
+        Row: {
+          id: string;
+          titulo: string;
+          descripcion: string;
+          tipo: TipoLeadmagnet;
+          fases_cagc_objetivo: number[];
+          contenido: string | null;
+          score_efectividad: number;
+          activo: boolean;
+          veces_ofrecido: number;
+          veces_aceptado: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          titulo: string;
+          descripcion?: string;
+          tipo: TipoLeadmagnet;
+          fases_cagc_objetivo?: number[];
+          contenido?: string | null;
+          score_efectividad?: number;
+          activo?: boolean;
+          veces_ofrecido?: number;
+          veces_aceptado?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["leadmagnets"]["Insert"]>;
         Relationships: Relationship[];
       };
     };  // end Tables
