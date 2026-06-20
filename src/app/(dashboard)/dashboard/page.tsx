@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Rol } from "@/lib/supabase/types";
+import { obtenerAccionPrioritaria, obtenerResumenPendientes } from "@/services/accion-prioritaria";
+import { AccionPrioritariaCard } from "@/components/dashboard/accion-prioritaria-card";
 
 // S10.5 — KPIs en tiempo real
 async function obtenerKPIs() {
@@ -190,7 +192,14 @@ export default async function DashboardPage() {
 
   const rol = (profile?.rol ?? "vendedor") as Rol;
   const modulos = MODULOS.filter((m) => m.roles.includes(rol));
-  const kpis = rol === "admin" || rol === "admin_financiero" ? await obtenerKPIs() : null;
+  const esAdmin = rol === "admin";
+
+  const [kpis, accionPrioritaria, resumenPendientes] = await Promise.all([
+    rol === "admin" || rol === "admin_financiero" ? obtenerKPIs() : Promise.resolve(null),
+    esAdmin ? obtenerAccionPrioritaria() : Promise.resolve(null),
+    esAdmin ? obtenerResumenPendientes() : Promise.resolve(null),
+  ]);
+
   const fmt = (n: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
 
   return (
@@ -203,6 +212,11 @@ export default async function DashboardPage() {
           CRM con IA para Centro ECM · Sprints 0–10 activos
         </p>
       </div>
+
+      {/* S21.4 — Acción prioritaria + chips de pendientes */}
+      {esAdmin && (
+        <AccionPrioritariaCard accion={accionPrioritaria} resumen={resumenPendientes} />
+      )}
 
       {/* S10.5 — KPIs en tiempo real */}
       {kpis && (
