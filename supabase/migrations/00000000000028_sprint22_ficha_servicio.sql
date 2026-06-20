@@ -9,7 +9,10 @@ ALTER TABLE recursos_conocimiento
   ADD COLUMN IF NOT EXISTS para_quien_es     TEXT,
   ADD COLUMN IF NOT EXISTS para_quien_no_es  TEXT;
 
--- Actualizar función buscar_recursos para retornar los campos de ficha
+-- DROP necesario porque cambia el tipo de retorno (nuevas columnas)
+DROP FUNCTION IF EXISTS buscar_recursos(vector, text, integer, float);
+
+-- Recrear función buscar_recursos con campos de ficha de servicio
 CREATE OR REPLACE FUNCTION buscar_recursos(
   query_embedding  vector(1536),
   tipo_filtro      TEXT DEFAULT NULL,
