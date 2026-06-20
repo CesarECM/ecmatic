@@ -9,6 +9,7 @@ import { registrarConversionExperimento } from "@/services/experimentos";
 import { obtenerFaseLead } from "@/services/cagc";
 import { inscribirEnPipeline } from "@/services/pipeline-multi";
 import { asignarEtiquetaProducto } from "@/services/etiquetas-hooks";
+import { asignarVarianteAB, registrarAvanceAB } from "@/services/pipeline-ab";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -94,6 +95,10 @@ export async function moverLead(
 
   // S13.5 — Mantener lead_pipelines sincronizado con el pipeline primario
   void inscribirEnPipeline(leadId, lead.pipeline_ruta, nuevaEtapa).catch(console.error);
+
+  // S13.8 — A/B: registrar conversión en etapa anterior + asignar variante en la nueva
+  void registrarAvanceAB(leadId, lead.pipeline_stage ?? "", lead.pipeline_ruta).catch(console.error);
+  void asignarVarianteAB(leadId, nuevaEtapa, lead.pipeline_ruta).catch(console.error);
 
   await supabase.from("pipeline_movimientos").insert({
     lead_id: leadId,
