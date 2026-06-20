@@ -38,6 +38,7 @@ export type EstadoComision = "pendiente" | "pagada";
 export type ResultadoCita = "show" | "noshow" | "seguimiento";
 export type TemperaturaCierre = "fria" | "tibia" | "caliente";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
+export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento" | "cierre";
 
 export interface DimensionesMatriz {
   temperamento?: "D" | "I" | "S" | "C";

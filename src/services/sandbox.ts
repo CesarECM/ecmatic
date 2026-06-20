@@ -9,6 +9,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export interface SandboxResult {
   respuesta: string;
+  scoreConfianza: number;
   intencion: string;
   faseCAGC: number | null;
   etiquetas: string[];
@@ -56,7 +57,7 @@ export async function procesarSandbox(
   ]);
 
   // Generar respuesta con el mismo motor que usa WhatsApp
-  const respuesta = await generarRespuesta([mensaje], {
+  const { texto: respuesta, scoreConfianza } = await generarRespuesta([mensaje], {
     nombre: lead.nombre ?? null,
     temperamento: lead.temperamento_inferido ?? null,
     pipelineStage: lead.pipeline_stage ?? "Nuevo",
@@ -79,6 +80,7 @@ export async function procesarSandbox(
 
   return {
     respuesta,
+    scoreConfianza,
     intencion,
     faseCAGC: estadoCagc?.fase_numero ?? null,
     etiquetas: etiquetasLead.map((e) => e.nombre),

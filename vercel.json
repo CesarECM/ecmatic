@@ -8,6 +8,7 @@
     { "path": "/api/admin/resumen-semanal", "schedule": "0 14 * * 1" },
     { "path": "/api/admin/procesar-cola",   "schedule": "*/5 * * * *" },
     { "path": "/api/admin/archivar-inactivos", "schedule": "0 6 * * 0" },
-    { "path": "/api/admin/calidad-kb",         "schedule": "0 7 * * 1" }
+    { "path": "/api/admin/calidad-kb",              "schedule": "0 7 * * 1" },
+    { "path": "/api/admin/cerrar-tareas-vencidas",  "schedule": "0 5 * * *" }
   ]
 }

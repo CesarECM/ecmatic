@@ -33,11 +33,30 @@ async function buscarRecursos(query: string, limite = 4) {
   return (data ?? []) as { id: string; titulo: string; contenido: string; tipo: string }[];
 }
 
+export interface RespuestaIA {
+  texto: string;
+  scoreConfianza: number; // 0–1; calculado en base a recursos KB + señales de incertidumbre
+}
+
+// Score heurístico: más recursos KB y sugerencia de matriz elevan la confianza;
+// frases de incertidumbre en la respuesta la bajan.
+function calcularScore(
+  recursos: { id: string }[],
+  sugerenciaMatriz: string | null,
+  texto: string
+): number {
+  const INDICADORES = ["no tengo información", "no puedo ayudarte", "no sé", "un asesor", "te contactará", "fuera de mi alcance"];
+  let score = Math.min(0.85, 0.30 + recursos.length * 0.18);
+  if (sugerenciaMatriz) score += 0.10;
+  if (INDICADORES.some((i) => texto.toLowerCase().includes(i))) score -= 0.30;
+  return Math.max(0, Math.min(1, score));
+}
+
 // ── S1.4: Genera la respuesta de ECMatic usando Claude ───────────────────
 export async function generarRespuesta(
   mensajes: string[],
   contexto: ContextoLead
-): Promise<string> {
+): Promise<RespuestaIA> {
   const queryParaBusqueda = mensajes.join(" ");
 
   // S13.3 — Armar dimensiones 8D para consultar la matriz de personalización
@@ -129,7 +148,9 @@ INSTRUCCIONES:
   void registrarAccionIA({ tipoAccion: "generar_respuesta", resultado: "enviado",
     metadata: { recursos_usados: recursos.length } }).catch(() => {});
 
-  return (response.content[0] as { text: string }).text.trim();
+  const texto = (response.content[0] as { text: string }).text.trim();
+  const scoreConfianza = calcularScore(recursos, sugerenciaMatriz, texto);
+  return { texto, scoreConfianza };
 }
 
 // ── Detecta si la IA necesita handoff humano ─────────────────────────────

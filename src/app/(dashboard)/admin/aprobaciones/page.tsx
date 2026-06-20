@@ -211,20 +211,33 @@ export default async function AprobacionesPage() {
         </section>
       )}
 
-      {/* S17.3 — Mensajes en cola (Modo Seguro) */}
+      {/* S17.3/S17.4 — Mensajes en cola (Modo Seguro / Seguro Automático) */}
       {mensajesPendientes.length > 0 && (
         <section className="space-y-2">
           <p className="text-sm font-medium flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-teal-500" />
-            Respuestas pendientes — Modo Seguro ({mensajesPendientes.length})
+            Respuestas en cola ({mensajesPendientes.length})
           </p>
           {mensajesPendientes.map((item) => (
             <div key={item.id} className="rounded-lg border border-teal-200 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">
-                    {item.lead_nombre ?? item.telefono} · hace {diasDesde(item.created_at)}d
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground">
+                      {item.lead_nombre ?? item.telefono} · hace {diasDesde(item.created_at)}d
+                    </span>
+                    {item.score_confianza !== null && (
+                      <span className={`text-xs rounded px-1.5 py-0.5 font-medium ${
+                        item.score_confianza >= 0.7
+                          ? "bg-green-100 text-green-700"
+                          : item.score_confianza >= 0.4
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700"
+                      }`}>
+                        Score {(item.score_confianza * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm mt-1 whitespace-pre-wrap line-clamp-3">{item.respuesta}</p>
                 </div>
                 <div className="flex gap-1 shrink-0">

@@ -6,15 +6,17 @@ export interface MensajeEnCola {
   telefono: string;
   respuesta: string;
   bloques: string[];
+  score_confianza: number | null;
   created_at: string;
 }
 
-// S17.3 — Encola una respuesta para aprobación manual
+// S17.3/S17.4 — Encola una respuesta para aprobación manual
 export async function encolarRespuesta(params: {
   leadId: string;
   telefono: string;
   respuesta: string;
   bloques: string[];
+  scoreConfianza?: number;
 }): Promise<void> {
   const supabase = createServiceClient();
   await (supabase as any).from("mensajes_cola_aprobacion").insert({
@@ -23,6 +25,7 @@ export async function encolarRespuesta(params: {
     respuesta: params.respuesta,
     bloques: params.bloques,
     aprobado: null,
+    score_confianza: params.scoreConfianza ?? null,
   });
 }
 
@@ -40,6 +43,7 @@ export async function listarMensajesPendientes(): Promise<
   return (data ?? []).map((m: any) => ({
     ...m,
     bloques: m.bloques as string[],
+    score_confianza: m.score_confianza ?? null,
     lead_nombre: m.leads?.nombre ?? null,
   }));
 }

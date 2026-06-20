@@ -12,7 +12,8 @@ import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } 
 import { inferirYRegistrarFase, obtenerFaseLead } from "./cagc";
 import { generarSolicitudDatosFaltantes } from "./limpieza-leads";
 import { obtenerEtiquetasLead } from "./etiquetas";
-import { obtenerModo } from "./sistema";
+import { obtenerConfig } from "./sistema";
+import { evaluarYAsignarTarea } from "./motor-tareas";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -94,7 +95,7 @@ export async function procesarConversacion(
     obtenerEtiquetasLead(lead.id).catch(() => []),
   ]);
 
-  const respuesta = await generarRespuesta(mensajes, {
+  const { texto: respuesta, scoreConfianza } = await generarRespuesta(mensajes, {
     nombre: leadActualizado?.nombre ?? null,
     temperamento: leadActualizado?.temperamento_inferido ?? null,
     pipelineStage: leadActualizado?.pipeline_stage ?? "Nuevo",
@@ -124,13 +125,20 @@ export async function procesarConversacion(
     await crearTicketHandoff(lead.id, mensajes.join("\n"));
   }
 
-  // 10. S1.5 + S1.6 — Enviar respuesta (o encolar según modo S17.3)
+  // 10. S1.5 + S1.6 — Enviar respuesta (o encolar según modo S17.3/S17.4)
   const bloques = dividirRespuesta(respuesta);
-  const modo = await obtenerModo().catch(() => "automatico" as const);
+  const config = await obtenerConfig().catch(() => ({ modo_operacion: "automatico" as const, umbral_confianza: 0.80 }));
 
-  if (modo === "seguro") {
-    // S17.3 — Modo Seguro: encolar para aprobación manual, no enviar
+  if (config.modo_operacion === "seguro") {
+    // S17.3 — Modo Seguro: cola siempre
     await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques });
+    await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
+    return;
+  }
+
+  if (config.modo_operacion === "seguro_automatico" && scoreConfianza < config.umbral_confianza) {
+    // S17.4 — Modo Seguro Automático: cola solo si score bajo
+    await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques, scoreConfianza });
     await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
     return;
   }
@@ -171,6 +179,9 @@ export async function procesarConversacion(
     const { sugerirEtiquetasParaLead } = await import("@/lib/ai/etiquetas-ia");
     void sugerirEtiquetasParaLead(lead.id, mensajes, historial).catch(console.error);
   }
+
+  // S17.6 — Reevaluar tarea de fondo tras cada conversación (fire-and-forget)
+  void evaluarYAsignarTarea(lead.id, "conversacion").catch(console.error);
 
   // S15.2 — Solicitar datos faltantes si hay señal positiva y la conversación ya avanzó
   if (historial && (!lead.nombre || !lead.email)) {

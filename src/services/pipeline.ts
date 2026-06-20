@@ -10,6 +10,7 @@ import { obtenerFaseLead } from "@/services/cagc";
 import { inscribirEnPipeline } from "@/services/pipeline-multi";
 import { asignarEtiquetaProducto } from "@/services/etiquetas-hooks";
 import { asignarVarianteAB, registrarAvanceAB } from "@/services/pipeline-ab";
+import { cerrarTarea } from "@/services/tareas";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -142,6 +143,11 @@ export async function moverLead(
   // S14.4 — Auto-etiqueta con producto comprado
   if (nuevaEtapa === "Comprado") {
     void asignarEtiquetaProducto(leadId, lead.pipeline_ruta).catch(console.error);
+  }
+
+  // S17.7 — Venta: cerrar tarea de fondo al convertir
+  if (nuevaEtapa === "Comprado") {
+    void cerrarTarea(leadId).catch(console.error);
   }
 
   // S5.6 — Clasifica el lead en un avatar al avanzar etapas relevantes
