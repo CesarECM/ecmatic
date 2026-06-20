@@ -1,4 +1,6 @@
 import { analizarFasesCAGC, resumenAnalisis, type AnalisisFaseCAGC } from "@/services/auditoria-cagc";
+import { obtenerTasaVotosPorFaseCagc } from "@/services/feedback-votos";
+import { resumirVotos } from "@/services/votos";
 
 export const metadata = { title: "Auditoría CAGC · ECMatic" };
 export const revalidate = 0;
@@ -84,8 +86,13 @@ function FaseRow({ f }: { f: AnalisisFaseCAGC }) {
 }
 
 export default async function CAGCPage() {
-  const fases = await analizarFasesCAGC();
+  const [fases, tasasVoto, resumenVotos] = await Promise.all([
+    analizarFasesCAGC(),
+    obtenerTasaVotosPorFaseCagc(),
+    resumirVotos(),
+  ]);
   const resumen = resumenAnalisis(fases);
+  const tasaVotoMap = new Map(tasasVoto.map((t) => [t.fase, t]));
 
   const scorePct = Math.round(resumen.scorePromedioTotal * 100);
 
@@ -140,6 +147,33 @@ export default async function CAGCPage() {
           {resumen.totalFases} fases · promedio de scores de contenido KB y volumen de leads por fase
         </p>
       </div>
+
+      {/* S21.2 — Calidad de respuestas IA por votos admin */}
+      {resumenVotos.total > 0 && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Calidad de respuestas IA (votos admin)</p>
+            <span className="text-xs text-muted-foreground">
+              {resumenVotos.total} votos · {Math.round(resumenVotos.tasa_buena * 100)}% buenos
+            </span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-red-200">
+            <div
+              className="h-2 rounded-full bg-green-500 transition-all"
+              style={{ width: `${Math.round(resumenVotos.tasa_buena * 100)}%` }}
+            />
+          </div>
+          {tasasVoto.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tasasVoto.map((t) => (
+                <span key={t.fase} className="text-xs rounded border px-2 py-0.5 bg-muted">
+                  Fase {t.fase}: {Math.round(t.tasa_buena * 100)}% ({t.total} votos)
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Grid de fases */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
