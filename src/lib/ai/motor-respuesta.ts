@@ -6,6 +6,7 @@ import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/
 import { registrarUsoIA } from "@/services/alertas-ia";
 import { registrarAccionIA } from "@/services/log-ia";
 import { inferirRespuestaMatriz } from "@/services/matriz-ia";
+import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 
 interface ContextoLead {
@@ -67,10 +68,11 @@ export async function generarRespuesta(
     ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
   };
 
-  const [recursos, gatillos, sugerenciaMatriz] = await Promise.all([
+  const [recursos, gatillos, sugerenciaMatriz, identidad] = await Promise.all([
     buscarRecursos(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
+    obtenerIdentidad().catch(() => null),
   ]);
   void registrarUso(recursos.map((r) => r.id));
   if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
@@ -105,8 +107,13 @@ export async function generarRespuesta(
     ? `\nSUGERENCIA DE MATRIZ (usa como guía, adapta a la conversación):\n${sugerenciaMatriz}`
     : "";
 
-  const systemPrompt = `Eres el asistente de ventas de Centro ECM, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.
+  // S18.4 — Inyectar identidad de marca en el system prompt
+  const brandLinea = identidad
+    ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}`
+    : "";
+
+  const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}

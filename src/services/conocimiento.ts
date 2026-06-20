@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { generarEmbedding, anthropic } from "@/lib/ai/client";
 import { modeloPorTarea } from "@/lib/ai/model-router";
+import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
 import type { TipoRecurso, OrigenRecurso } from "@/lib/supabase/types";
 
 interface VersionRecurso {
@@ -218,14 +219,19 @@ export async function detectarObsoletos(): Promise<AlertaRecurso[]> {
 // S2.8 — Sugiere un recurso nuevo cuando la pregunta no tiene cobertura en KB
 export async function sugerirRecursoDesdeQuery(query: string): Promise<void> {
   try {
+    // S18.4 — Leer identidad para que los templates generados usen el branding correcto
+    const identidad = await obtenerIdentidad().catch(() => null);
+    const brandContext = identidad ? `\n\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
+
     const response = await anthropic.messages.create({
       model: modeloPorTarea("SUGERIR_KB"),
-      max_tokens: 300,
+      max_tokens: 400,
       system: `Analiza la pregunta de un lead sobre certificaciones CONOCER en México.
 Determina si se debería crear un nuevo recurso en la base de conocimiento para responderla mejor.
 Responde SOLO en JSON con este formato exacto:
-{"crear": true, "tipo": "faq|objecion|servicio|practica_venta", "titulo": "...", "contenido": "..."}
-Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta por FAQs generales, responde: {"crear": false}`,
+{"crear": true, "tipo": "faq|objecion|servicio|practica_venta|template_wa|template_email", "titulo": "...", "contenido": "..."}
+Si el recurso es un template (template_wa o template_email), aplica la identidad de marca en el contenido: usa el nombre de la empresa, slogan y firma según el canal.
+Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta por FAQs generales, responde: {"crear": false}${brandContext}`,
       messages: [{ role: "user", content: `Pregunta sin cobertura en KB:\n${query}` }],
     });
 
@@ -241,14 +247,19 @@ Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta po
 
 // S2.9 — Extrae y crea recursos desde contenido externo (URL o texto pegado)
 export async function procesarFuenteExterna(contenido: string): Promise<number> {
+  // S18.4 — Brand context para que los templates extraídos usen el branding correcto
+  const identidad = await obtenerIdentidad().catch(() => null);
+  const brandContext = identidad ? `\n\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
+
   const response = await anthropic.messages.create({
     model: modeloPorTarea("SUGERIR_KB"),
     max_tokens: 1500,
     system: `Eres un extractor de conocimiento para un centro de certificación CONOCER en México.
-Analiza el contenido y extrae hasta 5 recursos útiles: FAQs, objeciones comunes, descripciones de servicios o prácticas de venta.
+Analiza el contenido y extrae hasta 5 recursos útiles: FAQs, objeciones comunes, descripciones de servicios, prácticas de venta o templates de mensajes.
 Responde SOLO en JSON con este formato exacto:
-[{"tipo":"faq|objecion|servicio|practica_venta","titulo":"...","contenido":"..."}]
-Si no hay contenido relevante sobre certificaciones laborales, responde: []`,
+[{"tipo":"faq|objecion|servicio|practica_venta|template_wa|template_email","titulo":"...","contenido":"..."}]
+Cuando el tipo sea template_wa o template_email, aplica la identidad de marca: usa el nombre de la empresa, slogan y firma del canal correspondiente.
+Si no hay contenido relevante sobre certificaciones laborales, responde: []${brandContext}`,
     messages: [{ role: "user", content: contenido.slice(0, 6000) }],
   });
 
