@@ -1,9 +1,9 @@
 // S19.4 — Pipelines como ramas no-lineales con consciencia CAGC
-// Usa es_tronco + etapas_siguientes de pipeline_etapas para
-// sugerir el próximo paso correcto según la fase CAGC del lead.
+// S19.5 — Motor de apertura de ramas paralelas por lead sin conflicto
 
 import { createServiceClient } from "@/lib/supabase/service";
-import type { PipelineRuta } from "@/lib/supabase/types";
+import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
+import { inscribirEnPipeline } from "@/services/pipeline-multi";
 
 type EtapaConFases = { nombre: string; fases_cagc: number[]; orden: number; es_tronco: boolean };
 
@@ -107,4 +107,94 @@ export async function obtenerTroncoComun(ruta: PipelineRuta): Promise<string[]> 
     .order("orden");
 
   return (data ?? []).map((e: any) => e.nombre as string);
+}
+
+// ── S19.5 — Motor de ramas paralelas ─────────────────────────
+
+export type MotivoNoApertura =
+  | "ya_activa"
+  | "estado_terminal"
+  | "fase_insuficiente"
+  | "sin_overlap";
+
+export interface ResultadoAperturaRama {
+  rutaObjetivo: PipelineRuta;
+  abierta: boolean;
+  etapaEntrada: string | null;
+  motivo: "abierta" | MotivoNoApertura;
+}
+
+// Fase CAGC mínima para entrar a cada ruta
+const MIN_FASE: Record<PipelineRuta, number> = {
+  tripwire: 1,  // cualquier lead activo califica
+  premium:  3,  // debe haber al menos definido el problema
+};
+
+const TERMINALES = new Set(["Comprado", "Perdido", "Certificado"]);
+
+// Intenta abrir una rama paralela para un lead.
+// Devuelve el resultado sin lanzar excepciones — el motor es silencioso.
+export async function abrirRamaParalela(
+  leadId: string,
+  rutaObjetivo: PipelineRuta,
+  faseCAGC: number,
+  movidoPor: MovidoPor = "ia"
+): Promise<ResultadoAperturaRama> {
+  const supabase = createServiceClient();
+
+  // ── Conflicto: ¿ya está activo o en estado terminal? ─────
+  const { data: existente } = await supabase
+    .from("lead_pipelines")
+    .select("etapa_actual, activo")
+    .eq("lead_id", leadId)
+    .eq("ruta", rutaObjetivo)
+    .maybeSingle();
+
+  if (existente?.activo) {
+    return { rutaObjetivo, abierta: false, etapaEntrada: null, motivo: "ya_activa" };
+  }
+  if (existente && TERMINALES.has(existente.etapa_actual)) {
+    return { rutaObjetivo, abierta: false, etapaEntrada: null, motivo: "estado_terminal" };
+  }
+
+  // ── Conflicto: fase CAGC insuficiente para esta ruta ─────
+  if (faseCAGC < MIN_FASE[rutaObjetivo]) {
+    return { rutaObjetivo, abierta: false, etapaEntrada: null, motivo: "fase_insuficiente" };
+  }
+
+  // ── Conflicto: ninguna etapa de la ruta cubre esta fase ──
+  const { data: etapasRuta } = await supabase
+    .from("pipeline_etapas")
+    .select("fases_cagc")
+    .eq("ruta", rutaObjetivo)
+    .eq("activo", true);
+
+  const hayOverlap = (etapasRuta ?? []).some((e: any) =>
+    (e.fases_cagc as number[]).includes(faseCAGC)
+  );
+  if (!hayOverlap) {
+    return { rutaObjetivo, abierta: false, etapaEntrada: null, motivo: "sin_overlap" };
+  }
+
+  // ── Abrir la rama en la etapa más alineada con la fase ───
+  const etapaEntrada = await etapaRecomendadaPorFase(rutaObjetivo, faseCAGC) ?? "Nuevo";
+  await inscribirEnPipeline(leadId, rutaObjetivo, etapaEntrada);
+
+  console.info(
+    `[pipeline-ramas] rama ${rutaObjetivo} abierta para lead ${leadId} en etapa "${etapaEntrada}" (fase CAGC ${faseCAGC}, movido por ${movidoPor})`
+  );
+
+  return { rutaObjetivo, abierta: true, etapaEntrada, motivo: "abierta" };
+}
+
+// Evalúa todas las rutas disponibles y abre las que apliquen en paralelo.
+export async function evaluarYAbrirRamas(
+  leadId: string,
+  faseCAGC: number,
+  movidoPor: MovidoPor = "ia"
+): Promise<ResultadoAperturaRama[]> {
+  const RUTAS: PipelineRuta[] = ["tripwire", "premium"];
+  return Promise.all(
+    RUTAS.map((ruta) => abrirRamaParalela(leadId, ruta, faseCAGC, movidoPor))
+  );
 }
