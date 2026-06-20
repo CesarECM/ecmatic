@@ -52,4 +52,4 @@ CREATE INDEX pipeline_ab_tests_activo           ON pipeline_ab_tests(activo) WHE
 -- Trigger updated_at
 CREATE TRIGGER pipeline_ab_tests_updated_at
   BEFORE UPDATE ON pipeline_ab_tests
-  FOR EACH ROW EXECUTE FUNCTION moddatetime(updated_at);
+  FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
