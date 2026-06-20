@@ -71,8 +71,9 @@ export interface IncomingMessage {
   messageId: string;
   body: string;
   timestamp: number;
-  mediaId?: string;      // presente solo en mensajes de audio
+  mediaId?: string;      // presente en audio, imagen y documento
   mimeType?: string;
+  mediaType?: "audio" | "image" | "document";
 }
 
 export function parseWebhookPayload(body: unknown): IncomingMessage[] {
@@ -97,6 +98,27 @@ export function parseWebhookPayload(body: unknown): IncomingMessage[] {
             timestamp: Number(msg.timestamp),
             mediaId: msg.audio?.id,
             mimeType: msg.audio?.mime_type,
+            mediaType: "audio",
+          });
+        } else if (msg.type === "image") {
+          messages.push({
+            from: msg.from,
+            messageId: msg.id,
+            body: "",
+            timestamp: Number(msg.timestamp),
+            mediaId: msg.image?.id,
+            mimeType: msg.image?.mime_type,
+            mediaType: "image",
+          });
+        } else if (msg.type === "document") {
+          messages.push({
+            from: msg.from,
+            messageId: msg.id,
+            body: msg.document?.filename ?? "",
+            timestamp: Number(msg.timestamp),
+            mediaId: msg.document?.id,
+            mimeType: msg.document?.mime_type,
+            mediaType: "document",
           });
         }
       }

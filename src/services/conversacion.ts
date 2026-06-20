@@ -31,6 +31,17 @@ export async function procesarConversacion(
     return; // número en blacklist — descartar silenciosamente
   }
 
+  // S18.2 — Comprobante de pago: respuesta canned + salir (admin revisa en panel)
+  if (mensajes.some((m) => m.startsWith("[Imagen: comprobante]"))) {
+    for (const contenido of mensajes) {
+      await guardarMensaje({ leadId: lead.id, contenido, direccion: "entrante", waMessageId });
+    }
+    const ack = "¡Recibimos tu comprobante! Nuestro equipo lo verificará en breve y te confirmaremos tu inscripción. ¡Gracias por tu confianza!";
+    await enviarRespuestaWhatsApp(telefono, [ack]);
+    await guardarMensaje({ leadId: lead.id, contenido: ack, direccion: "saliente" });
+    return;
+  }
+
   // S12.9 — Privacidad LFPDPPP: si el lead acepta en este mensaje, registrar y salir
   const textoEntrada = mensajes.join(" ");
   if (!lead.privacidad_aceptada && detectarAceptacion(textoEntrada)) {

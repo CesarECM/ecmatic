@@ -1,5 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
+import { createServiceClient } from "@/lib/supabase/service";
 import { TicketsList } from "@/components/tickets/tickets-list";
 import type { TicketConLead } from "@/components/tickets/tickets-list";
 
@@ -7,13 +6,7 @@ export const metadata = { title: "Tickets de Handoff · ECMatic" };
 export const revalidate = 30;
 
 export default async function TicketsPage() {
-  const supabase = await createClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  if (profile?.rol !== "admin") redirect("/dashboard");
+  const supabase = createServiceClient();
 
   // Consulta separada para evitar problemas de relaciones en tipos manuales
   const { data: tickets } = await supabase

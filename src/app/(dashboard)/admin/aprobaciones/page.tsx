@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { revalidatePath } from "next/cache";
 import { listarPendientes, aprobarEtiqueta, archivarEtiqueta } from "@/services/etiquetas";
 import { listarMensajesPendientes, marcarMensajeEnviado, rechazarMensaje } from "@/services/mensajes-aprobacion";
+import { listarComprobantesPendientes, aprobarComprobante, rechazarComprobante } from "@/services/comprobantes";
 import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 
 export const metadata = { title: "Cola de Aprobaciones · ECMatic" };
@@ -68,10 +69,22 @@ async function rechazarMensajeAction(id: string) {
   revalidatePath("/admin/aprobaciones");
 }
 
+async function aprobarComprobanteAction(id: string) {
+  "use server";
+  await aprobarComprobante(id);
+  revalidatePath("/admin/aprobaciones");
+}
+
+async function rechazarComprobanteAction(id: string) {
+  "use server";
+  await rechazarComprobante(id);
+  revalidatePath("/admin/aprobaciones");
+}
+
 export default async function AprobacionesPage() {
   const supabase = createServiceClient();
 
-  const [{ data: kb }, { data: matriz }, { data: sugerencias }, etiquetasPendientes, mensajesPendientes] = await Promise.all([
+  const [{ data: kb }, { data: matriz }, { data: sugerencias }, etiquetasPendientes, mensajesPendientes, comprobantesPendientes] = await Promise.all([
     supabase.from("recursos_conocimiento")
       .select("id, tipo, titulo, contenido, origen, created_at")
       .eq("aprobado", false).order("created_at"),
@@ -83,11 +96,12 @@ export default async function AprobacionesPage() {
       .is("aprobado", null).order("prioridad").order("created_at"),
     listarPendientes(),
     listarMensajesPendientes(),
+    listarComprobantesPendientes(),
   ]);
 
   const totalPendientes =
     (kb?.length ?? 0) + (matriz?.length ?? 0) + (sugerencias?.length ?? 0) +
-    etiquetasPendientes.length + mensajesPendientes.length;
+    etiquetasPendientes.length + mensajesPendientes.length + comprobantesPendientes.length;
 
   function diasDesde(fecha: string) {
     return Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
@@ -202,6 +216,49 @@ export default async function AprobacionesPage() {
                   <form action={archivarEtiquetaAction.bind(null, item.id)}>
                     <button type="submit" className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
                       Archivar
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* S18.2 — Comprobantes de pago pendientes de verificación */}
+      {comprobantesPendientes.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-sm font-medium flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-amber-500" />
+            Comprobantes de pago ({comprobantesPendientes.length})
+          </p>
+          {comprobantesPendientes.map((item) => (
+            <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    {item.lead_nombre ?? item.telefono} · {item.telefono} · hace {diasDesde(item.created_at)}d
+                  </p>
+                  {item.wa_media_id && (
+                    <a
+                      href={`/api/admin/comprobante-imagen/${item.wa_media_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-amber-700 underline mt-1 inline-block"
+                    >
+                      Ver imagen
+                    </a>
+                  )}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <form action={aprobarComprobanteAction.bind(null, item.id)}>
+                    <button type="submit" className="rounded bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700">
+                      Aprobar → Comprado
+                    </button>
+                  </form>
+                  <form action={rechazarComprobanteAction.bind(null, item.id)}>
+                    <button type="submit" className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
+                      Rechazar
                     </button>
                   </form>
                 </div>

@@ -4,6 +4,9 @@ import { descargarMediaWA } from "@/lib/whatsapp/client";
 import type { IntencionClasificada } from "@/lib/supabase/types";
 import { procesarConversacion } from "@/services/conversacion";
 import { transcribirAudio } from "@/lib/ai/audio";
+import { clasificarImagen } from "@/lib/ai/vision";
+import { encolarComprobante } from "@/services/comprobantes";
+import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 
 const BUFFER_WINDOW_MS = 8_000;
 
@@ -20,16 +23,28 @@ export async function procesarMensajeEntrante(msg: IncomingMessage) {
 
   if (existente) return;
 
-  // Transcribir audio antes de entrar al buffer
+  // Procesar media antes de entrar al buffer
   let body = msg.body;
   if (msg.mediaId) {
     try {
       const { buffer, mimeType } = await descargarMediaWA(msg.mediaId);
-      const texto = await transcribirAudio(buffer, mimeType);
-      body = `[Audio]: ${texto}`;
+      if (msg.mediaType === "image" || msg.mediaType === "document") {
+        // S18.1 — Clasificar imagen con Claude Vision
+        const resultado = await clasificarImagen(buffer, mimeType);
+        body = `[Imagen: ${resultado.tipo}]`;
+
+        // S18.2 — Comprobante: encolar para revisión humana antes de continuar
+        if (resultado.tipo === "comprobante") {
+          await encolarComprobante({ telefono: msg.from, waMediaId: msg.mediaId });
+        }
+      } else {
+        // S16.4 — Transcribir audio con Whisper
+        const texto = await transcribirAudio(buffer, mimeType);
+        body = `[Audio]: ${texto}`;
+      }
     } catch (err) {
-      console.error("[mensajes] error transcribiendo audio:", err);
-      body = "[Audio no pudo transcribirse]";
+      console.error("[mensajes] error procesando media:", err);
+      body = msg.mediaType === "audio" ? "[Audio no pudo transcribirse]" : "[Imagen no pudo procesarse]";
     }
   }
 

@@ -10,7 +10,8 @@ export type TareaIA =
   | "SUGERIR_KB"
   | "COMPETIDORES"
   | "CHURN"
-  | "CAGC_INFERIR";
+  | "CAGC_INFERIR"
+  | "VISION";
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -30,6 +31,7 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   ENCUESTA:      "sonnet",
   ANALISIS:      "sonnet",  // análisis de transcriptos
   COACHING:      "sonnet",  // coaching de vendedores
+  VISION:        "sonnet",  // clasificación de imágenes (requiere visión)
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.
