@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listarCitas } from "@/services/citas";
+import { TranscriptoBtn } from "@/components/admin/transcripto-btn";
 import type { EstadoCita } from "@/lib/supabase/types";
 
 const ESTADOS: EstadoCita[] = ["pendiente", "confirmada", "show", "noshow", "cancelada"];
@@ -45,11 +46,12 @@ export default async function CitasPage({ searchParams }: Props) {
               <th className="p-3 text-left">Fecha</th>
               <th className="p-3 text-center">Estado</th>
               <th className="p-3 text-center">Meet</th>
+              <th className="p-3 text-center">Transcripto</th>
             </tr>
           </thead>
           <tbody>
             {citas.length === 0 && (
-              <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Sin citas</td></tr>
+              <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Sin citas</td></tr>
             )}
             {citas.map((c) => {
               const lead = c.leads as unknown as { nombre: string | null; telefono: string | null } | null;
@@ -69,6 +71,11 @@ export default async function CitasPage({ searchParams }: Props) {
                   <td className="p-3 text-center">
                     {c.google_meet_link
                       ? <a href={c.google_meet_link} target="_blank" className="text-blue-600 text-xs hover:underline">Abrir</a>
+                      : <span className="text-xs text-gray-400">—</span>}
+                  </td>
+                  <td className="p-3 text-center">
+                    {c.estado === "show" && c.google_meet_link
+                      ? <TranscriptoBtn citaId={c.id} />
                       : <span className="text-xs text-gray-400">—</span>}
                   </td>
                 </tr>

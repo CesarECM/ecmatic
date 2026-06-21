@@ -3,7 +3,12 @@
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3000/api/auth/google/callback";
-const SCOPES = ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/userinfo.email"];
+// S26.2: meetings.space.readonly permite leer conferenceRecords y transcriptos de Meet
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/meetings.space.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
+];
 
 export function isConfigured(): boolean {
   return !!(CLIENT_ID && CLIENT_SECRET);
