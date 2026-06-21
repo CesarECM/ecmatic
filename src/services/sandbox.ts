@@ -5,6 +5,8 @@ import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { generarRespuesta, necesitaHandoff } from "@/lib/ai/motor-respuesta";
 import { obtenerFaseLead } from "./cagc";
 import { obtenerEtiquetasLead } from "./etiquetas";
+import { obtenerSlotsDisponibles, asignarMejorVendedor } from "./citas";
+import { logAgen } from "./log-agendamiento";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export interface SandboxResult {
@@ -57,6 +59,23 @@ export async function procesarSandbox(
     obtenerEtiquetasLead(lead.id).catch(() => [] as Array<{ categoria: string; nombre: string }>),
   ]);
 
+  // Slots de calendario cuando el lead quiere agendar (igual que en conversacion.ts)
+  let slotsParaAI = undefined;
+  if (intencion === "quiere_agendar") {
+    try {
+      const vendedorId = await asignarMejorVendedor();
+      if (vendedorId) {
+        slotsParaAI = await obtenerSlotsDisponibles(vendedorId);
+        void logAgen({ paso: "slots_consultados", leadId: lead.id, vendedorId,
+          detalle: `[sandbox] Intención quiere_agendar — ${slotsParaAI.length} slots disponibles`,
+          metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId, origen: "sandbox" } });
+      }
+    } catch (err) {
+      void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
+        detalle: `[sandbox] Error obteniendo slots: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
   // Generar respuesta con el mismo motor que usa WhatsApp
   const { texto: respuesta, scoreConfianza } = await generarRespuesta([mensaje], {
     nombre: lead.nombre ?? null,
@@ -67,6 +86,7 @@ export async function procesarSandbox(
     pipelineRuta: lead.pipeline_ruta ?? "tripwire",
     faseCAGC: estadoCagc?.fase_numero,
     etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
+    slotsDisponibles: slotsParaAI,
   });
 
   // Detectar si la respuesta activaría handoff
