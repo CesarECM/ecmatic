@@ -30,7 +30,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="border-b bg-card px-6 py-3 flex items-center justify-between shrink-0">
-        <span className="font-bold text-lg">ECMatic</span>
+        <span className="font-bold text-lg pl-8 md:pl-0">ECMatic</span>
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span>{profile.nombre ?? user.email}</span>
           <RolBadge rol={rol} />

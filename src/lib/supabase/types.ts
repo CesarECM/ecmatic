@@ -40,6 +40,7 @@ export type TemperaturaCierre = "fria" | "tibia" | "caliente";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
 export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento" | "cierre";
 export type TipoLeadmagnet = "pre-creado" | "generable-ia" | "requiere-humano";
+export type TipoPagoServicio = "landing" | "pasarela";
 
 // S23.1 — Entrada del historial versionado del Contexto del lead
 export interface EntradaContexto {
@@ -352,6 +353,7 @@ export interface Database {
           origen: OrigenRecurso;
           versiones_previas: unknown[];
           fecha_ultima_actualizacion: string;
+          precio_centavos: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -374,6 +376,7 @@ export interface Database {
           aprobado?: boolean;
           origen?: OrigenRecurso;
           versiones_previas?: unknown[];
+          precio_centavos?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["recursos_conocimiento"]["Insert"]>;
         Relationships: Relationship[];
@@ -933,6 +936,82 @@ export interface Database {
           veces_aceptado?: number;
         };
         Update: Partial<Database["public"]["Tables"]["leadmagnets"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      servicio_pagos: {
+        Row: {
+          id: string;
+          recurso_id: string;
+          tipo: TipoPagoServicio;
+          url: string;
+          descripcion: string | null;
+          activo: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          recurso_id: string;
+          tipo: TipoPagoServicio;
+          url: string;
+          descripcion?: string | null;
+          activo?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["servicio_pagos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      brochures: {
+        Row: {
+          id: string;
+          titulo: string;
+          descripcion: string;
+          recurso_id: string | null;
+          url: string;
+          fases_cagc_objetivo: number[];
+          score_efectividad: number;
+          activo: boolean;
+          veces_ofrecido: number;
+          veces_aceptado: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          titulo: string;
+          descripcion?: string;
+          recurso_id?: string | null;
+          url: string;
+          fases_cagc_objetivo?: number[];
+          score_efectividad?: number;
+          activo?: boolean;
+          veces_ofrecido?: number;
+          veces_aceptado?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["brochures"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      cuentas_bancarias: {
+        Row: {
+          id: string;
+          banco: string;
+          titular: string;
+          clabe: string | null;
+          cuenta: string | null;
+          activa: boolean;
+          orden: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          banco: string;
+          titular: string;
+          clabe?: string | null;
+          cuenta?: string | null;
+          activa?: boolean;
+          orden?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["cuentas_bancarias"]["Insert"]>;
         Relationships: Relationship[];
       };
     };  // end Tables

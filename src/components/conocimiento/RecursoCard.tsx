@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,7 +80,17 @@ function HistorialVersiones({ id, versiones }: { id: string; versiones: Version[
                   <span className="text-muted-foreground">{new Date(v.fecha).toLocaleDateString("es-MX")}</span>
                   <button
                     disabled={pending}
-                    onClick={() => startTransition(() => restaurarVersionAction(id, v.titulo, v.contenido))}
+                    onClick={() => {
+                      const tid = toast.loading("Restaurando versión...");
+                      startTransition(async () => {
+                        try {
+                          await restaurarVersionAction(id, v.titulo, v.contenido);
+                          toast.success("Versión restaurada", { id: tid });
+                        } catch {
+                          toast.error("Error al restaurar", { id: tid });
+                        }
+                      });
+                    }}
                     className="text-blue-600 hover:underline disabled:opacity-50"
                   >
                     Restaurar
@@ -104,7 +115,15 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
 
   function confirmarEliminar() {
     if (!confirm(`¿Eliminar "${r.titulo}" permanentemente?`)) return;
-    startTransition(() => eliminarRecursoAction(r.id));
+    const tid = toast.loading("Eliminando...");
+    startTransition(async () => {
+      try {
+        await eliminarRecursoAction(r.id);
+        toast.success("Recurso eliminado", { id: tid });
+      } catch {
+        toast.error("Error al eliminar", { id: tid });
+      }
+    });
   }
 
   return (
@@ -137,9 +156,19 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
         <CardContent className="pt-0 space-y-3">
           {editando ? (
             <form
-              action={async (fd) => {
-                await editarRecursoAction(fd);
-                setEditando(false);
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const tid = toast.loading("Guardando...");
+                startTransition(async () => {
+                  try {
+                    await editarRecursoAction(fd);
+                    toast.success("Versión guardada", { id: tid });
+                    setEditando(false);
+                  } catch {
+                    toast.error("Error al guardar", { id: tid });
+                  }
+                });
               }}
               className="space-y-2"
             >
@@ -180,19 +209,50 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
               )}
               <div className="flex gap-2 flex-wrap">
                 {!r.aprobado && (
-                  <form action={aprobarRecursoAction}>
-                    <input type="hidden" name="id" value={r.id} />
-                    <Button type="submit" size="sm">Aprobar</Button>
-                  </form>
+                  <Button
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => {
+                      const tid = toast.loading("Aprobando...");
+                      const fd = new FormData();
+                      fd.set("id", r.id);
+                      startTransition(async () => {
+                        try {
+                          await aprobarRecursoAction(fd);
+                          toast.success("Recurso aprobado", { id: tid });
+                        } catch {
+                          toast.error("Error al aprobar", { id: tid });
+                        }
+                      });
+                    }}
+                  >
+                    Aprobar
+                  </Button>
                 )}
                 <Button size="sm" variant="outline" onClick={() => setEditando(true)}>Editar</Button>
-                <form action={setActivoAction}>
-                  <input type="hidden" name="id" value={r.id} />
-                  <input type="hidden" name="activo" value={String(!r.activo)} />
-                  <Button type="submit" size="sm" variant="outline">
-                    {r.activo ? "Desactivar" : "Activar"}
-                  </Button>
-                </form>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => {
+                    const label = r.activo ? "Desactivando..." : "Activando...";
+                    const successMsg = r.activo ? "Recurso desactivado" : "Recurso activado";
+                    const tid = toast.loading(label);
+                    const fd = new FormData();
+                    fd.set("id", r.id);
+                    fd.set("activo", String(!r.activo));
+                    startTransition(async () => {
+                      try {
+                        await setActivoAction(fd);
+                        toast.success(successMsg, { id: tid });
+                      } catch {
+                        toast.error("Error al cambiar estado", { id: tid });
+                      }
+                    });
+                  }}
+                >
+                  {r.activo ? "Desactivar" : "Activar"}
+                </Button>
                 <Button size="sm" variant="ghost" disabled={pending} onClick={confirmarEliminar}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50">
                   Eliminar

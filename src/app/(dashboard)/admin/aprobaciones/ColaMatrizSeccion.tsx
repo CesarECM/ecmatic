@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { aprobarMatrizAction, actualizarMatrizAction, eliminarMatrizAction } from "./actions";
 
 type MatrizItem = {
@@ -21,9 +22,29 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
   const [pending, startTransition] = useTransition();
 
   function guardar() {
+    const id = toast.loading("Guardando...");
     startTransition(async () => {
-      await actualizarMatrizAction(item.id, respuesta);
-      setEditando(false);
+      try {
+        await actualizarMatrizAction(item.id, respuesta);
+        toast.success("Respuesta guardada", { id });
+        setEditando(false);
+      } catch {
+        toast.error("Error al guardar", { id });
+      }
+    });
+  }
+
+  function guardarYAprobar() {
+    const id = toast.loading("Guardando y aprobando...");
+    startTransition(async () => {
+      try {
+        await actualizarMatrizAction(item.id, respuesta);
+        await aprobarMatrizAction(item.id);
+        toast.success("Entrada guardada y aprobada", { id });
+        setEditando(false);
+      } catch {
+        toast.error("Error al guardar y aprobar", { id });
+      }
     });
   }
 
@@ -32,9 +53,29 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
     setEditando(false);
   }
 
-  function eliminar() {
-    if (!confirm("¿Eliminar esta entrada de la Matriz nD?")) return;
-    startTransition(() => eliminarMatrizAction(item.id));
+  function aprobar() {
+    const id = toast.loading("Aprobando...");
+    startTransition(async () => {
+      try {
+        await aprobarMatrizAction(item.id);
+        toast.success("Entrada aprobada", { id });
+      } catch {
+        toast.error("Error al aprobar", { id });
+      }
+    });
+  }
+
+  function rechazar() {
+    if (!confirm("¿Rechazar esta entrada de la Matriz nD?")) return;
+    const id = toast.loading("Rechazando...");
+    startTransition(async () => {
+      try {
+        await eliminarMatrizAction(item.id);
+        toast.success("Entrada rechazada", { id });
+      } catch {
+        toast.error("Error al rechazar", { id });
+      }
+    });
   }
 
   return (
@@ -52,13 +93,20 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
             value={respuesta}
             onChange={(e) => setRespuesta(e.target.value)}
           />
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             <button
-              onClick={guardar}
+              onClick={guardarYAprobar}
               disabled={pending}
               className="rounded bg-orange-600 px-3 py-1 text-xs text-white hover:bg-orange-700 disabled:opacity-50"
             >
-              Guardar
+              Guardar y Aprobar
+            </button>
+            <button
+              onClick={guardar}
+              disabled={pending}
+              className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200 disabled:opacity-50"
+            >
+              Solo guardar
             </button>
             <button onClick={cancelar} className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
               Cancelar
@@ -69,16 +117,14 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
         <div className="flex items-start justify-between gap-2">
           <p className="text-xs text-muted-foreground line-clamp-2">{respuesta}</p>
           <div className="flex gap-1 shrink-0">
-            <form action={aprobarMatrizAction.bind(null, item.id)}>
-              <button type="submit" disabled={pending} className="rounded bg-orange-600 px-3 py-1 text-xs text-white hover:bg-orange-700 disabled:opacity-50">
-                Aprobar
-              </button>
-            </form>
+            <button onClick={aprobar} disabled={pending} className="rounded bg-orange-600 px-3 py-1 text-xs text-white hover:bg-orange-700 disabled:opacity-50">
+              Aprobar
+            </button>
             <button onClick={() => setEditando(true)} className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">
               Editar
             </button>
-            <button onClick={eliminar} disabled={pending} className="rounded bg-red-100 px-3 py-1 text-xs text-red-700 hover:bg-red-200 disabled:opacity-50">
-              Eliminar
+            <button onClick={rechazar} disabled={pending} className="rounded bg-red-100 px-3 py-1 text-xs text-red-700 hover:bg-red-200 disabled:opacity-50">
+              Rechazar
             </button>
           </div>
         </div>

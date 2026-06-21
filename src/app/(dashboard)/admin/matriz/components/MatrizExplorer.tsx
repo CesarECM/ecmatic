@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { aprobarCeldaAction } from "../actions";
+import { toast } from "sonner";
+import { aprobarCeldaAction, actualizarCeldaAction, rechazarCeldaAction } from "../actions";
 import type { CeldaMatriz } from "@/services/matriz";
 
 function scoreColor(score: number): string {
@@ -23,21 +24,115 @@ function DimsBadges({ dims }: { dims: Record<string, string> }) {
 }
 
 function CeldaFila({ celda }: { celda: CeldaMatriz }) {
-  const [expandida, setExpandida] = useState(false);
+  const [editando, setEditando]   = useState(false);
+  const [respuesta, setRespuesta] = useState(celda.respuesta_sugerida);
   const [pending, startTransition] = useTransition();
 
+  function cancelar() {
+    setRespuesta(celda.respuesta_sugerida);
+    setEditando(false);
+  }
+
+  function guardar() {
+    const id = toast.loading("Guardando...");
+    startTransition(async () => {
+      try {
+        await actualizarCeldaAction(celda.id, respuesta);
+        toast.success("Respuesta guardada", { id });
+        setEditando(false);
+      } catch {
+        toast.error("Error al guardar", { id });
+      }
+    });
+  }
+
+  function guardarYAprobar() {
+    const id = toast.loading("Guardando y aprobando...");
+    startTransition(async () => {
+      try {
+        await actualizarCeldaAction(celda.id, respuesta);
+        await aprobarCeldaAction(celda.id);
+        toast.success("Celda guardada y aprobada", { id });
+        setEditando(false);
+      } catch {
+        toast.error("Error al guardar y aprobar", { id });
+      }
+    });
+  }
+
+  function aprobar() {
+    const id = toast.loading("Aprobando...");
+    startTransition(async () => {
+      try {
+        await aprobarCeldaAction(celda.id);
+        toast.success("Celda aprobada", { id });
+      } catch {
+        toast.error("Error al aprobar", { id });
+      }
+    });
+  }
+
+  function rechazar() {
+    if (!confirm("¿Rechazar esta celda de la Matriz nD?")) return;
+    const id = toast.loading("Rechazando...");
+    startTransition(async () => {
+      try {
+        await rechazarCeldaAction(celda.id);
+        toast.success("Celda rechazada", { id });
+      } catch {
+        toast.error("Error al rechazar", { id });
+      }
+    });
+  }
+
+  // ── Modo edición: fila expandida ──────────────────────────
+  if (editando) {
+    return (
+      <tr className="border-b bg-orange-50/60">
+        <td className="p-3">
+          <DimsBadges dims={celda.dimensiones as Record<string, string>} />
+        </td>
+        <td colSpan={4} className="p-3">
+          <textarea
+            className="w-full rounded border px-2 py-1.5 text-sm min-h-[80px] resize-y bg-white"
+            value={respuesta}
+            onChange={(e) => setRespuesta(e.target.value)}
+          />
+          <div className="flex gap-1 mt-2 flex-wrap">
+            <button
+              onClick={guardarYAprobar}
+              disabled={pending}
+              className="rounded bg-orange-600 px-3 py-1 text-xs text-white hover:bg-orange-700 disabled:opacity-50"
+            >
+              Guardar y Aprobar
+            </button>
+            <button
+              onClick={guardar}
+              disabled={pending}
+              className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200 disabled:opacity-50"
+            >
+              Solo guardar
+            </button>
+            <button onClick={cancelar} className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
+              Cancelar
+            </button>
+          </div>
+        </td>
+        <td className="p-3" />
+      </tr>
+    );
+  }
+
+  // ── Modo lectura ──────────────────────────────────────────
   return (
     <tr className="border-b hover:bg-gray-50">
       <td className="p-3">
         <DimsBadges dims={celda.dimensiones as Record<string, string>} />
       </td>
-      <td className="p-3 text-sm max-w-xs">
-        <button
-          className="text-left text-gray-700 hover:text-gray-900"
-          onClick={() => setExpandida((v) => !v)}
-        >
-          {expandida ? celda.respuesta_sugerida : `${celda.respuesta_sugerida.slice(0, 80)}…`}
-        </button>
+      <td className="p-3 text-sm max-w-xs text-gray-700">
+        {celda.respuesta_sugerida.length > 100
+          ? `${celda.respuesta_sugerida.slice(0, 100)}…`
+          : celda.respuesta_sugerida}
       </td>
       <td className="p-3 text-center">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${scoreColor(celda.score_efectividad)}`}>
@@ -53,14 +148,36 @@ function CeldaFila({ celda }: { celda: CeldaMatriz }) {
         </span>
       </td>
       <td className="p-3 text-center">
-        {!celda.aprobado && (
+        {celda.aprobado ? (
           <button
-            disabled={pending}
-            className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
-            onClick={() => startTransition(() => aprobarCeldaAction(celda.id))}
+            onClick={() => setEditando(true)}
+            className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200"
           >
-            Aprobar
+            Editar
           </button>
+        ) : (
+          <div className="flex gap-1 justify-center flex-wrap">
+            <button
+              disabled={pending}
+              onClick={aprobar}
+              className="rounded bg-orange-600 px-3 py-1 text-xs text-white hover:bg-orange-700 disabled:opacity-50"
+            >
+              Aprobar
+            </button>
+            <button
+              onClick={() => setEditando(true)}
+              className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200"
+            >
+              Editar
+            </button>
+            <button
+              disabled={pending}
+              onClick={rechazar}
+              className="rounded bg-red-100 px-3 py-1 text-xs text-red-700 hover:bg-red-200 disabled:opacity-50"
+            >
+              Rechazar
+            </button>
+          </div>
         )}
       </td>
     </tr>
@@ -86,7 +203,7 @@ export function MatrizExplorer({ celdas }: { celdas: CeldaMatriz[] }) {
             <th className="p-3 text-center">Score</th>
             <th className="p-3 text-center">Usos / Cierres</th>
             <th className="p-3 text-center">Estado</th>
-            <th className="p-3 text-center">Acción</th>
+            <th className="p-3 text-center">Acciones</th>
           </tr>
         </thead>
         <tbody>

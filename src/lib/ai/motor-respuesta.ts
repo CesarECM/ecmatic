@@ -7,6 +7,8 @@ import { registrarUsoIA } from "@/services/alertas-ia";
 import { registrarAccionIA } from "@/services/log-ia";
 import { inferirRespuestaMatriz } from "@/services/matriz-ia";
 import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
+import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
+import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 
 interface ContextoLead {
@@ -98,8 +100,50 @@ export async function generarRespuesta(
 
   // S23.6 — Anclar servicio(s) identificados: la IA razona desde el servicio antes que desde cualquier otra cosa
   const serviciosAncla = recursos.filter((r) => r.tipo === "servicio");
+
+  // S24.1/S24.2 — Resolver pagos, precios y cuentas bancarias en paralelo
+  const [pagosServicios, cuentasActivas] = await Promise.all([
+    serviciosAncla.length > 0
+      ? Promise.all(
+          serviciosAncla.map(async (s) => {
+            const supabase = createServiceClient();
+            const [pago, precioRow] = await Promise.all([
+              seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
+              supabase
+                .from("recursos_conocimiento")
+                .select("precio_centavos")
+                .eq("id", s.id)
+                .single()
+                .then((r) => (r.data?.precio_centavos as number | null) ?? null, () => null),
+            ]);
+            return { titulo: s.titulo, pago, precio: precioRow };
+          })
+        )
+      : Promise.resolve([]),
+    listarCuentasActivas().catch(() => []),
+  ]);
+  const pagosConLink = pagosServicios.filter((p) => p.pago !== null);
+
+  // Cuentas bancarias: solo mostrar si hay servicios ancla con precio configurado
+  const serviciosConPrecio = pagosServicios.filter((p) => p.precio !== null);
+  const cuentasBancariasLinea = (cuentasActivas.length > 0 && serviciosAncla.length > 0)
+    ? [
+        "\nTRANSFERENCIA BANCARIA (solo ofrécela si el lead no puede usar los links de pago):",
+        ...cuentasActivas.map((c) => `• ${formatearCuentaParaPrompt(c)}`),
+        serviciosConPrecio.length > 0
+          ? `Montos: ${serviciosConPrecio.map((s) => `${s.titulo}: $${((s.precio ?? 0) / 100).toLocaleString("es-MX")} MXN`).join(" | ")}`
+          : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
   const anclaLinea = serviciosAncla.length > 0
-    ? `\nSERVICIO(S) QUE ESTÁS VENDIENDO EN ESTA CONVERSACIÓN:\n${serviciosAncla.map((s) => `• ${s.titulo}`).join("\n")}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).\n`
+    ? [
+        `\nSERVICIO(S) QUE ESTÁS VENDIENDO EN ESTA CONVERSACIÓN:\n${serviciosAncla.map((s) => `• ${s.titulo}`).join("\n")}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
+        pagosConLink.length > 0
+          ? `\nLINKS DE PAGO (comparte el link cuando detectes intención de compra):\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}${p.pago!.descripcion ? ` (${p.pago!.descripcion})` : ""}`).join("\n")}`
+          : "",
+        cuentasBancariasLinea,
+      ].join("\n")
     : "";
 
   // S22.5 — Usar formato enriquecido para recursos tipo servicio
@@ -162,7 +206,7 @@ INSTRUCCIONES:
 - Máximo 3 oraciones por mensaje; si necesitas más, divide en bloques
 - NO expliques que eres IA
 - Si no tienes información suficiente para responder, pregunta por más detalles
-- Si detectas intención de compra, ofrece el link de pago de forma natural
+- Si detectas intención de compra, ofrece el link de pago de forma natural; si el lead no puede usarlo, proporciona los datos de transferencia bancaria del contexto
 - Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad`;

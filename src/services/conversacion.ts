@@ -16,6 +16,7 @@ import { obtenerConfig } from "./sistema";
 import { evaluarYAsignarTarea } from "./motor-tareas";
 import { generarOfertaConsultiva } from "./oferta-consultiva";
 import { ofrecerLeadmagnet } from "./selector-leadmagnet";
+import { ofrecerBrochure } from "./selector-brochure";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { capturarContactoPasivo } from "./captura-contacto";
 import { actualizarContextoIA } from "./contexto";
@@ -202,6 +203,11 @@ export async function procesarConversacion(
   // Solo si hay historial y fase CAGC conocida (el leadmagnet filtra por fase internamente)
   if (historial && estadoCagc !== null) {
     void ofrecerLeadmagnet(lead.id, telefono, estadoCagc.fase_numero).catch(console.error);
+  }
+
+  // S24.3 — Oferta proactiva de brochure (fire-and-forget, cooldown independiente)
+  if (historial && estadoCagc !== null) {
+    void ofrecerBrochure(lead.id, telefono, estadoCagc.fase_numero).catch(console.error);
   }
 
   // S14.2 — Sugerir etiquetas (fire-and-forget, solo si hay historial)

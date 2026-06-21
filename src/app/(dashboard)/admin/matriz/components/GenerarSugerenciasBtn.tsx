@@ -1,18 +1,24 @@
 "use client";
 
 import { useTransition } from "react";
+import { toast } from "sonner";
 import { generarSugerenciasAction } from "../actions";
 
 export function GenerarSugerenciasBtn() {
   const [pending, startTransition] = useTransition();
 
   function handleClick() {
+    const id = toast.loading("Generando sugerencias IA...");
     startTransition(async () => {
-      const resultado = await generarSugerenciasAction();
-      if (resultado.generadas > 0) {
-        alert(`Se generaron ${resultado.generadas} sugerencias nuevas. Revísalas en "Pendientes".`);
-      } else {
-        alert("No se encontraron combinaciones de dimensiones vacías que generar.");
+      try {
+        const { generadas } = await generarSugerenciasAction();
+        if (generadas > 0) {
+          toast.success(`${generadas} sugerencia${generadas > 1 ? "s" : ""} generada${generadas > 1 ? "s" : ""} — revísalas en "Pendientes"`, { id });
+        } else {
+          toast.info("No hay combinaciones vacías que generar", { id });
+        }
+      } catch {
+        toast.error("Error al generar sugerencias", { id });
       }
     });
   }

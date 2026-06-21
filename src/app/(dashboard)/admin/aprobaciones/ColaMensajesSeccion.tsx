@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { aprobarMensajeAction, rechazarMensajeAction, actualizarMensajeAction } from "./actions";
 
 type MensajeItem = {
@@ -35,18 +36,40 @@ function ItemMensaje({ item }: { item: MensajeItem }) {
   const [pending, startTransition] = useTransition();
 
   function enviar() {
-    startTransition(() => aprobarMensajeAction(item.id, item.telefono, [respuesta]));
+    const id = toast.loading("Enviando mensaje...");
+    startTransition(async () => {
+      try {
+        await aprobarMensajeAction(item.id, item.telefono, [respuesta]);
+        toast.success("Mensaje enviado", { id });
+      } catch {
+        toast.error("Error al enviar", { id });
+      }
+    });
   }
 
   function soloGuardar() {
+    const id = toast.loading("Guardando...");
     startTransition(async () => {
-      await actualizarMensajeAction(item.id, respuesta);
-      setEditando(false);
+      try {
+        await actualizarMensajeAction(item.id, respuesta);
+        toast.success("Cambios guardados", { id });
+        setEditando(false);
+      } catch {
+        toast.error("Error al guardar", { id });
+      }
     });
   }
 
   function rechazar() {
-    startTransition(() => rechazarMensajeAction(item.id));
+    const id = toast.loading("Rechazando...");
+    startTransition(async () => {
+      try {
+        await rechazarMensajeAction(item.id);
+        toast.success("Mensaje rechazado", { id });
+      } catch {
+        toast.error("Error al rechazar", { id });
+      }
+    });
   }
 
   return (
