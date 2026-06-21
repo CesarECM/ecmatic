@@ -32,11 +32,14 @@ export async function calcularMetricasVendedor(vendedorId: string): Promise<Metr
     .eq("alerta_enviada", true)
     .is("cumplida", null);
 
-  const { count: transcriptosSubidos } = await supabase
-    .from("transcriptos_meet")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", desde)
-    .in("cita_id", (citas ?? []).map((c) => c.id));
+  const citaIds = (citas ?? []).map((c) => c.id);
+  const { count: transcriptosSubidos } = citaIds.length
+    ? await supabase
+        .from("transcriptos_meet")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", desde)
+        .in("cita_id", citaIds)
+    : { count: 0 };
 
   const total = citas?.length ?? 0;
   const shows = citas?.filter((c) => c.resultado === "show").length ?? 0;
