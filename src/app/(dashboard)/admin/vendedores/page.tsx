@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { calcularMetricasVendedor } from "@/services/vendedor-metricas";
 import { isConfigured } from "@/lib/google/calendar";
 import { PesoInput } from "@/components/vendedores/peso-input";
+import { AgregarVendedorBtn } from "@/components/vendedores/agregar-vendedor-btn";
 
 export const revalidate = 0;
 
@@ -23,11 +24,14 @@ export default async function VendedoresPage() {
           <h1 className="text-xl font-semibold">Equipo de vendedores</h1>
           <p className="text-sm text-muted-foreground">{vendedores?.length ?? 0} vendedores activos</p>
         </div>
-        {!googleOk && (
-          <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded border border-orange-200">
-            Google Calendar no configurado — agrega GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {!googleOk && (
+            <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded border border-orange-200">
+              Google Calendar no configurado
+            </span>
+          )}
+          <AgregarVendedorBtn />
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded border">
