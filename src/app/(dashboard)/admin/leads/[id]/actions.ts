@@ -6,6 +6,8 @@ import { pausarNurturing, reanudarNurturing } from "@/services/nurturing";
 import { createServiceClient } from "@/lib/supabase/service";
 import { emitirFactura, construirItemServicio } from "@/lib/facturama/client";
 import { marcarPrivacidadAceptada } from "@/services/privacidad";
+import { agregarEntradaManualContexto } from "@/services/contexto";
+import { headers } from "next/headers";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -106,6 +108,17 @@ export async function marcarPrivacidadManualAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
   if (!leadId) return;
   await marcarPrivacidadAceptada(leadId);
+  revalidatePath(`/admin/leads/${leadId}`);
+}
+
+// S23.2 — Agrega una nota manual al Contexto del lead
+export async function agregarEntradaManualAction(formData: FormData) {
+  const leadId = formData.get("leadId") as string;
+  const nota = (formData.get("nota") as string)?.trim();
+  if (!leadId || !nota) return;
+  const hdrs = await headers();
+  const autor = hdrs.get("x-user-email") ?? "admin";
+  await agregarEntradaManualContexto(leadId, nota, autor);
   revalidatePath(`/admin/leads/${leadId}`);
 }
 

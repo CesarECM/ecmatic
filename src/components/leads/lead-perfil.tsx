@@ -1,11 +1,13 @@
 "use client";
 
-import { useTransition, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { moverLeadDesdePerfilAction, asignarVendedorAction, toggleNurturingAction, actualizarDatosB2BAction, emitirFacturaAction, marcarPrivacidadManualAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
+import { moverLeadDesdePerfilAction, asignarVendedorAction, toggleNurturingAction, actualizarDatosB2BAction, marcarPrivacidadManualAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
 import { MensajesLead } from "@/components/leads/mensajes-lead";
+import { ContextoLead } from "@/components/leads/contexto-lead";
+import { FacturacionCard } from "@/components/leads/facturacion-card";
+import type { EntradaContexto } from "@/lib/supabase/types";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
@@ -13,6 +15,7 @@ type Lead = {
   score_salud: number; compra_previa: boolean; created_at: string; vendedor_id: string | null;
   metadata: Record<string, unknown> | null;
   privacidad_aceptada: boolean; privacidad_fecha: string | null;
+  contexto: string | null; contexto_historial: EntradaContexto[]; contexto_updated_at: string | null;
 };
 type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
@@ -35,8 +38,6 @@ const DISC_COLORS: Record<string, string> = {
 
 export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: LeadPerfilProps) {
   const scoreColor = lead.score_salud >= 67 ? "text-green-600" : lead.score_salud >= 34 ? "text-yellow-600" : "text-red-600";
-  const [facturaPending, startFactura] = useTransition();
-  const [facturaMsg, setFacturaMsg] = useState<string | null>(null);
   const rfc = lead.metadata?.rfc as string | undefined;
   const cfdiUuid = lead.metadata?.cfdi_uuid as string | undefined;
 
@@ -209,57 +210,22 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
         </CardContent>
       </Card>
 
+      {/* S23.2 — Contexto interpretativo del lead */}
+      <ContextoLead
+        leadId={lead.id}
+        contexto={lead.contexto}
+        historial={lead.contexto_historial ?? []}
+        contextoFecha={lead.contexto_updated_at}
+      />
+
       {/* S12.6 — Facturación (solo si hay RFC) */}
       {rfc && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Facturación CFDI</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {cfdiUuid && (
-              <p className="text-xs text-green-700 font-medium">Último UUID: {cfdiUuid}</p>
-            )}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                startFactura(async () => {
-                  const res = await emitirFacturaAction(fd);
-                  setFacturaMsg(res.ok ? `Factura emitida: ${res.uuid}` : `Error: ${res.error}`);
-                });
-              }}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-            >
-              <input type="hidden" name="leadId" value={lead.id} />
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Monto total (con IVA)</label>
-                <input name="monto" type="number" min="1" step="0.01" required
-                  placeholder="1160.00"
-                  className="w-full text-sm border rounded-md px-3 py-1.5 bg-background" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">CP fiscal del receptor</label>
-                <input name="cp_fiscal" defaultValue={(lead.metadata?.cp_fiscal as string) ?? ""}
-                  placeholder="00000"
-                  className="w-full text-sm border rounded-md px-3 py-1.5 bg-background" />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <label className="text-xs text-muted-foreground">Descripción del servicio</label>
-                <input name="descripcion" defaultValue="Servicio de certificación CONOCER"
-                  className="w-full text-sm border rounded-md px-3 py-1.5 bg-background" />
-              </div>
-              <div className="sm:col-span-2 flex items-center gap-3">
-                <Button type="submit" size="sm" disabled={facturaPending}>
-                  {facturaPending ? "Emitiendo..." : "Emitir factura"}
-                </Button>
-                <span className="text-xs text-muted-foreground">RFC: {rfc}</span>
-              </div>
-            </form>
-            {facturaMsg && (
-              <p className={`text-xs font-medium ${facturaMsg.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>
-                {facturaMsg}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <FacturacionCard
+          leadId={lead.id}
+          rfc={rfc}
+          cfdiUuid={cfdiUuid}
+          cpFiscal={(lead.metadata?.cp_fiscal as string) ?? ""}
+        />
       )}
 
       {/* Historial de pipeline */}
