@@ -96,6 +96,12 @@ export async function generarRespuesta(
   void registrarUso(recursos.map((r) => r.id));
   if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
+  // S23.6 — Anclar servicio(s) identificados: la IA razona desde el servicio antes que desde cualquier otra cosa
+  const serviciosAncla = recursos.filter((r) => r.tipo === "servicio");
+  const anclaLinea = serviciosAncla.length > 0
+    ? `\nSERVICIO(S) QUE ESTÁS VENDIENDO EN ESTA CONVERSACIÓN:\n${serviciosAncla.map((s) => `• ${s.titulo}`).join("\n")}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).\n`
+    : "";
+
   // S22.5 — Usar formato enriquecido para recursos tipo servicio
   const recursosTexto =
     recursos.length > 0
@@ -133,7 +139,7 @@ export async function generarRespuesta(
     : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}
