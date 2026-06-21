@@ -111,37 +111,66 @@ export async function asignarMejorVendedor(): Promise<string | null> {
   return conDeficit[0].id;
 }
 
-// S7.3 — Genera 3 slots disponibles en los próximos 2 días hábiles
+// S25.1 — Slots disponibles con Google Calendar como fuente de verdad para bloqueos manuales
 export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotDisponible[]> {
   const supabase = createServiceClient();
-  const { data: vendedor } = await supabase.from("vendedores").select("nombre").eq("id", vendedorId).single();
-  const { data: citasExistentes } = await supabase.from("citas")
-    .select("fecha_inicio, fecha_fin")
-    .eq("vendedor_id", vendedorId).in("estado", ["pendiente", "confirmada"]);
+  const [{ data: vendedor }, { data: citasExistentes }] = await Promise.all([
+    supabase.from("vendedores").select("nombre").eq("id", vendedorId).single(),
+    supabase.from("citas")
+      .select("fecha_inicio, fecha_fin")
+      .eq("vendedor_id", vendedorId)
+      .in("estado", ["pendiente", "confirmada"]),
+  ]);
 
-  const ocupados = (citasExistentes ?? []).map((c) => ({ inicio: c.fecha_inicio, fin: c.fecha_fin }));
+  // Bloques de la BD
+  const ocupados: { inicio: string | Date; fin: string | Date }[] =
+    (citasExistentes ?? []).map((c) => ({ inicio: c.fecha_inicio, fin: c.fecha_fin }));
+
+  // Bloques de Google Calendar (bloqueos manuales como verdad única)
+  if (isConfigured()) {
+    try {
+      const { data: tokenRow } = await supabase
+        .from("vendedor_tokens").select("*").eq("vendedor_id", vendedorId).maybeSingle();
+      if (tokenRow) {
+        let token = tokenRow.access_token;
+        if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date() && tokenRow.refresh_token) {
+          const refreshed = await refreshAccessToken(tokenRow.refresh_token);
+          token = refreshed.access_token;
+          await supabase.from("vendedor_tokens")
+            .update({ access_token: token, expires_at: refreshed.expires_at })
+            .eq("vendedor_id", vendedorId);
+        }
+        const desde = new Date();
+        const hasta = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+        const googleBusy = await getFreeBusy(token, "primary", desde, hasta);
+        ocupados.push(...googleBusy);
+      }
+    } catch {
+      // Si Google Calendar no responde, continúa solo con BD
+    }
+  }
+
   const slots: SlotDisponible[] = [];
   const candidato = new Date();
   candidato.setHours(candidato.getHours() + 2, 0, 0, 0);
+  let diasRevisados = 0;
 
-  while (slots.length < 3) {
+  while (slots.length < 3 && diasRevisados < 14) {
     const dia = candidato.getDay();
     if (dia !== 0 && dia !== 6) {
-      const horas = [10, 12, 15, 17];
-      for (const h of horas) {
+      for (const h of [10, 12, 15, 17]) {
         if (slots.length >= 3) break;
         const inicio = new Date(candidato);
         inicio.setHours(h, 0, 0, 0);
         const fin = new Date(inicio.getTime() + 30 * 60 * 1000);
-        const ocupado = ocupados.some((o) =>
-          new Date(o.inicio) < fin && new Date(o.fin) > inicio
-        );
+        const ocupado = ocupados.some((o) => new Date(o.inicio) < fin && new Date(o.fin) > inicio);
         if (!ocupado && inicio > new Date()) {
           slots.push({ inicio, fin, vendedorId, vendedorNombre: vendedor?.nombre ?? "Asesor" });
         }
       }
     }
     candidato.setDate(candidato.getDate() + 1);
+    diasRevisados++;
   }
   return slots;
 }
@@ -158,9 +187,24 @@ export async function listarCitas(filtros?: { vendedorId?: string; estado?: Esta
   return data ?? [];
 }
 
+// S25.3 — Al confirmar, crea el evento Meet autónomamente si aún no existe
 export async function actualizarEstadoCita(id: string, estado: EstadoCita): Promise<void> {
   const supabase = createServiceClient();
   await supabase.from("citas").update({ estado }).eq("id", id);
+
+  if (estado === "confirmada") {
+    const { data: cita } = await supabase
+      .from("citas")
+      .select("lead_id, vendedor_id, fecha_inicio, fecha_fin, google_meet_link")
+      .eq("id", id)
+      .single();
+    if (cita && !cita.google_meet_link && cita.vendedor_id) {
+      void sincronizarConCalendar(
+        id, cita.lead_id, cita.vendedor_id,
+        new Date(cita.fecha_inicio), new Date(cita.fecha_fin)
+      );
+    }
+  }
 }
 
 export async function registrarPostSesion(id: string, datos: {
