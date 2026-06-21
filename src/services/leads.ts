@@ -60,6 +60,7 @@ export async function inferirEtapaPipeline(
     objecion_confianza:   "Negociación",
     abandono_inminente:   "Contactado",
     quiere_agendar:       "Propuesta",
+    confirmando_slot:     "Propuesta",
     fuera_de_contexto:    "Contactado",
     compra:               "Propuesta",   // legacy
     otro:                 "Contactado",  // legacy

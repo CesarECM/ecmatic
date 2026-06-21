@@ -20,7 +20,8 @@ import { ofrecerBrochure } from "./selector-brochure";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { capturarContactoPasivo } from "./captura-contacto";
 import { actualizarContextoIA } from "./contexto";
-import { obtenerSlotsDisponibles, asignarMejorVendedor } from "./citas";
+import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from "./citas";
+import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -116,20 +117,40 @@ export async function procesarConversacion(
     obtenerEtiquetasLead(lead.id).catch(() => []),
   ]);
 
-  // Slots de calendario cuando el lead quiere agendar (fire-and-forget en parallel)
   let slotsParaAI = undefined;
+  let meetLinkParaAI: string | null = null;
+
   if (intencion === "quiere_agendar") {
     try {
       const vendedorId = await asignarMejorVendedor();
       if (vendedorId) {
         slotsParaAI = await obtenerSlotsDisponibles(vendedorId);
         void logAgen({ paso: "slots_consultados", leadId: lead.id, vendedorId,
-          detalle: `Intención quiere_agendar detectada — ${slotsParaAI.length} slots disponibles`,
+          detalle: `Intención quiere_agendar — ${slotsParaAI.length} slots disponibles`,
           metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId } });
       }
     } catch (err) {
       void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
         detalle: `Error obteniendo slots: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
+  if (intencion === "confirmando_slot") {
+    try {
+      const vendedorId = await asignarMejorVendedor();
+      if (vendedorId) {
+        const slots = await obtenerSlotsDisponibles(vendedorId);
+        const slot = await detectarSlotSeleccionado(mensajes.join(" "), slots);
+        if (slot) {
+          const { citaId, meetLink } = await crearCitaConMeet({ leadId: lead.id, vendedorId, inicio: slot.inicio, fin: slot.fin });
+          meetLinkParaAI = meetLink;
+          void logAgen({ paso: "cita_creada", citaId, leadId: lead.id, vendedorId,
+            detalle: "Cita creada desde conversación WA", metadata: { meetLink, inicio: slot.inicio.toISOString() } });
+        }
+      }
+    } catch (err) {
+      void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
+        detalle: `Error creando cita: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
 
@@ -143,6 +164,7 @@ export async function procesarConversacion(
     faseCAGC: estadoCagc?.fase_numero,
     etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
     slotsDisponibles: slotsParaAI,
+    meetLink: meetLinkParaAI,
   });
 
   // 8.5. S8.1 — Si la intención es compra inmediata, generar link Stripe

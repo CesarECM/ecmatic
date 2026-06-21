@@ -25,6 +25,7 @@ export type IntencionClasificada =
   | "objecion_confianza"
   | "abandono_inminente"
   | "quiere_agendar"
+  | "confirmando_slot"
   | "fuera_de_contexto"
   | "compra"       // legacy
   | "otro";        // legacy

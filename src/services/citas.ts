@@ -41,19 +41,20 @@ export async function crearCita(params: {
   return cita.id;
 }
 
+// Retorna meetLink para que el caller pueda usarlo de inmediato si lo necesita
 async function sincronizarConCalendar(
   citaId: string, leadId: string, vendedorId: string, inicio: Date, fin: Date,
   notificar: boolean
-): Promise<void> {
-  if (!isConfigured()) return;
+): Promise<string | null> {
+  if (!isConfigured()) return null;
   try {
     const supabase = createServiceClient();
     const [{ data: tokenRow }, { data: lead }, { data: vendedor }] = await Promise.all([
       supabase.from("vendedor_tokens").select("*").eq("vendedor_id", vendedorId).maybeSingle(),
-      supabase.from("leads").select("nombre, email").eq("id", leadId).single(),
+      supabase.from("leads").select("nombre, email, telefono").eq("id", leadId).single(),
       supabase.from("vendedores").select("nombre, email").eq("id", vendedorId).single(),
     ]);
-    if (!tokenRow || !vendedor) return;
+    if (!tokenRow || !vendedor) return null;
 
     let token = tokenRow.access_token;
     if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date() && tokenRow.refresh_token) {
@@ -65,11 +66,15 @@ async function sincronizarConCalendar(
       void logAgen({ paso: "token_refresh", citaId, leadId, vendedorId, detalle: "Access token renovado con refresh token" });
     }
 
+    const nombreLead = (lead as { nombre?: string | null; telefono?: string | null } | null)?.nombre
+      ?? (lead as { nombre?: string | null; telefono?: string | null } | null)?.telefono
+      ?? "Lead";
+
     const { eventId, meetLink } = await createCalendarEvent(token, {
-      titulo: `Cita ECMatic — ${lead?.nombre ?? "Lead"}`,
-      descripcion: `Cita de asesoría para certificación CONOCER`,
+      titulo: `ECMatic — Asesoría CONOCER | ${nombreLead}`,
+      descripcion: `Cita de asesoría para certificación CONOCER con ${nombreLead}`,
       inicio, fin,
-      emailLead: lead?.email ?? null,
+      emailLead: (lead as { email?: string | null } | null)?.email ?? null,
       emailVendedor: vendedor.email,
     });
 
@@ -85,11 +90,33 @@ async function sincronizarConCalendar(
     if (notificar && meetLink) {
       void notificarCitaConfirmada(citaId, leadId, vendedorId, meetLink);
     }
+    return meetLink;
   } catch (err) {
     console.error("[citas] Error sincronizando Calendar:", err);
     void logAgen({ paso: "error", nivel: "error", citaId, leadId, vendedorId,
       detalle: err instanceof Error ? err.message : String(err), metadata: { fase: "sincronizar_calendar" } });
+    return null;
   }
+}
+
+// Crea la cita y espera el link de Meet para devolverlo de inmediato (usado en flujo de conversación)
+export async function crearCitaConMeet(params: {
+  leadId: string; vendedorId: string; inicio: Date; fin: Date; notasPrevias?: string;
+}): Promise<{ citaId: string; meetLink: string | null }> {
+  const supabase = createServiceClient();
+  const { data: cita, error } = await supabase
+    .from("citas")
+    .insert({
+      lead_id: params.leadId, vendedor_id: params.vendedorId,
+      fecha_inicio: params.inicio.toISOString(), fecha_fin: params.fin.toISOString(),
+      notas_previas: params.notasPrevias ?? null,
+    })
+    .select("id").single();
+  if (error || !cita) throw new Error(`[citas] Error creando cita: ${error?.message}`);
+  void logAgen({ paso: "cita_creada", citaId: cita.id, leadId: params.leadId, vendedorId: params.vendedorId,
+    detalle: "Cita creada desde conversación IA", metadata: { inicio: params.inicio.toISOString() } });
+  const meetLink = await sincronizarConCalendar(cita.id, params.leadId, params.vendedorId, params.inicio, params.fin, false);
+  return { citaId: cita.id, meetLink };
 }
 
 // S25.2 — Elige el vendedor con mayor déficit proporcional según su peso (0–100)

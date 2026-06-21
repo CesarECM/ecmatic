@@ -3,7 +3,7 @@ import { modeloPorTarea } from "./model-router";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import type { IntencionClasificada } from "@/lib/supabase/types";
 
-// S11.1 — 8 categorías de intención con árbol de respuesta dedicado
+// S11.1 — 9 categorías de intención con árbol de respuesta dedicado
 const INTENCIONES_V2 = [
   "compra_inmediata",
   "compra_consideracion",
@@ -12,6 +12,7 @@ const INTENCIONES_V2 = [
   "objecion_confianza",
   "abandono_inminente",
   "quiere_agendar",
+  "confirmando_slot",
   "fuera_de_contexto",
 ] as const;
 
@@ -24,6 +25,7 @@ export const ARBOL_RESPUESTA: Record<string, { tono: string; objetivo: string }>
   objecion_confianza:   { tono: "transparente y validador", objetivo: "Presentar credenciales y testimonios" },
   abandono_inminente:   { tono: "activador de urgencia",    objetivo: "Usar gatillo mental activo para retener" },
   quiere_agendar:       { tono: "cálido y organizador",     objetivo: "Presentar los horarios disponibles y guiar al lead para que elija uno" },
+  confirmando_slot:     { tono: "entusiasta y confirmador", objetivo: "Confirmar el horario elegido, compartir el link de Meet y dar los siguientes pasos" },
   fuera_de_contexto:    { tono: "amigable y redirector",    objetivo: "Redirigir al tema de certificación" },
   compra:               { tono: "urgente y facilitador",    objetivo: "Enviar link de pago" }, // legacy
   otro:                 { tono: "neutro",                   objetivo: "Explorar necesidad" }, // legacy
@@ -40,7 +42,7 @@ export async function clasificarIntencion(
     max_tokens: 15,
     system: `Eres un clasificador de intención de leads para un centro de certificación CONOCER en México.
 Responde ÚNICAMENTE con una de estas palabras exactas (sin espacios adicionales):
-compra_inmediata, compra_consideracion, duda_tecnica, objecion_precio, objecion_confianza, abandono_inminente, quiere_agendar, fuera_de_contexto
+compra_inmediata, compra_consideracion, duda_tecnica, objecion_precio, objecion_confianza, abandono_inminente, quiere_agendar, confirmando_slot, fuera_de_contexto
 
 Definiciones:
 - compra_inmediata: el lead quiere comprar ahora mismo ("¿cómo pago?", "quiero inscribirme")
@@ -50,6 +52,7 @@ Definiciones:
 - objecion_confianza: duda de la credibilidad del centro, pide referencias
 - abandono_inminente: señales de que va a dejar la conversación o ya no está interesado
 - quiere_agendar: pide agendar, quiere hablar con alguien, solicita una cita o reunión ("¿puedo agendar?", "quiero hablar con un asesor", "¿cuándo podemos hablar?")
+- confirmando_slot: el lead está eligiendo o confirmando un horario específico de los que se le ofrecieron ("el lunes", "la primera opción", "a las 10", "me quedo con ese", "sí, ese horario")
 - fuera_de_contexto: pregunta que no tiene relación con certificaciones CONOCER`,
     messages: [
       {

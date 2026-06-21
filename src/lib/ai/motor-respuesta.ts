@@ -22,6 +22,7 @@ interface ContextoLead {
   faseCAGC?: number;
   etiquetas?: string[];
   slotsDisponibles?: SlotDisponible[]; // inyectados cuando intención = quiere_agendar
+  meetLink?: string | null;            // inyectado cuando intención = confirmando_slot y la cita se creó
 }
 
 // S22.4 — Tipo de recurso enriquecido (incluye ficha de servicio)
@@ -184,6 +185,11 @@ export async function generarRespuesta(
     ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}`
     : "";
 
+  // Meet link cuando el lead confirmó un slot y la cita ya fue creada
+  const meetLinkLinea = contexto.meetLink
+    ? `\nCITA AGENDADA — COMPARTE EL ENLACE:\nEl sistema acaba de crear la cita en Google Calendar. El enlace de Google Meet es:\n${contexto.meetLink}\nCompártelo en tu respuesta de forma cálida. Indica la fecha y hora de la cita y que queda pendiente de confirmación por el equipo.`
+    : "";
+
   // Slots disponibles para agendar (solo cuando intención = quiere_agendar)
   const slotsLinea = contexto.slotsDisponibles?.length
     ? [
@@ -198,7 +204,7 @@ export async function generarRespuesta(
     : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${slotsLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${meetLinkLinea}${slotsLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}
