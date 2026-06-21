@@ -2,6 +2,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendTextMessageWithRetry } from "@/lib/whatsapp/client";
 import { enviarEmail } from "@/lib/email/resend";
+import { logAgen } from "@/services/log-agendamiento";
 
 function formatearFechaHora(iso: string): { fecha: string; hora: string } {
   const d = new Date(iso);
@@ -30,7 +31,11 @@ export async function notificarCitaConfirmada(
   // WhatsApp al lead
   if (lead?.telefono) {
     const msg = `¡Hola ${nombreLead}! Tu cita de asesoría está confirmada.\n\n📅 ${fecha} a las ${hora}\n🎥 ${meetLink}\n\nTe esperamos. Cualquier duda, escríbenos aquí.`;
-    await sendTextMessageWithRetry(lead.telefono, msg).catch(() => {});
+    await sendTextMessageWithRetry(lead.telefono, msg)
+      .then(() => void logAgen({ paso: "notificacion_wa", citaId, leadId, vendedorId,
+        detalle: `WhatsApp enviado a ${lead.telefono}`, metadata: { fecha, hora } }))
+      .catch((err: unknown) => void logAgen({ paso: "notificacion_wa", nivel: "error", citaId, leadId, vendedorId,
+        detalle: err instanceof Error ? err.message : String(err) }));
   }
 
   // Email al lead
@@ -43,7 +48,11 @@ export async function notificarCitaConfirmada(
 <p>📅 <strong>${fecha} a las ${hora}</strong></p>
 <p>🎥 <a href="${meetLink}">Unirse a Google Meet</a></p>
 <p>¡Te esperamos!</p>`,
-    }).catch(() => {});
+    })
+      .then(() => void logAgen({ paso: "notificacion_email_lead", citaId, leadId, vendedorId,
+        detalle: `Email enviado a ${lead.email}` }))
+      .catch((err: unknown) => void logAgen({ paso: "notificacion_email_lead", nivel: "error", citaId, leadId, vendedorId,
+        detalle: err instanceof Error ? err.message : String(err) }));
   }
 
   // Email al vendedor
@@ -56,6 +65,10 @@ export async function notificarCitaConfirmada(
 <p>👤 <strong>${lead?.nombre ?? "Lead"}</strong></p>
 <p>📅 <strong>${fecha} a las ${hora}</strong></p>
 <p>🎥 <a href="${meetLink}">Google Meet</a></p>`,
-    }).catch(() => {});
+    })
+      .then(() => void logAgen({ paso: "notificacion_email_vendedor", citaId, leadId, vendedorId,
+        detalle: `Email enviado a ${vendedor.email}` }))
+      .catch((err: unknown) => void logAgen({ paso: "notificacion_email_vendedor", nivel: "error", citaId, leadId, vendedorId,
+        detalle: err instanceof Error ? err.message : String(err) }));
   }
 }

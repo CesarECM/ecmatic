@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { isConfigured, getFreeBusy, refreshAccessToken, createCalendarEvent } from "@/lib/google/calendar";
 import { notificarCitaConfirmada } from "@/services/notificaciones-cita";
+import { logAgen } from "@/services/log-agendamiento";
 import type { EstadoCita, ResultadoCita } from "@/lib/supabase/types";
 
 export interface SlotDisponible {
@@ -34,6 +35,8 @@ export async function crearCita(params: {
 
   if (error || !cita) throw new Error(`[citas] Error creando cita: ${error?.message}`);
 
+  void logAgen({ paso: "cita_creada", citaId: cita.id, leadId: params.leadId, vendedorId: params.vendedorId,
+    detalle: "Cita insertada en BD", metadata: { inicio: params.inicio.toISOString(), fin: params.fin.toISOString() } });
   void sincronizarConCalendar(cita.id, params.leadId, params.vendedorId, params.inicio, params.fin, false);
   return cita.id;
 }
@@ -59,6 +62,7 @@ async function sincronizarConCalendar(
       await supabase.from("vendedor_tokens")
         .update({ access_token: token, expires_at: refreshed.expires_at })
         .eq("vendedor_id", vendedorId);
+      void logAgen({ paso: "token_refresh", citaId, leadId, vendedorId, detalle: "Access token renovado con refresh token" });
     }
 
     const { eventId, meetLink } = await createCalendarEvent(token, {
@@ -69,12 +73,22 @@ async function sincronizarConCalendar(
       emailVendedor: vendedor.email,
     });
 
+    void logAgen({ paso: "calendar_sync", citaId, leadId, vendedorId, detalle: "Evento creado en Google Calendar",
+      metadata: { eventId, tieneMeetLink: !!meetLink } });
+    if (meetLink) {
+      void logAgen({ paso: "meet_generado", citaId, leadId, vendedorId, detalle: meetLink });
+    } else {
+      void logAgen({ paso: "meet_generado", nivel: "warn", citaId, leadId, vendedorId, detalle: "Google Calendar no devolvió link de Meet" });
+    }
+
     await supabase.from("citas").update({ google_event_id: eventId, google_meet_link: meetLink }).eq("id", citaId);
     if (notificar && meetLink) {
       void notificarCitaConfirmada(citaId, leadId, vendedorId, meetLink);
     }
   } catch (err) {
     console.error("[citas] Error sincronizando Calendar:", err);
+    void logAgen({ paso: "error", nivel: "error", citaId, leadId, vendedorId,
+      detalle: err instanceof Error ? err.message : String(err), metadata: { fase: "sincronizar_calendar" } });
   }
 }
 
@@ -149,9 +163,12 @@ export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotD
         const hasta = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
         const googleBusy = await getFreeBusy(token, "primary", desde, hasta);
         ocupados.push(...googleBusy);
+        void logAgen({ paso: "slots_consultados", nivel: "info", vendedorId,
+          detalle: `Google Calendar: ${googleBusy.length} bloques ocupados`, metadata: { fuente: "google_calendar" } });
       }
-    } catch {
-      // Si Google Calendar no responde, continúa solo con BD
+    } catch (err) {
+      void logAgen({ paso: "error", nivel: "warn", vendedorId,
+        detalle: `Calendar free/busy falló, usando solo BD: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
 
@@ -177,6 +194,8 @@ export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotD
     candidato.setDate(candidato.getDate() + 1);
     diasRevisados++;
   }
+  void logAgen({ paso: "slots_consultados", vendedorId, detalle: `${slots.length} slots disponibles generados`,
+    metadata: { slots_encontrados: slots.length, dias_revisados: diasRevisados } });
   return slots;
 }
 
@@ -198,6 +217,7 @@ export async function actualizarEstadoCita(id: string, estado: EstadoCita): Prom
   await supabase.from("citas").update({ estado }).eq("id", id);
 
   if (estado === "confirmada") {
+    void logAgen({ paso: "estado_confirmado", citaId: id, detalle: "Estado actualizado a confirmada → iniciando sincronización Meet" });
     const { data: cita } = await supabase
       .from("citas")
       .select("lead_id, vendedor_id, fecha_inicio, fecha_fin, google_meet_link")
