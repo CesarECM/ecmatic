@@ -18,6 +18,7 @@ import { generarOfertaConsultiva } from "./oferta-consultiva";
 import { ofrecerLeadmagnet } from "./selector-leadmagnet";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { capturarContactoPasivo } from "./captura-contacto";
+import { actualizarContextoIA } from "./contexto";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -211,6 +212,10 @@ export async function procesarConversacion(
 
   // S17.6 — Reevaluar tarea de fondo tras cada conversación (fire-and-forget)
   void evaluarYAsignarTarea(lead.id, "conversacion").catch(console.error);
+
+  // S23.3 — Actualizar Contexto interpretativo del lead (fire-and-forget)
+  const accionContexto = `Conversación WhatsApp — intención: ${intencion}`;
+  void actualizarContextoIA(lead.id, accionContexto).catch(console.error);
 
   // S15.2 — Solicitar datos faltantes si hay señal positiva y la conversación ya avanzó
   if (historial && (!lead.nombre || !lead.email)) {
