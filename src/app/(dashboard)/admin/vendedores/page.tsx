@@ -17,10 +17,19 @@ const METRICAS_VACÍAS: MetricasVendedor = {
 export default async function VendedoresPage() {
   const supabase = createServiceClient();
 
-  const { data: vendedores } = await supabase
+  // Intentar con peso; si la columna no existe aún, fallback sin ella
+  let { data: vendedores } = await supabase
     .from("vendedores")
     .select("id, profile_id, nombre, email, activo, peso")
     .order("nombre");
+
+  if (!vendedores) {
+    const { data: fallback } = await supabase
+      .from("vendedores")
+      .select("id, profile_id, nombre, email, activo")
+      .order("nombre");
+    vendedores = (fallback ?? []).map((v) => ({ ...v, peso: 50 }));
+  }
 
   // Detectar invitaciones pendientes — falla silenciosamente si el admin API no responde
   let pendientes = new Set<string>();
