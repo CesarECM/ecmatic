@@ -187,19 +187,28 @@ export async function generarRespuesta(
 
   // Meet link cuando el lead confirmó un slot y la cita ya fue creada
   const meetLinkLinea = contexto.meetLink
-    ? `\nCITA AGENDADA — COMPARTE EL ENLACE:\nEl sistema acaba de crear la cita en Google Calendar. El enlace de Google Meet es:\n${contexto.meetLink}\nCompártelo en tu respuesta de forma cálida. Indica la fecha y hora de la cita y que queda pendiente de confirmación por el equipo.`
+    ? [
+        "\nCITA CREADA — COMPARTE EL LINK CON ENTUSIASMO:",
+        `El sistema generó este enlace de Google Meet: ${contexto.meetLink}`,
+        "Compártelo de forma cálida y natural. Menciona la fecha y hora en horario del Centro de México.",
+        "Dile al lead que su solicitud ya está registrada y que en breve el equipo la confirma. Usa tono entusiasta y cercano.",
+      ].join("\n")
     : "";
 
   // Slots disponibles para agendar (solo cuando intención = quiere_agendar)
+  const tz = "America/Mexico_City";
   const slotsLinea = contexto.slotsDisponibles?.length
     ? [
-        "\nHORARIOS DISPONIBLES PARA AGENDAR CITA (preséntaselos al lead para que elija):",
-        ...contexto.slotsDisponibles.map((s) => {
-          const fecha = s.inicio.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
-          const hora  = s.inicio.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-          return `• ${fecha} a las ${hora} — con ${s.vendedorNombre}`;
+        "\nHORARIOS DISPONIBLES — preséntaselos de forma conversacional, no como lista rígida:",
+        ...contexto.slotsDisponibles.map((s, i) => {
+          const fecha = s.inicio.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
+          const hora  = s.inicio.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+          return `${i + 1}. ${fecha} a las ${hora}`;
         }),
-        "Cuando el lead elija un horario, confirma su selección y dile que quedará pendiente de confirmación.",
+        "\nREGLAS DE ZONA HORARIA (seguir siempre):",
+        "• Todos los horarios son en horario del Centro de México — usa exactamente esa expresión, nunca abrevies a 'CDMX' ni 'hora local'.",
+        "• Si el lead menciona estar en otra ciudad, estado o país con huso horario diferente, convierte el horario y acláraselo de forma natural: ejemplo: 'serían las 3:00 pm en horario del Centro de México, que en tu zona local serían las 4:00 pm'.",
+        "• Cuando el lead elija un horario, confírmalo con calidez y entusiasmo.",
       ].join("\n")
     : "";
 

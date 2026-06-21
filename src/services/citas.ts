@@ -200,17 +200,23 @@ export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotD
   }
 
   const slots: SlotDisponible[] = [];
-  const candidato = new Date();
-  candidato.setHours(candidato.getHours() + 2, 0, 0, 0);
+  // CDMX permanente en UTC-6 desde que México eliminó el horario de verano (oct 2022)
+  const CDMX_H = 6;
+  // Candidato en "reloj CDMX": desplazamos el UTC actual menos el offset para
+  // poder usar getUTCDay / getUTCDate / etc. como si fuera hora local CDMX
+  const candidato = new Date(Date.now() + 2 * 3_600_000 - CDMX_H * 3_600_000);
   let diasRevisados = 0;
 
   while (slots.length < 3 && diasRevisados < 14) {
-    const dia = candidato.getDay();
-    if (dia !== 0 && dia !== 6) {
+    const diaSemana = candidato.getUTCDay();
+    if (diaSemana !== 0 && diaSemana !== 6) {
       for (const h of [10, 12, 15, 17]) {
         if (slots.length >= 3) break;
-        const inicio = new Date(candidato);
-        inicio.setHours(h, 0, 0, 0);
+        // h:00 CDMX → UTC sumando el offset
+        const inicio = new Date(Date.UTC(
+          candidato.getUTCFullYear(), candidato.getUTCMonth(), candidato.getUTCDate(),
+          h + CDMX_H, 0, 0,
+        ));
         const fin = new Date(inicio.getTime() + 30 * 60 * 1000);
         const ocupado = ocupados.some((o) => new Date(o.inicio) < fin && new Date(o.fin) > inicio);
         if (!ocupado && inicio > new Date()) {
@@ -218,7 +224,7 @@ export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotD
         }
       }
     }
-    candidato.setDate(candidato.getDate() + 1);
+    candidato.setUTCDate(candidato.getUTCDate() + 1);
     diasRevisados++;
   }
   void logAgen({ paso: "slots_consultados", vendedorId, detalle: `${slots.length} slots disponibles generados`,

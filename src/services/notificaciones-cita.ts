@@ -6,8 +6,9 @@ import { logAgen } from "@/services/log-agendamiento";
 
 function formatearFechaHora(iso: string): { fecha: string; hora: string } {
   const d = new Date(iso);
-  const fecha = d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
-  const hora = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const tz = "America/Mexico_City";
+  const fecha = d.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
+  const hora = d.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
   return { fecha, hora };
 }
 

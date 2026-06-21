@@ -9,10 +9,11 @@ export async function detectarSlotSeleccionado(
 ): Promise<SlotDisponible | null> {
   if (!slots.length) return null;
 
+  const tz = "America/Mexico_City";
   const listaSlots = slots.map((s, i) => {
-    const fecha = s.inicio.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
-    const hora  = s.inicio.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-    return `${i + 1}. ${fecha} a las ${hora}`;
+    const fecha = s.inicio.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
+    const hora  = s.inicio.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+    return `${i + 1}. ${fecha} a las ${hora} (hora del Centro de México)`;
   }).join("\n");
 
   const response = await anthropic.messages.create({
