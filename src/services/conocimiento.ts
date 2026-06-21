@@ -37,6 +37,13 @@ export async function crearRecurso(
     .single();
 
   if (error) throw new Error(`[conocimiento] Error creando recurso: ${error.message}`);
+
+  // S23.5 — Al registrar un servicio nuevo, generar paquete de sugerencias en cola de aprobación
+  if (tipo === "servicio") {
+    const { generarPaqueteServicioNuevo } = await import("@/lib/ai/paquete-servicio-nuevo");
+    void generarPaqueteServicioNuevo(titulo, contenido).catch(console.error);
+  }
+
   return data;
 }
 
