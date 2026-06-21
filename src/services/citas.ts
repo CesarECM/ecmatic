@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { isConfigured, getFreeBusy, refreshAccessToken, createCalendarEvent } from "@/lib/google/calendar";
+import { notificarCitaConfirmada } from "@/services/notificaciones-cita";
 import type { EstadoCita, ResultadoCita } from "@/lib/supabase/types";
 
 export interface SlotDisponible {
@@ -33,12 +34,13 @@ export async function crearCita(params: {
 
   if (error || !cita) throw new Error(`[citas] Error creando cita: ${error?.message}`);
 
-  void sincronizarConCalendar(cita.id, params.leadId, params.vendedorId, params.inicio, params.fin);
+  void sincronizarConCalendar(cita.id, params.leadId, params.vendedorId, params.inicio, params.fin, false);
   return cita.id;
 }
 
 async function sincronizarConCalendar(
-  citaId: string, leadId: string, vendedorId: string, inicio: Date, fin: Date
+  citaId: string, leadId: string, vendedorId: string, inicio: Date, fin: Date,
+  notificar: boolean
 ): Promise<void> {
   if (!isConfigured()) return;
   try {
@@ -68,6 +70,9 @@ async function sincronizarConCalendar(
     });
 
     await supabase.from("citas").update({ google_event_id: eventId, google_meet_link: meetLink }).eq("id", citaId);
+    if (notificar && meetLink) {
+      void notificarCitaConfirmada(citaId, leadId, vendedorId, meetLink);
+    }
   } catch (err) {
     console.error("[citas] Error sincronizando Calendar:", err);
   }
@@ -201,7 +206,7 @@ export async function actualizarEstadoCita(id: string, estado: EstadoCita): Prom
     if (cita && !cita.google_meet_link && cita.vendedor_id) {
       void sincronizarConCalendar(
         id, cita.lead_id, cita.vendedor_id,
-        new Date(cita.fecha_inicio), new Date(cita.fecha_fin)
+        new Date(cita.fecha_inicio), new Date(cita.fecha_fin), true
       );
     }
   }
