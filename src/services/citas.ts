@@ -73,20 +73,42 @@ async function sincronizarConCalendar(
   }
 }
 
-// S7.2 — Elige el mejor vendedor disponible según carga y conversión
+// S25.2 — Elige el vendedor con mayor déficit proporcional según su peso (0–100)
 export async function asignarMejorVendedor(): Promise<string | null> {
   const supabase = createServiceClient();
-  const { data: vendedores } = await supabase.from("vendedores").select("id, nombre").eq("activo", true);
+  const { data: vendedores } = await supabase
+    .from("vendedores").select("id, peso").eq("activo", true);
   if (!vendedores?.length) return null;
 
-  const cargas: { id: string; citas: number }[] = [];
-  for (const v of vendedores) {
-    const { count } = await supabase.from("citas").select("id", { count: "exact", head: true })
-      .eq("vendedor_id", v.id).in("estado", ["pendiente", "confirmada"]);
-    cargas.push({ id: v.id, citas: count ?? 0 });
+  const activos = vendedores.filter((v) => (v.peso ?? 50) > 0);
+  if (!activos.length) return null;
+  if (activos.length === 1) return activos[0].id;
+
+  const totalPeso = activos.reduce((sum, v) => sum + (v.peso ?? 50), 0);
+  const ids = activos.map((v) => v.id);
+
+  const hace30 = new Date();
+  hace30.setDate(hace30.getDate() - 30);
+
+  const { data: citasRecientes } = await supabase
+    .from("citas").select("vendedor_id")
+    .in("vendedor_id", ids)
+    .gte("created_at", hace30.toISOString());
+
+  const conteo = new Map<string, number>(ids.map((id) => [id, 0]));
+  for (const c of citasRecientes ?? []) {
+    if (c.vendedor_id) conteo.set(c.vendedor_id, (conteo.get(c.vendedor_id) ?? 0) + 1);
   }
-  cargas.sort((a, b) => a.citas - b.citas);
-  return cargas[0]?.id ?? null;
+  const totalCitas = [...conteo.values()].reduce((a, b) => a + b, 0);
+
+  const conDeficit = activos.map((v) => ({
+    id: v.id,
+    deficit:
+      (v.peso ?? 50) / totalPeso -
+      (totalCitas > 0 ? (conteo.get(v.id) ?? 0) / totalCitas : 0),
+  }));
+  conDeficit.sort((a, b) => b.deficit - a.deficit);
+  return conDeficit[0].id;
 }
 
 // S7.3 — Genera 3 slots disponibles en los próximos 2 días hábiles

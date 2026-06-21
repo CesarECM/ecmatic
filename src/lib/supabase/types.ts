@@ -128,6 +128,7 @@ export interface Database {
           email: string;
           telefono: string | null;
           activo: boolean;
+          peso: number;
           created_at: string;
           updated_at: string;
         };
@@ -138,6 +139,7 @@ export interface Database {
           email: string;
           telefono?: string | null;
           activo?: boolean;
+          peso?: number;
         };
         Update: Partial<Database["public"]["Tables"]["vendedores"]["Insert"]>;
         Relationships: Relationship[];

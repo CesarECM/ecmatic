@@ -2,13 +2,14 @@ import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/service";
 import { calcularMetricasVendedor } from "@/services/vendedor-metricas";
 import { isConfigured } from "@/lib/google/calendar";
+import { PesoInput } from "@/components/vendedores/peso-input";
 
 export const revalidate = 0;
 
 export default async function VendedoresPage() {
   const supabase = createServiceClient();
   const { data: vendedores } = await supabase
-    .from("vendedores").select("id, nombre, email, activo").order("nombre");
+    .from("vendedores").select("id, nombre, email, activo, peso").order("nombre");
 
   const googleOk = isConfigured();
   const metricas = await Promise.all(
@@ -37,6 +38,7 @@ export default async function VendedoresPage() {
               <th className="p-3 text-center">Citas (30d)</th>
               <th className="p-3 text-center">Show rate</th>
               <th className="p-3 text-center">Conversión</th>
+              <th className="p-3 text-center">Peso (0–100)</th>
               <th className="p-3 text-center">Google Cal.</th>
               <th className="p-3 text-center">Detalle</th>
             </tr>
@@ -57,6 +59,9 @@ export default async function VendedoresPage() {
                     </span>
                   </td>
                   <td className="p-3 text-center">{Math.round((m?.tasaConversion ?? 0) * 100)}%</td>
+                  <td className="p-3 text-center">
+                    <PesoInput vendedorId={v.id} pesoInicial={v.peso ?? 50} />
+                  </td>
                   <td className="p-3 text-center">
                     {googleOk
                       ? <a href={`/api/auth/google?vendedor_id=${v.id}`}
