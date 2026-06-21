@@ -31,6 +31,12 @@ export default async function VendedoresPage() {
     vendedores = (fallback ?? []).map((v) => ({ ...v, peso: 50 }));
   }
 
+  // Tokens de Google Calendar — qué vendedores ya tienen conexión activa
+  const { data: tokens } = await supabase
+    .from("vendedor_tokens")
+    .select("vendedor_id, expires_at");
+  const conectados = new Set((tokens ?? []).map((t) => t.vendedor_id));
+
   // Detectar invitaciones pendientes — falla silenciosamente si el admin API no responde
   let pendientes = new Set<string>();
   try {
@@ -112,10 +118,16 @@ export default async function VendedoresPage() {
                     <PesoInput vendedorId={v.id} pesoInicial={v.peso ?? 50} />
                   </td>
                   <td className="p-3 text-center">
-                    {googleOk
-                      ? <a href={`/api/auth/google?vendedor_id=${v.id}`}
-                          className="text-xs text-blue-600 hover:underline">Conectar</a>
-                      : <span className="text-xs text-gray-400">N/A</span>}
+                    {!googleOk
+                      ? <span className="text-xs text-gray-400">N/A</span>
+                      : conectados.has(v.id)
+                        ? <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                            Conectado
+                          </span>
+                        : <a href={`/api/auth/google?vendedor_id=${v.id}`}
+                            className="text-xs text-blue-600 hover:underline">Conectar</a>
+                    }
                   </td>
                   <td className="p-3 text-center">
                     <Link href={`/admin/vendedores/${v.id}`}
