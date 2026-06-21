@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/service";
-import { calcularMetricasVendedor } from "@/services/vendedor-metricas";
+import { calcularMetricasVendedor, type MetricasVendedor } from "@/services/vendedor-metricas";
 import { isConfigured } from "@/lib/google/calendar";
 import { PesoInput } from "@/components/vendedores/peso-input";
 import { AgregarVendedorBtn } from "@/components/vendedores/agregar-vendedor-btn";
 import { ReenviarBtn } from "@/components/vendedores/reenviar-btn";
 
 export const revalidate = 0;
+
+const METRICAS_VACÍAS: MetricasVendedor = {
+  vendedorId: "",
+  totalCitas: 0, shows: 0, noShows: 0, showRate: 0,
+  conversiones: 0, tasaConversion: 0, promesasVencidas: 0, transcriptosSubidos: 0,
+};
 
 export default async function VendedoresPage() {
   const supabase = createServiceClient();
@@ -16,17 +22,26 @@ export default async function VendedoresPage() {
     .select("id, profile_id, nombre, email, activo, peso")
     .order("nombre");
 
-  // Detectar invitaciones pendientes (email_confirmed_at null = nunca aceptó)
-  const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-  const pendientes = new Set(
-    (authData?.users ?? [])
-      .filter((u) => !u.email_confirmed_at)
-      .map((u) => u.id)
-  );
+  // Detectar invitaciones pendientes — falla silenciosamente si el admin API no responde
+  let pendientes = new Set<string>();
+  try {
+    const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    pendientes = new Set(
+      (authData?.users ?? [])
+        .filter((u) => !u.email_confirmed_at)
+        .map((u) => u.id)
+    );
+  } catch {
+    // omitir indicadores de pendiente si falla
+  }
 
   const googleOk = isConfigured();
+
+  // Métricas — falla silenciosamente por vendedor si hay error
   const metricas = await Promise.all(
-    (vendedores ?? []).map((v) => calcularMetricasVendedor(v.id))
+    (vendedores ?? []).map((v) =>
+      calcularMetricasVendedor(v.id).catch(() => ({ ...METRICAS_VACÍAS, vendedorId: v.id }))
+    )
   );
 
   return (
@@ -61,8 +76,8 @@ export default async function VendedoresPage() {
           </thead>
           <tbody>
             {(vendedores ?? []).map((v, i) => {
-              const m = metricas[i];
-              const esPendiente = pendientes.has(v.profile_id);
+              const m = metricas[i] ?? METRICAS_VACÍAS;
+              const esPendiente = v.profile_id ? pendientes.has(v.profile_id) : false;
               return (
                 <tr key={v.id} className="border-b hover:bg-gray-50">
                   <td className="p-3">
@@ -75,17 +90,15 @@ export default async function VendedoresPage() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">{v.email}</p>
-                    {esPendiente && (
-                      <ReenviarBtn email={v.email} />
-                    )}
+                    {esPendiente && <ReenviarBtn email={v.email} />}
                   </td>
-                  <td className="p-3 text-center">{m?.totalCitas ?? 0}</td>
+                  <td className="p-3 text-center">{m.totalCitas}</td>
                   <td className="p-3 text-center">
-                    <span className={`font-medium ${(m?.showRate ?? 0) >= 0.6 ? "text-green-600" : "text-red-500"}`}>
-                      {Math.round((m?.showRate ?? 0) * 100)}%
+                    <span className={`font-medium ${m.showRate >= 0.6 ? "text-green-600" : "text-red-500"}`}>
+                      {Math.round(m.showRate * 100)}%
                     </span>
                   </td>
-                  <td className="p-3 text-center">{Math.round((m?.tasaConversion ?? 0) * 100)}%</td>
+                  <td className="p-3 text-center">{Math.round(m.tasaConversion * 100)}%</td>
                   <td className="p-3 text-center">
                     <PesoInput vendedorId={v.id} pesoInicial={v.peso ?? 50} />
                   </td>
