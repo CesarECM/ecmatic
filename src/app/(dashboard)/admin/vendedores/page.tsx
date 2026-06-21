@@ -4,13 +4,25 @@ import { calcularMetricasVendedor } from "@/services/vendedor-metricas";
 import { isConfigured } from "@/lib/google/calendar";
 import { PesoInput } from "@/components/vendedores/peso-input";
 import { AgregarVendedorBtn } from "@/components/vendedores/agregar-vendedor-btn";
+import { ReenviarBtn } from "@/components/vendedores/reenviar-btn";
 
 export const revalidate = 0;
 
 export default async function VendedoresPage() {
   const supabase = createServiceClient();
+
   const { data: vendedores } = await supabase
-    .from("vendedores").select("id, nombre, email, activo, peso").order("nombre");
+    .from("vendedores")
+    .select("id, profile_id, nombre, email, activo, peso")
+    .order("nombre");
+
+  // Detectar invitaciones pendientes (email_confirmed_at null = nunca aceptó)
+  const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  const pendientes = new Set(
+    (authData?.users ?? [])
+      .filter((u) => !u.email_confirmed_at)
+      .map((u) => u.id)
+  );
 
   const googleOk = isConfigured();
   const metricas = await Promise.all(
@@ -22,7 +34,7 @@ export default async function VendedoresPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Equipo de vendedores</h1>
-          <p className="text-sm text-muted-foreground">{vendedores?.length ?? 0} vendedores activos</p>
+          <p className="text-sm text-muted-foreground">{vendedores?.length ?? 0} vendedores</p>
         </div>
         <div className="flex items-center gap-3">
           {!googleOk && (
@@ -50,11 +62,22 @@ export default async function VendedoresPage() {
           <tbody>
             {(vendedores ?? []).map((v, i) => {
               const m = metricas[i];
+              const esPendiente = pendientes.has(v.profile_id);
               return (
                 <tr key={v.id} className="border-b hover:bg-gray-50">
                   <td className="p-3">
-                    <p className="font-medium">{v.nombre}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{v.nombre}</p>
+                      {esPendiente && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                          Pendiente
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">{v.email}</p>
+                    {esPendiente && (
+                      <ReenviarBtn email={v.email} />
+                    )}
                   </td>
                   <td className="p-3 text-center">{m?.totalCitas ?? 0}</td>
                   <td className="p-3 text-center">

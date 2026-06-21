@@ -42,3 +42,10 @@ export async function agregarVendedorAction(nombre: string, email: string): Prom
 
   revalidatePath("/admin/vendedores");
 }
+
+// S25.0b — Reenvía la invitación a un vendedor que aún no ha aceptado
+export async function reenviarInvitacionAction(email: string): Promise<void> {
+  const supabase = createServiceClient();
+  const { error } = await supabase.auth.admin.inviteUserByEmail(email.trim().toLowerCase());
+  if (error) throw new Error(`[invitación] ${error.message}`);
+}
