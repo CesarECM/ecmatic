@@ -10,6 +10,7 @@ import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/ident
 import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
 import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
+import type { SlotDisponible } from "@/services/citas";
 
 interface ContextoLead {
   nombre: string | null;
@@ -18,8 +19,9 @@ interface ContextoLead {
   compraPreviaa: boolean;
   historial: string;
   pipelineRuta?: PipelineRuta;
-  faseCAGC?: number; // S13.3 — 8ª dimensión de personalización
-  etiquetas?: string[]; // S14.5 — etiquetas activas del lead
+  faseCAGC?: number;
+  etiquetas?: string[];
+  slotsDisponibles?: SlotDisponible[]; // inyectados cuando intención = quiere_agendar
 }
 
 // S22.4 — Tipo de recurso enriquecido (incluye ficha de servicio)
@@ -182,8 +184,21 @@ export async function generarRespuesta(
     ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}`
     : "";
 
+  // Slots disponibles para agendar (solo cuando intención = quiere_agendar)
+  const slotsLinea = contexto.slotsDisponibles?.length
+    ? [
+        "\nHORARIOS DISPONIBLES PARA AGENDAR CITA (preséntaselos al lead para que elija):",
+        ...contexto.slotsDisponibles.map((s) => {
+          const fecha = s.inicio.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+          const hora  = s.inicio.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+          return `• ${fecha} a las ${hora} — con ${s.vendedorNombre}`;
+        }),
+        "Cuando el lead elija un horario, confirma su selección y dile que quedará pendiente de confirmación.",
+      ].join("\n")
+    : "";
+
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${slotsLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}

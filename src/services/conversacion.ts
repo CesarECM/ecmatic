@@ -20,6 +20,8 @@ import { ofrecerBrochure } from "./selector-brochure";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { capturarContactoPasivo } from "./captura-contacto";
 import { actualizarContextoIA } from "./contexto";
+import { obtenerSlotsDisponibles, asignarMejorVendedor } from "./citas";
+import { logAgen } from "./log-agendamiento";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -114,6 +116,23 @@ export async function procesarConversacion(
     obtenerEtiquetasLead(lead.id).catch(() => []),
   ]);
 
+  // Slots de calendario cuando el lead quiere agendar (fire-and-forget en parallel)
+  let slotsParaAI = undefined;
+  if (intencion === "quiere_agendar") {
+    try {
+      const vendedorId = await asignarMejorVendedor();
+      if (vendedorId) {
+        slotsParaAI = await obtenerSlotsDisponibles(vendedorId);
+        void logAgen({ paso: "slots_consultados", leadId: lead.id, vendedorId,
+          detalle: `Intención quiere_agendar detectada — ${slotsParaAI.length} slots disponibles`,
+          metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId } });
+      }
+    } catch (err) {
+      void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
+        detalle: `Error obteniendo slots: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
   const { texto: respuesta, scoreConfianza } = await generarRespuesta(mensajes, {
     nombre: leadActualizado?.nombre ?? null,
     temperamento: leadActualizado?.temperamento_inferido ?? null,
@@ -123,6 +142,7 @@ export async function procesarConversacion(
     pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
     faseCAGC: estadoCagc?.fase_numero,
     etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
+    slotsDisponibles: slotsParaAI,
   });
 
   // 8.5. S8.1 — Si la intención es compra inmediata, generar link Stripe
