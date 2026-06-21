@@ -13,7 +13,9 @@ export type TareaIA =
   | "CAGC_INFERIR"
   | "VISION"
   | "SENALES"
-  | "LEADMAGNET";
+  | "LEADMAGNET"
+  | "CONTEXTO"          // S23.1 — actualización incremental del Contexto del lead
+  | "PAQUETE_SERVICIO"; // S23.5 — sugerencias automáticas al crear un servicio nuevo
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -34,8 +36,10 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   ANALISIS:      "sonnet",  // análisis de transcriptos
   COACHING:      "sonnet",  // coaching de vendedores
   VISION:        "sonnet",  // clasificación de imágenes (requiere visión)
-  SENALES:       "haiku",   // extracción de señales situacionales
-  LEADMAGNET:    "haiku",   // mensaje de oferta de leadmagnet (simple, conversacional)
+  SENALES:          "haiku",
+  LEADMAGNET:       "haiku",
+  CONTEXTO:         "haiku",   // S23.1 — resumen interpretativo del lead
+  PAQUETE_SERVICIO: "haiku",   // S23.5 — sugerencias al registrar un servicio nuevo
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.

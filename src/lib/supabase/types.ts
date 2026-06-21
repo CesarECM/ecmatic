@@ -41,6 +41,16 @@ export type ActorPromesa = "vendedor" | "lead" | "ia";
 export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento" | "cierre";
 export type TipoLeadmagnet = "pre-creado" | "generable-ia" | "requiere-humano";
 
+// S23.1 — Entrada del historial versionado del Contexto del lead
+export interface EntradaContexto {
+  id: string;
+  contenido: string;
+  origen: "ia" | "humano";
+  autor?: string;   // para entradas manuales humanas
+  accion?: string;  // para entradas IA: evento que disparó la actualización
+  timestamp: string;
+}
+
 export interface DimensionesMatriz {
   temperamento?: "D" | "I" | "S" | "C";
   objecion?: string;
@@ -152,6 +162,9 @@ export interface Database {
           privacidad_fecha: string | null;
           archivado: boolean;
           archivado_razon: string | null;
+          contexto: string | null;
+          contexto_historial: EntradaContexto[];
+          contexto_updated_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -175,6 +188,9 @@ export interface Database {
           privacidad_fecha?: string | null;
           archivado?: boolean;
           archivado_razon?: string | null;
+          contexto?: string | null;
+          contexto_historial?: EntradaContexto[];
+          contexto_updated_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: Relationship[];
