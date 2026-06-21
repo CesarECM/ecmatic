@@ -17,6 +17,22 @@ interface MensajeChat {
   };
 }
 
+// Renderiza markdown básico: **negrita**, *cursiva*, saltos de línea
+function renderMensaje(texto: string): React.ReactNode {
+  return texto.split("\n").map((linea, li, arr) => (
+    <span key={li}>
+      {linea.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/).map((seg, si) => {
+        if (seg.startsWith("**") && seg.endsWith("**"))
+          return <strong key={si}>{seg.slice(2, -2)}</strong>;
+        if (seg.startsWith("*") && seg.endsWith("*"))
+          return <em key={si}>{seg.slice(1, -1)}</em>;
+        return seg;
+      })}
+      {li < arr.length - 1 && <br />}
+    </span>
+  ));
+}
+
 export function ChatWidget() {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
@@ -129,21 +145,39 @@ export function ChatWidget() {
   const ultimaMeta = [...mensajes].reverse().find((m) => m.rol === "ia" && m.meta)?.meta;
 
   return (
-    <div className="flex gap-4" style={{ height: "calc(100vh - 180px)" }}>
-      <SesionesSandbox
-        sessionId={sessionId}
-        sesiones={sesiones}
-        onNuevaSesion={nuevaSesion}
-        onCargarSesion={cargarSesion}
-        onEliminarSesion={eliminarSesion}
-        cargandoSesion={cargandoSesion}
-      />
+    <div className="flex flex-col md:flex-row gap-3 md:gap-4" style={{ height: "calc(100dvh - 160px)" }}>
+      {/* Panel de sesiones — solo desktop */}
+      <div className="hidden md:block">
+        <SesionesSandbox
+          sessionId={sessionId}
+          sesiones={sesiones}
+          onNuevaSesion={nuevaSesion}
+          onCargarSesion={cargarSesion}
+          onEliminarSesion={eliminarSesion}
+          cargandoSesion={cargandoSesion}
+        />
+      </div>
 
       {/* Área de chat */}
-      <div className="flex flex-col flex-1 border rounded-lg bg-card overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex flex-col flex-1 border rounded-lg bg-card overflow-hidden min-h-0">
+
+        {/* Barra superior móvil: sesión activa + botón nueva sesión */}
+        <div className="flex md:hidden items-center justify-between px-3 py-2 border-b bg-muted/40">
+          <span className="text-xs text-muted-foreground">
+            Sesión: <span className="font-mono">{sessionId.slice(0, 8)}…</span>
+          </span>
+          <button
+            onClick={nuevaSesion}
+            className="text-xs text-primary font-medium hover:underline"
+          >
+            + Nueva
+          </button>
+        </div>
+
+        {/* Mensajes */}
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 min-h-0">
           {mensajes.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground pt-10">
+            <p className="text-center text-sm text-muted-foreground pt-10 px-4">
               Escribe un mensaje para simular una conversación de WhatsApp.
               <br />
               <span className="text-xs">La IA responde igual que en producción, sin envíos reales.</span>
@@ -152,13 +186,13 @@ export function ChatWidget() {
           {mensajes.map((m, i) => (
             <div key={i} className={`flex flex-col ${m.rol === "usuario" ? "items-end" : "items-start"}`}>
               <div
-                className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                className={`max-w-[88%] md:max-w-[78%] rounded-2xl px-3 md:px-4 py-2.5 text-sm leading-relaxed ${
                   m.rol === "usuario"
                     ? "bg-primary text-primary-foreground rounded-br-sm"
                     : "bg-muted rounded-bl-sm"
                 }`}
               >
-                {m.texto}
+                {renderMensaje(m.texto)}
               </div>
               {m.rol === "ia" && m.mensajeId && (
                 <div className="mt-0.5 px-1">
@@ -181,12 +215,22 @@ export function ChatWidget() {
           <div ref={bottomRef} />
         </div>
 
-        <div className="border-t p-3 flex gap-2">
+        {/* Strip de diagnóstico — solo móvil, aparece cuando hay respuesta */}
+        {ultimaMeta && (
+          <div className="flex md:hidden items-center gap-3 px-3 py-1.5 border-t bg-muted/30 text-xs text-muted-foreground overflow-x-auto whitespace-nowrap">
+            <span>Intent: <strong className="text-foreground">{ultimaMeta.intencion.replace(/_/g, " ")}</strong></span>
+            {ultimaMeta.faseCAGC !== null && <span>· CAGC {ultimaMeta.faseCAGC}</span>}
+            {ultimaMeta.handoff && <span className="text-red-500 font-medium">· Handoff</span>}
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="border-t p-2 md:p-3 flex gap-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
-            placeholder="Escribe como si fueras un lead de WhatsApp…"
+            placeholder="Escribe como si fueras un lead…"
             className="flex-1 rounded-md border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             disabled={cargando || cargandoSesion}
             autoFocus
@@ -194,15 +238,15 @@ export function ChatWidget() {
           <button
             onClick={enviar}
             disabled={cargando || cargandoSesion || !input.trim()}
-            className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 transition-opacity"
+            className="px-3 md:px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 transition-opacity shrink-0"
           >
             Enviar
           </button>
         </div>
       </div>
 
-      {/* Panel de diagnóstico IA */}
-      <div className="w-60 shrink-0 border rounded-lg bg-card p-4 space-y-5 overflow-y-auto">
+      {/* Diagnóstico IA — solo desktop */}
+      <div className="hidden md:block w-60 shrink-0 border rounded-lg bg-card p-4 space-y-5 overflow-y-auto">
         <h3 className="text-sm font-semibold">Diagnóstico IA</h3>
 
         {ultimaMeta ? (
@@ -238,7 +282,7 @@ export function ChatWidget() {
           </>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Los diagnósticos aparecen aquí después de la primera respuesta de esta sesión.
+            Los diagnósticos aparecen aquí después de la primera respuesta.
           </p>
         )}
 
