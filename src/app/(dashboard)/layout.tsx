@@ -27,6 +27,14 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   const rol = profile.rol as Rol;
 
+  // Si es admin, verificar si también tiene registro como vendedor (para mostrar Mi agenda)
+  let esVendedor = false;
+  if (rol === "admin") {
+    const { data: vendedor } = await createServiceClient()
+      .from("vendedores").select("id").eq("profile_id", user.id).maybeSingle();
+    esVendedor = !!vendedor;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="border-b bg-card px-6 py-3 flex items-center justify-between shrink-0">
@@ -37,7 +45,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         </div>
       </header>
       <div className="flex flex-1 overflow-hidden">
-        <SideNav rol={rol} />
+        <SideNav rol={rol} esVendedor={esVendedor} />
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>

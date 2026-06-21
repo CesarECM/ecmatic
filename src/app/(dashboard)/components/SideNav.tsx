@@ -80,11 +80,13 @@ function NavLink({ item, collapsed, active }: { item: NavItem; collapsed: boolea
   );
 }
 
-function SectionBlock({ section, rol, pathname, collapsed, open, onToggle }: {
-  section: NavSection; rol: Rol; pathname: string;
+function SectionBlock({ section, rol, esVendedor, pathname, collapsed, open, onToggle }: {
+  section: NavSection; rol: Rol; esVendedor: boolean; pathname: string;
   collapsed: boolean; open: boolean; onToggle: () => void;
 }) {
-  const items = section.items.filter((i) => i.roles.includes(rol));
+  const items = section.items.filter(
+    (i) => i.roles.includes(rol) || (esVendedor && i.roles.includes("vendedor"))
+  );
   if (!items.length) return null;
   const visible = open || collapsed;
   return (
@@ -113,7 +115,7 @@ function SectionBlock({ section, rol, pathname, collapsed, open, onToggle }: {
 
 const INIT_SECTIONS = Object.fromEntries(SECTIONS.map((s) => [s.id, true]));
 
-export function SideNav({ rol }: { rol: Rol }) {
+export function SideNav({ rol, esVendedor = false }: { rol: Rol; esVendedor?: boolean }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed]     = useState(false);
   const [drawerOpen, setDrawerOpen]   = useState(false);
@@ -149,6 +151,7 @@ export function SideNav({ rol }: { rol: Rol }) {
           key={s.id}
           section={s}
           rol={rol}
+          esVendedor={esVendedor}
           pathname={pathname}
           collapsed={!inDrawer && collapsed}
           open={openSections[s.id] ?? true}
