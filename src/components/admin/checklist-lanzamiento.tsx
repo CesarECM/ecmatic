@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { WADiagnosticoPanel } from "@/components/admin/wa-diagnostico";
 
 export interface ItemAuto {
   label: string;
@@ -24,7 +25,15 @@ interface Props {
 }
 
 const MANUALES = [
-  { label: "Número WhatsApp verificado en Meta Developer Console", grupo: "WhatsApp" },
+  // S27 — WhatsApp número definitivo (+52 vía Twilio/Meta)
+  { label: "S27.1 — Número mexicano (+52) adquirido en Twilio (verificar que nunca fue usado en WA)", grupo: "S27 WhatsApp" },
+  { label: "S27.2 — Número verificado en Meta: SMS/voz recibido en Twilio y código ingresado en Meta BM", grupo: "S27 WhatsApp" },
+  { label: "S27.3 — Alta en Meta Business Manager: app WA Business + número asociado al WABA", grupo: "S27 WhatsApp" },
+  { label: "S27.4 — Revisión de mensajería Meta aprobada (esperar 1–5 días hábiles)", grupo: "S27 WhatsApp" },
+  { label: "S27.5 — WHATSAPP_PHONE_NUMBER_ID actualizado en Vercel con el nuevo Phone ID", grupo: "S27 WhatsApp" },
+  { label: "S27.6 — Prueba extremo a extremo exitosa con el botón de diagnóstico (abajo)", grupo: "S27 WhatsApp" },
+  { label: "S27.7 — Landings, anuncios y QR actualizados con el número nuevo (GHL intacto en sus canales)", grupo: "S27 WhatsApp" },
+  // Generales
   { label: "Webhook Meta apunta a https://ecmatic.vercel.app/api/whatsapp/webhook", grupo: "WhatsApp" },
   { label: "Webhook Stripe registrado en Dashboard de Stripe", grupo: "Pagos" },
   { label: "DNS de ceecm.mx apuntando a Vercel (A/CNAME)", grupo: "Producción" },
@@ -134,6 +143,16 @@ export function ChecklistLanzamiento({ secciones, okAuto, totalAuto, recursosKB,
               </div>
             </label>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* S27.5/S27.6 — Diagnóstico en vivo del número WhatsApp activo */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Diagnóstico WhatsApp (número activo)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WADiagnosticoPanel />
         </CardContent>
       </Card>
     </div>
