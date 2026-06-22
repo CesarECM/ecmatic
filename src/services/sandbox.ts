@@ -9,6 +9,7 @@ import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from 
 import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
 import { createServiceClient } from "@/lib/supabase/service";
+import { capturarContactoPasivo } from "./captura-contacto";
 
 export interface SandboxResult {
   respuesta: string;
@@ -53,6 +54,9 @@ export async function procesarSandbox(
     direccion: "entrante",
     intencion,
   });
+
+  // Capturar nombre/email si el lead los menciona en el texto (igual que conversacion.ts)
+  void capturarContactoPasivo(lead.id, [mensaje]).catch(console.error);
 
   // Estado CAGC y etiquetas actuales
   const [estadoCagc, etiquetasLead] = await Promise.all([
@@ -109,6 +113,7 @@ export async function procesarSandbox(
     etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
     slotsDisponibles: slotsParaAI,
     meetLink: meetLinkParaAI,
+    canal_origen: "whatsapp",
   });
 
   // Detectar si la respuesta activaría handoff

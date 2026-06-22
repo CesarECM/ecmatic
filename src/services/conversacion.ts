@@ -90,7 +90,7 @@ export async function procesarConversacion(
   const [{ data: leadActualizado }, estadoCagc, etiquetasLead] = await Promise.all([
     supabase
       .from("leads")
-      .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado")
+      .select("nombre, email, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, canal_origen, setter_fase_actual, setter_calificado")
       .eq("id", lead.id)
       .single(),
     obtenerFaseLead(lead.id).catch(() => null),
@@ -196,6 +196,7 @@ export async function procesarConversacion(
     etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
     slotsDisponibles: slotsParaAI,
     meetLink: meetLinkParaAI,
+    canal_origen: leadActualizado?.canal_origen ?? null,
     setterEstado,
     protocoloObjecion,
     rolesDinamicos,
@@ -236,10 +237,13 @@ export async function procesarConversacion(
     void enviarRespuestaWhatsApp(telefono, [mensajeAvisoPrivacidad()]).catch(console.error);
   }
 
-  // Datos faltantes (S15.2)
-  if (historial && (!lead.nombre || !lead.email)) {
+  // Datos faltantes (S15.2) — usa nombre/email del leadActualizado para reflejar captura pasiva
+  const nombreActual = leadActualizado?.nombre ?? lead.nombre ?? null;
+  const emailActual = leadActualizado?.email ?? lead.email ?? null;
+  const canalActual = leadActualizado?.canal_origen ?? null;
+  if (historial && (!nombreActual || !emailActual)) {
     const solicitud = await generarSolicitudDatosFaltantes(
-      { id: lead.id, nombre: lead.nombre ?? null, email: lead.email ?? null }, historial
+      { id: lead.id, nombre: nombreActual, email: emailActual }, historial, canalActual ?? undefined
     ).catch(() => null);
     if (solicitud) {
       void enviarRespuestaWhatsApp(telefono, [solicitud]).catch(console.error);

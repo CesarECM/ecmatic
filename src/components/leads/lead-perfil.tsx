@@ -66,8 +66,9 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Datos</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {lead.telefono && <div><span className="text-muted-foreground">Teléfono: </span>{lead.telefono}</div>}
-            {lead.email && <div><span className="text-muted-foreground">Email: </span>{lead.email}</div>}
+            <div><span className="text-muted-foreground">Nombre: </span>{lead.nombre ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
+            <div><span className="text-muted-foreground">Teléfono: </span>{lead.telefono ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
+            <div><span className="text-muted-foreground">Email: </span>{lead.email ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
             <div className="flex gap-4">
               <div><span className="text-muted-foreground">Score salud: </span><span className={`font-semibold ${scoreColor}`}>{lead.score_salud}</span></div>
             </div>

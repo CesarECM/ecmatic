@@ -73,13 +73,16 @@ export async function detectarDuplicadosLeads(): Promise<
 
 // S15.2 — Solicita datos faltantes al lead de forma conversacional si hay señal positiva.
 // Devuelve el texto a enviar, o null si no corresponde pedirlos ahora.
+// canal: evita pedir datos que el canal ya provee (whatsapp → no pedir teléfono, email → no pedir correo)
 export async function generarSolicitudDatosFaltantes(
   lead: { id: string; nombre: string | null; email: string | null },
-  historial: string
+  historial: string,
+  canal?: string
 ): Promise<string | null> {
   const faltantes: string[] = [];
   if (!lead.nombre) faltantes.push("nombre completo");
-  if (!lead.email)  faltantes.push("correo electrónico");
+  // No pedir correo si el canal de origen ya lo provee
+  if (!lead.email && canal !== "email") faltantes.push("correo electrónico");
   if (faltantes.length === 0) return null;
 
   // Solo pedir si la conversación tiene señal positiva (no en primera interacción)

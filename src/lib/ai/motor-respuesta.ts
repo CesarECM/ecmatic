@@ -27,6 +27,7 @@ interface ContextoLead {
   etiquetas?: string[];
   slotsDisponibles?: SlotDisponible[];
   meetLink?: string | null;
+  canal_origen?: string | null;
   // S31 — Arquitectura de Objeciones
   setterEstado?: EstadoSetter | null;
   protocoloObjecion?: ProtocoloObjecion | null;
@@ -244,6 +245,15 @@ export async function generarRespuesta(
   // S31.8 — Regla de Oro del Cierre (instrucción permanente)
   const reglaOroCierre = instruccionReglaOroCierre();
 
+  // Instrucción de canal: evita pedir datos que el canal ya provee
+  const canal = contexto.canal_origen;
+  const instruccionCanal =
+    canal === "whatsapp" || canal === "sandbox"
+      ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
+      : canal === "email"
+      ? "- El correo electrónico del lead ya está registrado desde el email de contacto — NUNCA lo solicites."
+      : "";
+
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
 Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
 
@@ -272,6 +282,7 @@ INSTRUCCIONES:
 - Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
+${instruccionCanal}
 ${reglaOroCierre}`;
 
   const response = await anthropic.messages.create({
