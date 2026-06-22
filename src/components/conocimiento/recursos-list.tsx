@@ -11,10 +11,10 @@ import { RecursoCard, type RecursoRow } from "./RecursoCard";
 
 export type { RecursoRow };
 
+// S32.7 — "servicio" eliminado: los servicios se gestionan desde /admin/servicios
 const TIPOS = [
   { value: "faq", label: "FAQ" },
   { value: "objecion", label: "Objeción" },
-  { value: "servicio", label: "Servicio" },
   { value: "template_wa", label: "Template WA" },
   { value: "template_email", label: "Template Email" },
   { value: "practica_venta", label: "Práctica de venta" },

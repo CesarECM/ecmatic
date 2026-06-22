@@ -13,6 +13,7 @@ export default async function ConocimientoPage() {
     (createServiceClient() as any)
       .from("recursos_conocimiento")
       .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at, versiones_previas, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es")
+      .neq("tipo", "servicio")   // S32.7 — servicios viven en /admin/servicios
       .order("created_at", { ascending: false }),
     detectarObsoletos(),
   ]);
@@ -28,6 +29,8 @@ export default async function ConocimientoPage() {
           <h1 className="text-2xl font-bold">Base de Conocimiento</h1>
           <p className="text-sm text-muted-foreground">
             {total} recursos · {pendientes} pendientes de aprobación
+            {" · "}
+            <a href="/admin/servicios" className="text-primary hover:underline">Ver catálogo de servicios →</a>
           </p>
         </div>
         <ImportarFuente />

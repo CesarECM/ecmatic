@@ -28,6 +28,7 @@ interface ContextoLead {
   slotsDisponibles?: SlotDisponible[];
   meetLink?: string | null;
   canal_origen?: string | null;
+  imagen_activa_url?: string | null;   // S32.8 — URL de imagen del servicio para el canal
   // S31 — Arquitectura de Objeciones
   setterEstado?: EstadoSetter | null;
   protocoloObjecion?: ProtocoloObjecion | null;
@@ -70,6 +71,7 @@ async function buscarRecursos(query: string, limite = 4) {
 export interface RespuestaIA {
   texto: string;
   scoreConfianza: number; // 0–1; calculado en base a recursos KB + señales de incertidumbre
+  imagenUrl: string | null;  // S32.8 — URL de imagen activa del servicio (null si no aplica)
 }
 
 // Score heurístico: más recursos KB y sugerencia de matriz elevan la confianza;
@@ -112,6 +114,19 @@ export async function generarRespuesta(
 
   // S23.6 — Anclar servicio(s) identificados: la IA razona desde el servicio antes que desde cualquier otra cosa
   const serviciosAncla = recursos.filter((r) => r.tipo === "servicio");
+
+  // S32.8 — Seleccionar imagen activa del canal para el servicio principal (fire-and-forget en paralelo)
+  const canalParaImagen = (contexto.canal_origen === "email" ? "email"
+    : contexto.canal_origen === "landing" ? "landing" : "whatsapp") as "whatsapp" | "email" | "landing";
+  const imagenActivaUrl: string | null = await (async () => {
+    if (!contexto.imagen_activa_url && serviciosAncla.length > 0) {
+      try {
+        const { seleccionarImagenActiva } = await import("@/services/imagen-servicio");
+        return await seleccionarImagenActiva(serviciosAncla[0].id, canalParaImagen);
+      } catch { return null; }
+    }
+    return contexto.imagen_activa_url ?? null;
+  })();
 
   // S24.1/S24.2 — Resolver pagos, precios y cuentas bancarias en paralelo
   const [pagosServicios, cuentasActivas] = await Promise.all([
@@ -194,6 +209,11 @@ export async function generarRespuesta(
     ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}`
     : "";
 
+  // S32.8 — Imagen activa del servicio disponible para este canal
+  const imagenLinea = imagenActivaUrl
+    ? `\nIMAGEN DEL SERVICIO DISPONIBLE:\nURL: ${imagenActivaUrl}\nEsta imagen puede acompañar tu respuesta si el canal lo permite. No la menciones explícitamente como "imagen"; úsala para enriquecer tu argumento visual si es relevante.`
+    : "";
+
   // Meet link cuando el lead confirmó un slot y la cita ya fue creada
   const meetLinkLinea = contexto.meetLink
     ? [
@@ -255,7 +275,7 @@ export async function generarRespuesta(
       : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}
@@ -303,7 +323,7 @@ ${reglaOroCierre}`;
 
   const texto = (response.content[0] as { text: string }).text.trim();
   const scoreConfianza = calcularScore(recursos, sugerenciaMatriz, texto);
-  return { texto, scoreConfianza };
+  return { texto, scoreConfianza, imagenUrl: imagenActivaUrl };
 }
 
 // ── Detecta si la IA necesita handoff humano ─────────────────────────────

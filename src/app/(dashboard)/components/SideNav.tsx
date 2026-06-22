@@ -27,11 +27,13 @@ const SECTIONS: NavSection[] = [
     id: "conocimiento",
     label: "Conocimiento",
     items: [
+      { href: "/admin/servicios",     label: "Servicios",           emoji: "🛍️", roles: ["admin"] },
       { href: "/admin/conocimiento",  label: "Base de conocimiento",emoji: "📚", roles: ["admin"] },
       { href: "/admin/nurturing",     label: "Nurturing",           emoji: "📧", roles: ["admin"] },
       { href: "/admin/matriz",        label: "Matriz nD",           emoji: "🧮", roles: ["admin"] },
       { href: "/admin/gatillos",      label: "Gatillos mentales",   emoji: "⚡", roles: ["admin"] },
       { href: "/admin/momentos",      label: "Momentos de cierre",  emoji: "⏱️", roles: ["admin"] },
+      { href: "/admin/etiquetas",     label: "Etiquetas",           emoji: "🏷️", roles: ["admin"] },
       { href: "/admin/cagc",              label: "Auditoría CAGC",      emoji: "🧭", roles: ["admin"] },
       { href: "/admin/matriz-cagc-global",label: "Matriz Global CAGC",  emoji: "🗺️", roles: ["admin"] },
     ],
@@ -43,6 +45,7 @@ const SECTIONS: NavSection[] = [
       { href: "/admin/aprobaciones",  label: "Aprobaciones",        emoji: "✅", roles: ["admin"] },
       { href: "/admin/postventa",     label: "Post-Venta",          emoji: "🎓", roles: ["admin"] },
       { href: "/admin/vendedores",    label: "Vendedores",          emoji: "🏆", roles: ["admin"] },
+      { href: "/admin/marca",         label: "Identidad de marca",  emoji: "🎨", roles: ["admin"] },
     ],
   },
   {
