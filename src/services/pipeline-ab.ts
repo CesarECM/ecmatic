@@ -41,7 +41,46 @@ interface AbAsignacion {
   convirtio: boolean | null;
 }
 
+// ── S30.2: Thompson Sampling — Beta(alpha, beta) puro en TypeScript ────────
+
+function randn(): number {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+function randGamma(shape: number): number {
+  if (shape < 1) return randGamma(shape + 1) * Math.pow(Math.random(), 1 / shape);
+  const d = shape - 1 / 3;
+  const c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    let x: number, v: number;
+    do { x = randn(); v = 1 + c * x; } while (v <= 0);
+    v = v * v * v;
+    const u = Math.random();
+    if (u < 1 - 0.0331 * x * x * x * x) return d * v;
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+
+// Beta(alpha, beta) sampling usando ratio de Gammas — O(1), sin dependencias
+function sampleBeta(alpha: number, beta: number): number {
+  const a = randGamma(alpha);
+  const b = randGamma(beta);
+  return a + b === 0 ? 0.5 : a / (a + b);
+}
+
+// S30.2 — Thompson Sampling: muestrea de Beta(α,β) y elige la variante con θ más alto.
+// α = conversiones + 1, β = (asignaciones - conversiones) + 1  (prior uniforme)
+function elegirVarianteThompson(test: Pick<AbTest, "asignaciones_a" | "asignaciones_b" | "conversiones_a" | "conversiones_b">): "a" | "b" {
+  const thetaA = sampleBeta(test.conversiones_a + 1, test.asignaciones_a - test.conversiones_a + 1);
+  const thetaB = sampleBeta(test.conversiones_b + 1, test.asignaciones_b - test.conversiones_b + 1);
+  return thetaA >= thetaB ? "a" : "b";
+}
+
 // ── S13.8: Asigna variante A o B cuando un lead ENTRA a una etapa ─────────
+// S30.2: La asignación ahora usa Thompson Sampling en lugar de round-robin.
 export async function asignarVarianteAB(
   leadId: string,
   etapaNombre: string,
@@ -51,11 +90,11 @@ export async function asignarVarianteAB(
 
   const { data: test } = await (supabase as any)
     .from("pipeline_ab_tests")
-    .select("id, asignaciones_a, asignaciones_b")
+    .select("id, asignaciones_a, asignaciones_b, conversiones_a, conversiones_b")
     .eq("etapa_nombre", etapaNombre)
     .eq("ruta", ruta)
     .eq("activo", true)
-    .maybeSingle() as { data: Pick<AbTest, "id" | "asignaciones_a" | "asignaciones_b"> | null };
+    .maybeSingle() as { data: Pick<AbTest, "id" | "asignaciones_a" | "asignaciones_b" | "conversiones_a" | "conversiones_b"> | null };
 
   if (!test) return;
 
@@ -68,8 +107,8 @@ export async function asignarVarianteAB(
 
   if (existente) return;
 
-  const variante: "a" | "b" =
-    test.asignaciones_a <= test.asignaciones_b ? "a" : "b";
+  // S30.2 — Thompson Sampling: favorece la variante con mayor probabilidad inferida
+  const variante = elegirVarianteThompson(test);
   const campo =
     variante === "a"
       ? { asignaciones_a: test.asignaciones_a + 1 }

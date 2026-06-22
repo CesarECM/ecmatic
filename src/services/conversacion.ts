@@ -23,6 +23,7 @@ import { actualizarContextoIA } from "./contexto";
 import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from "./citas";
 import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
+import { actualizarScoreSalud } from "./score-salud";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // Orquestador principal — ejecutado después de drenar el buffer
@@ -264,6 +265,9 @@ export async function procesarConversacion(
   // S23.3 — Actualizar Contexto interpretativo del lead (fire-and-forget)
   const accionContexto = `Conversación WhatsApp — intención: ${intencion}`;
   void actualizarContextoIA(lead.id, accionContexto).catch(console.error);
+
+  // ES-1/S30.1 — Recalcular score de salud tras cada conversación (fire-and-forget)
+  void actualizarScoreSalud(lead.id).catch(console.error);
 
   // S15.2 — Solicitar datos faltantes si hay señal positiva y la conversación ya avanzó
   if (historial && (!lead.nombre || !lead.email)) {

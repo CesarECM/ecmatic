@@ -1,5 +1,33 @@
 import { createServiceClient } from "@/lib/supabase/service";
 
+// S30.4 — Beta sampling para Thompson Sampling (misma implementación que pipeline-ab)
+function randn(): number {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+function randGamma(shape: number): number {
+  if (shape < 1) return randGamma(shape + 1) * Math.pow(Math.random(), 1 / shape);
+  const d = shape - 1 / 3; const c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    let x: number, v: number;
+    do { x = randn(); v = 1 + c * x; } while (v <= 0);
+    v = v * v * v; const u = Math.random();
+    if (u < 1 - 0.0331 * x * x * x * x) return d * v;
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+function sampleBeta(alpha: number, beta: number): number {
+  const a = randGamma(alpha); const b = randGamma(beta);
+  return a + b === 0 ? 0.5 : a / (a + b);
+}
+function elegirGrupoThompson(exp: Experimento): "a" | "b" {
+  const thetaA = sampleBeta(exp.conversiones_a + 1, exp.asignaciones_a - exp.conversiones_a + 1);
+  const thetaB = sampleBeta(exp.conversiones_b + 1, exp.asignaciones_b - exp.conversiones_b + 1);
+  return thetaA >= thetaB ? "a" : "b";
+}
+
 export interface Experimento {
   id: string; nombre: string; descripcion: string | null;
   precio_a_centavos: number; precio_b_centavos: number;
@@ -57,8 +85,8 @@ export async function asignarExperimento(leadId: string): Promise<{
     };
   }
 
-  // Asignar al grupo con menos asignaciones
-  const grupo: "a" | "b" = exp.asignaciones_a <= exp.asignaciones_b ? "a" : "b";
+  // S30.4 — Thompson Sampling para precio: favorece el precio con mayor conversión histórica
+  const grupo: "a" | "b" = elegirGrupoThompson(exp);
   const precioCentavos = grupo === "a" ? exp.precio_a_centavos : exp.precio_b_centavos;
   const campo = grupo === "a" ? { asignaciones_a: exp.asignaciones_a + 1 } : { asignaciones_b: exp.asignaciones_b + 1 };
 

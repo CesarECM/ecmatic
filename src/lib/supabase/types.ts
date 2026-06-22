@@ -1022,6 +1022,42 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["cuentas_bancarias"]["Insert"]>;
         Relationships: Relationship[];
       };
+      // ── Sprint 17 · Sistema ──────────────────────────────────────
+      configuracion_sistema: {
+        Row: {
+          id: string;
+          modo_operacion: "pruebas" | "seguro" | "seguro_automatico" | "automatico";
+          umbral_confianza: number;
+          metadata: Record<string, unknown>;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          modo_operacion?: "pruebas" | "seguro" | "seguro_automatico" | "automatico";
+          umbral_confianza?: number;
+          metadata?: Record<string, unknown>;
+          updated_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["configuracion_sistema"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      // ── Sprint 30 · Modelos Matemáticos ──────────────────────────
+      pipeline_ab_contextos: {
+        Row: {
+          id: string; test_id: string; context_key: string;
+          asignaciones_a: number; conversiones_a: number;
+          asignaciones_b: number; conversiones_b: number;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; test_id: string; context_key: string;
+          asignaciones_a?: number; conversiones_a?: number;
+          asignaciones_b?: number; conversiones_b?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["pipeline_ab_contextos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
       // ── Sprint 28 · Protocolos, Canales, Contenido y Llamadas ────
       etapa_protocolo: {
         Row: {
