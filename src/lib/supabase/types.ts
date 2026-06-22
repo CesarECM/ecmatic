@@ -895,7 +895,9 @@ export interface Database {
           historial?: import("@/services/cagc").TransicionCAGC[];
         };
         Update: Partial<Database["public"]["Tables"]["lead_cagc_estado"]["Insert"]>;
-        Relationships: Relationship[];
+        Relationships: [
+          { foreignKeyName: "lead_cagc_estado_lead_id_fkey"; columns: ["lead_id"]; referencedRelation: "leads"; referencedColumns: ["id"] },
+        ];
       };
       votos_respuesta: {
         Row: {

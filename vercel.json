@@ -17,6 +17,7 @@
     { "path": "/api/admin/contacto-validador","schedule": "0 6 * * *" },
     { "path": "/api/admin/brochures-scan",    "schedule": "0 8 * * 1" },
     { "path": "/api/admin/vendedor-monitor",      "schedule": "0 7 * * *" },
-    { "path": "/api/admin/protocolo-sugerencias", "schedule": "0 9 * * 2" }
+    { "path": "/api/admin/protocolo-sugerencias",  "schedule": "0 9 * * 2" },
+    { "path": "/api/admin/auditoria-integridad",   "schedule": "0 5 * * *" }
   ]
 }
