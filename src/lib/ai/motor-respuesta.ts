@@ -1,4 +1,4 @@
-import { anthropic, generarEmbedding } from "./client";
+import { anthropic } from "./client";
 import { modeloPorTarea } from "./model-router";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
@@ -11,10 +11,13 @@ import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
 import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
 import { instruccionReglaOroCierre } from "./regla-oro-cierre";
 import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
+import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
 import type { EstadoSetter } from "./setter-protocol";
 import type { ProtocoloObjecion } from "./protocolo-objecion";
+
+export { necesitaHandoff } from "./handoff";
 
 interface ContextoLead {
   nombre: string | null;
@@ -28,74 +31,25 @@ interface ContextoLead {
   slotsDisponibles?: SlotDisponible[];
   meetLink?: string | null;
   canal_origen?: string | null;
-  imagen_activa_url?: string | null;   // S32.8 — URL de imagen del servicio para el canal
+  imagen_activa_url?: string | null;
   // S31 — Arquitectura de Objeciones
   setterEstado?: EstadoSetter | null;
   protocoloObjecion?: ProtocoloObjecion | null;
   rolesDinamicos?: RolPorServicio[];
 }
 
-// S22.4 — Tipo de recurso enriquecido (incluye ficha de servicio)
-interface RecursoKB {
-  id: string; tipo: string; titulo: string; contenido: string;
-  caracteristicas?: string | null; beneficios?: string | null;
-  ventajas?: string | null; para_quien_es?: string | null; para_quien_no_es?: string | null;
-}
-
-// S22.5 — Formato enriquecido para recursos tipo servicio
-function formatearRecursoKB(r: RecursoKB): string {
-  if (r.tipo !== "servicio") return `[${r.tipo.toUpperCase()}] ${r.titulo}:\n${r.contenido}`;
-  const partes = [`[SERVICIO] ${r.titulo}:\n${r.contenido}`];
-  if (r.caracteristicas) partes.push(`Características: ${r.caracteristicas}`);
-  if (r.beneficios) partes.push(`Beneficios: ${r.beneficios}`);
-  if (r.ventajas) partes.push(`Ventajas: ${r.ventajas}`);
-  if (r.para_quien_es) partes.push(`Ideal para: ${r.para_quien_es}`);
-  if (r.para_quien_no_es) partes.push(`NO recomendado para: ${r.para_quien_no_es}`);
-  return partes.join("\n");
-}
-
-// ── S1.4: Búsqueda semántica en base de conocimiento ─────────────────────
-async function buscarRecursos(query: string, limite = 4) {
-  const supabase = createServiceClient();
-  const embedding = await generarEmbedding(query);
-
-  const { data } = await supabase.rpc("buscar_recursos", {
-    query_embedding: embedding,
-    limite,
-    umbral: 0.65,
-  });
-
-  return (data ?? []) as RecursoKB[];
-}
-
 export interface RespuestaIA {
   texto: string;
-  scoreConfianza: number; // 0–1; calculado en base a recursos KB + señales de incertidumbre
-  imagenUrl: string | null;  // S32.8 — URL de imagen activa del servicio (null si no aplica)
+  scoreConfianza: number;
+  imagenUrl: string | null;  // S32.8
 }
 
-// Score heurístico: más recursos KB y sugerencia de matriz elevan la confianza;
-// frases de incertidumbre en la respuesta la bajan.
-function calcularScore(
-  recursos: { id: string }[],
-  sugerenciaMatriz: string | null,
-  texto: string
-): number {
-  const INDICADORES = ["no tengo información", "no puedo ayudarte", "no sé", "un asesor", "te contactará", "fuera de mi alcance"];
-  let score = Math.min(0.85, 0.30 + recursos.length * 0.18);
-  if (sugerenciaMatriz) score += 0.10;
-  if (INDICADORES.some((i) => texto.toLowerCase().includes(i))) score -= 0.30;
-  return Math.max(0, Math.min(1, score));
-}
-
-// ── S1.4: Genera la respuesta de ECMatic usando Claude ───────────────────
 export async function generarRespuesta(
   mensajes: string[],
   contexto: ContextoLead
 ): Promise<RespuestaIA> {
   const queryParaBusqueda = mensajes.join(" ");
 
-  // S13.3 — Armar dimensiones 8D para consultar la matriz de personalización
   const dims8D: DimensionesMatriz = {
     canal_origen: "whatsapp",
     etapa_atasco: contexto.pipelineStage,
@@ -112,10 +66,9 @@ export async function generarRespuesta(
   void registrarUso(recursos.map((r) => r.id));
   if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
-  // S23.6 — Anclar servicio(s) identificados: la IA razona desde el servicio antes que desde cualquier otra cosa
   const serviciosAncla = recursos.filter((r) => r.tipo === "servicio");
 
-  // S32.8 — Seleccionar imagen activa del canal para el servicio principal (fire-and-forget en paralelo)
+  // S32.8 — Seleccionar imagen activa del canal para el servicio principal
   const canalParaImagen = (contexto.canal_origen === "email" ? "email"
     : contexto.canal_origen === "landing" ? "landing" : "whatsapp") as "whatsapp" | "email" | "landing";
   const imagenActivaUrl: string | null = await (async () => {
@@ -128,107 +81,67 @@ export async function generarRespuesta(
     return contexto.imagen_activa_url ?? null;
   })();
 
-  // S24.1/S24.2 — Resolver pagos, precios y cuentas bancarias en paralelo
+  // S24.1/S24.2 — Pagos y cuentas bancarias
   const [pagosServicios, cuentasActivas] = await Promise.all([
     serviciosAncla.length > 0
-      ? Promise.all(
-          serviciosAncla.map(async (s) => {
-            const supabase = createServiceClient();
-            const [pago, precioRow] = await Promise.all([
-              seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
-              supabase
-                .from("recursos_conocimiento")
-                .select("precio_centavos")
-                .eq("id", s.id)
-                .single()
-                .then((r) => (r.data?.precio_centavos as number | null) ?? null, () => null),
-            ]);
-            return { titulo: s.titulo, pago, precio: precioRow };
-          })
-        )
+      ? Promise.all(serviciosAncla.map(async (s) => {
+          const supabase = createServiceClient();
+          const [pago, precioRow] = await Promise.all([
+            seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
+            supabase.from("recursos_conocimiento").select("precio_centavos")
+              .eq("id", s.id).single()
+              .then((r) => (r.data?.precio_centavos as number | null) ?? null, () => null),
+          ]);
+          return { titulo: s.titulo, pago, precio: precioRow };
+        }))
       : Promise.resolve([]),
     listarCuentasActivas().catch(() => []),
   ]);
   const pagosConLink = pagosServicios.filter((p) => p.pago !== null);
-
-  // Cuentas bancarias: solo mostrar si hay servicios ancla con precio configurado
   const serviciosConPrecio = pagosServicios.filter((p) => p.precio !== null);
+
   const cuentasBancariasLinea = (cuentasActivas.length > 0 && serviciosAncla.length > 0)
-    ? [
-        "\nTRANSFERENCIA BANCARIA (solo ofrécela si el lead no puede usar los links de pago):",
+    ? ["\nTRANSFERENCIA BANCARIA (solo ofrécela si el lead no puede usar los links de pago):",
         ...cuentasActivas.map((c) => `• ${formatearCuentaParaPrompt(c)}`),
         serviciosConPrecio.length > 0
-          ? `Montos: ${serviciosConPrecio.map((s) => `${s.titulo}: $${((s.precio ?? 0) / 100).toLocaleString("es-MX")} MXN`).join(" | ")}`
-          : "",
+          ? `Montos: ${serviciosConPrecio.map((s) => `${s.titulo}: $${((s.precio ?? 0) / 100).toLocaleString("es-MX")} MXN`).join(" | ")}` : "",
       ].filter(Boolean).join("\n")
     : "";
 
   const anclaLinea = serviciosAncla.length > 0
-    ? [
-        `\nSERVICIO(S) QUE ESTÁS VENDIENDO EN ESTA CONVERSACIÓN:\n${serviciosAncla.map((s) => `• ${s.titulo}`).join("\n")}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
+    ? [`\nSERVICIO(S) QUE ESTÁS VENDIENDO EN ESTA CONVERSACIÓN:\n${serviciosAncla.map((s) => `• ${s.titulo}`).join("\n")}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
         pagosConLink.length > 0
-          ? `\nLINKS DE PAGO (comparte el link cuando detectes intención de compra):\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}${p.pago!.descripcion ? ` (${p.pago!.descripcion})` : ""}`).join("\n")}`
-          : "",
-        cuentasBancariasLinea,
-      ].join("\n")
+          ? `\nLINKS DE PAGO (comparte el link cuando detectes intención de compra):\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}${p.pago!.descripcion ? ` (${p.pago!.descripcion})` : ""}`).join("\n")}` : "",
+        cuentasBancariasLinea].join("\n")
     : "";
 
-  // S22.5 — Usar formato enriquecido para recursos tipo servicio
-  const recursosTexto =
-    recursos.length > 0
-      ? recursos.map(formatearRecursoKB).join("\n\n")
-      : "No se encontraron recursos específicos. Responde con información general del Centro ECM.";
-
-  // S11.8 — Inyectar mejores prácticas aprobadas en el contexto
   const { data: practicas } = await createServiceClient()
-    .from("recursos_conocimiento")
-    .select("contenido")
-    .eq("tipo", "practica_venta")
-    .eq("aprobado", true)
-    .eq("activo", true)
-    .order("score_confianza", { ascending: false })
-    .limit(3);
+    .from("recursos_conocimiento").select("contenido")
+    .eq("tipo", "practica_venta").eq("aprobado", true).eq("activo", true)
+    .order("score_confianza", { ascending: false }).limit(3);
 
+  const recursosTexto = recursos.length > 0
+    ? recursos.map(formatearRecursoKB).join("\n\n")
+    : "No se encontraron recursos específicos. Responde con información general del Centro ECM.";
   const practicasTexto = practicas?.length
-    ? `\nMEJORES PRÁCTICAS DE VENTA APLICABLES:\n${practicas.map((p) => `• ${p.contenido}`).join("\n")}`
-    : "";
-
+    ? `\nMEJORES PRÁCTICAS DE VENTA APLICABLES:\n${practicas.map((p) => `• ${p.contenido}`).join("\n")}` : "";
   const faseCagcLinea = contexto.faseCAGC !== undefined
-    ? `- Fase de compra CAGC: ${contexto.faseCAGC} — guía el tono y objetivo de tu respuesta según este momento del comprador`
-    : "";
+    ? `- Fase de compra CAGC: ${contexto.faseCAGC} — guía el tono y objetivo de tu respuesta según este momento del comprador` : "";
   const etiquetasLinea = contexto.etiquetas?.length
-    ? `- Etiquetas del lead: ${contexto.etiquetas.join(", ")}`
-    : "";
-
+    ? `- Etiquetas del lead: ${contexto.etiquetas.join(", ")}` : "";
   const matrizLinea = sugerenciaMatriz
-    ? `\nSUGERENCIA DE MATRIZ (usa como guía, adapta a la conversación):\n${sugerenciaMatriz}`
-    : "";
-
-  // S18.4 — Inyectar identidad de marca en el system prompt
-  const brandLinea = identidad
-    ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}`
-    : "";
-
-  // S32.8 — Imagen activa del servicio disponible para este canal
+    ? `\nSUGERENCIA DE MATRIZ (usa como guía, adapta a la conversación):\n${sugerenciaMatriz}` : "";
+  const brandLinea = identidad ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
   const imagenLinea = imagenActivaUrl
-    ? `\nIMAGEN DEL SERVICIO DISPONIBLE:\nURL: ${imagenActivaUrl}\nEsta imagen puede acompañar tu respuesta si el canal lo permite. No la menciones explícitamente como "imagen"; úsala para enriquecer tu argumento visual si es relevante.`
-    : "";
-
-  // Meet link cuando el lead confirmó un slot y la cita ya fue creada
+    ? `\nIMAGEN DEL SERVICIO DISPONIBLE:\nURL: ${imagenActivaUrl}\nEsta imagen puede acompañar tu respuesta si el canal lo permite. No la menciones como "imagen"; úsala para enriquecer tu argumento visual.` : "";
   const meetLinkLinea = contexto.meetLink
-    ? [
-        "\nCITA CREADA — COMPARTE EL LINK CON ENTUSIASMO:",
+    ? ["\nCITA CREADA — COMPARTE EL LINK CON ENTUSIASMO:",
         `El sistema generó este enlace de Google Meet: ${contexto.meetLink}`,
         "Compártelo de forma cálida y natural. Menciona la fecha y hora en horario del Centro de México.",
-        "Dile al lead que su solicitud ya está registrada y que en breve el equipo la confirma. Usa tono entusiasta y cercano.",
-      ].join("\n")
-    : "";
-
-  // Slots disponibles para agendar (solo cuando intención = quiere_agendar)
+        "Dile al lead que su solicitud ya está registrada y que en breve el equipo la confirma. Usa tono entusiasta y cercano."].join("\n") : "";
   const tz = "America/Mexico_City";
   const slotsLinea = contexto.slotsDisponibles?.length
-    ? [
-        "\nHORARIOS DISPONIBLES — preséntaselos de forma conversacional, no como lista rígida:",
+    ? ["\nHORARIOS DISPONIBLES — preséntaselos de forma conversacional, no como lista rígida:",
         ...contexto.slotsDisponibles.map((s, i) => {
           const fecha = s.inicio.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
           const hora  = s.inicio.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
@@ -236,43 +149,22 @@ export async function generarRespuesta(
         }),
         "\nREGLAS DE ZONA HORARIA (seguir siempre):",
         "• Todos los horarios son en horario del Centro de México — usa exactamente esa expresión, nunca abrevies a 'CDMX' ni 'hora local'.",
-        "• Si el lead menciona estar en otra ciudad, estado o país con huso horario diferente, convierte el horario y acláraselo de forma natural: ejemplo: 'serían las 3:00 pm en horario del Centro de México, que en tu zona local serían las 4:00 pm'.",
-        "• Cuando el lead elija un horario, confírmalo con calidez y entusiasmo.",
-      ].join("\n")
-    : "";
-
-  // S31.2 — Bloque Protocolo Setter
+        "• Si el lead menciona estar en otra ciudad, estado o país con huso horario diferente, convierte el horario y acláraselo de forma natural.",
+        "• Cuando el lead elija un horario, confírmalo con calidez y entusiasmo."].join("\n") : "";
   const setterLinea = contexto.setterEstado
-    ? [
-        `\nPROTOCOLO SETTER — FASE ${contexto.setterEstado.faseNueva}: ${contexto.setterEstado.nombreFase}`,
+    ? [`\nPROTOCOLO SETTER — FASE ${contexto.setterEstado.faseNueva}: ${contexto.setterEstado.nombreFase}`,
         `Objetivo: ${contexto.setterEstado.descripcionFase}`,
         contexto.setterEstado.preguntaGuia
-          ? `Pregunta guía (úsala de forma natural, nunca como interrogatorio): "${contexto.setterEstado.preguntaGuia}"`
-          : "",
-      ].filter(Boolean).join("\n")
-    : "";
-
-  // S31.4-31.6 — Bloque Protocolo de Objeción
-  const objecionLinea = contexto.protocoloObjecion?.instruccion
-    ? `\n${contexto.protocoloObjecion.instruccion}`
-    : "";
-
-  // S31.7 — Bloque Rol Dinámico
-  const rolLinea = contexto.rolesDinamicos?.length
-    ? formatearRolDinamicoParaPrompt(contexto.rolesDinamicos)
-    : "";
-
-  // S31.8 — Regla de Oro del Cierre (instrucción permanente)
-  const reglaOroCierre = instruccionReglaOroCierre();
-
-  // Instrucción de canal: evita pedir datos que el canal ya provee
+          ? `Pregunta guía (úsala de forma natural, nunca como interrogatorio): "${contexto.setterEstado.preguntaGuia}"` : "",
+      ].filter(Boolean).join("\n") : "";
+  const objecionLinea = contexto.protocoloObjecion?.instruccion ? `\n${contexto.protocoloObjecion.instruccion}` : "";
+  const rolLinea = contexto.rolesDinamicos?.length ? formatearRolDinamicoParaPrompt(contexto.rolesDinamicos) : "";
   const canal = contexto.canal_origen;
-  const instruccionCanal =
-    canal === "whatsapp" || canal === "sandbox"
-      ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
-      : canal === "email"
-      ? "- El correo electrónico del lead ya está registrado desde el email de contacto — NUNCA lo solicites."
-      : "";
+  const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
+    ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
+    : canal === "email"
+    ? "- El correo electrónico del lead ya está registrado desde el email de contacto — NUNCA lo solicites."
+    : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
 Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
@@ -303,18 +195,13 @@ INSTRUCCIONES:
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
 ${instruccionCanal}
-${reglaOroCierre}`;
+${instruccionReglaOroCierre()}`;
 
   const response = await anthropic.messages.create({
     model: modeloPorTarea("RESPUESTA"),
     max_tokens: 400,
     system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: mensajes.join("\n"),
-      },
-    ],
+    messages: [{ role: "user", content: mensajes.join("\n") }],
   });
 
   void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
@@ -322,22 +209,5 @@ ${reglaOroCierre}`;
     metadata: { recursos_usados: recursos.length } }).catch(() => {});
 
   const texto = (response.content[0] as { text: string }).text.trim();
-  const scoreConfianza = calcularScore(recursos, sugerenciaMatriz, texto);
-  return { texto, scoreConfianza, imagenUrl: imagenActivaUrl };
-}
-
-// ── Detecta si la IA necesita handoff humano ─────────────────────────────
-export async function necesitaHandoff(
-  mensajes: string[],
-  respuestaGenerada: string
-): Promise<boolean> {
-  const indicadores = [
-    "no tengo información",
-    "no puedo ayudarte",
-    "no sé",
-    "un asesor",
-    "te contactará",
-    "fuera de mi alcance",
-  ];
-  return indicadores.some((i) => respuestaGenerada.toLowerCase().includes(i));
+  return { texto, scoreConfianza: calcularScore(recursos, sugerenciaMatriz, texto), imagenUrl: imagenActivaUrl };
 }
