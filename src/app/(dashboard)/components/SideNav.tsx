@@ -19,6 +19,7 @@ const SECTIONS: NavSection[] = [
       { href: "/admin/citas",         label: "Citas",               emoji: "📅", roles: ["admin"] },
       { href: "/admin/prospeccion",   label: "Prospección",         emoji: "📋", roles: ["admin"] },
       { href: "/vendedor/agenda",     label: "Mi agenda",           emoji: "🗓️", roles: ["vendedor"] },
+      { href: "/vendedor/llamadas",   label: "Mis llamadas",        emoji: "📞", roles: ["vendedor"] },
       { href: "/vendedor/comisiones", label: "Mis comisiones",      emoji: "💵", roles: ["vendedor"] },
     ],
   },

@@ -323,6 +323,7 @@ export interface Database {
           ruta: string;
           etapa_actual: string;
           activo: boolean;
+          metadata: Record<string, unknown>;
           created_at: string;
           updated_at: string;
         };
@@ -332,6 +333,7 @@ export interface Database {
           ruta: string;
           etapa_actual?: string;
           activo?: boolean;
+          metadata?: Record<string, unknown>;
         };
         Update: Partial<Database["public"]["Tables"]["lead_pipelines"]["Insert"]>;
         Relationships: Relationship[];
@@ -1017,6 +1019,71 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["cuentas_bancarias"]["Insert"]>;
         Relationships: Relationship[];
+      };
+      // ── Sprint 28 · Protocolos, Canales, Contenido y Llamadas ────
+      etapa_protocolo: {
+        Row: {
+          id: string; etapa_id: string;
+          tipo: "ia-propuesto" | "manual";
+          regla_avance: string | null; regla_retroceso: string | null; regla_espera: string | null;
+          historial: Record<string, unknown>[]; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; etapa_id: string; tipo?: "ia-propuesto" | "manual";
+          regla_avance?: string | null; regla_retroceso?: string | null; regla_espera?: string | null;
+          historial?: Record<string, unknown>[];
+        };
+        Update: Partial<Database["public"]["Tables"]["etapa_protocolo"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      etapa_canales: {
+        Row: {
+          id: string; etapa_id: string;
+          canal: "whatsapp" | "email" | "llamada" | "meet";
+          activo: boolean; created_at: string;
+        };
+        Insert: {
+          id?: string; etapa_id: string;
+          canal: "whatsapp" | "email" | "llamada" | "meet";
+          activo?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["etapa_canales"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      etapa_contenido: {
+        Row: {
+          id: string; etapa_id: string;
+          recurso_tipo: "leadmagnet" | "brochure"; recurso_id: string;
+          es_puente: boolean; etapa_origen_id: string | null;
+          orden: number; activo: boolean; created_at: string;
+        };
+        Insert: {
+          id?: string; etapa_id: string;
+          recurso_tipo: "leadmagnet" | "brochure"; recurso_id: string;
+          es_puente?: boolean; etapa_origen_id?: string | null;
+          orden?: number; activo?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["etapa_contenido"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      llamadas_vendedor: {
+        Row: {
+          id: string; lead_id: string; vendedor_id: string;
+          objetivo: "cierre" | "avance";
+          resultado: "exitoso" | "no-contesta" | "seguimiento" | "perdido" | null;
+          notas: string | null; duracion_min: number | null; created_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; vendedor_id: string;
+          objetivo: "cierre" | "avance";
+          resultado?: "exitoso" | "no-contesta" | "seguimiento" | "perdido" | null;
+          notas?: string | null; duracion_min?: number | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["llamadas_vendedor"]["Insert"]>;
+        Relationships: [
+          { foreignKeyName: "llamadas_vendedor_lead_id_fkey"; columns: ["lead_id"]; referencedRelation: "leads"; referencedColumns: ["id"] },
+          { foreignKeyName: "llamadas_vendedor_vendedor_id_fkey"; columns: ["vendedor_id"]; referencedRelation: "vendedores"; referencedColumns: ["id"] },
+        ];
       };
     };  // end Tables
     Views: Record<string, never>;

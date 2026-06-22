@@ -9,6 +9,8 @@ import { generarMensajeOfertaLeadmagnet } from "@/lib/ai/oferta-leadmagnet";
 import { encolarRespuesta } from "@/services/mensajes-aprobacion";
 import { asignarTarea } from "@/services/tareas";
 import { obtenerHistorial } from "@/services/mensajes";
+import { inscribirEnPipeline } from "@/services/pipeline-multi";
+import { evaluarCulminacionPorLeadmagnet } from "@/services/culminacion-pipeline";
 
 const SCORE_MINIMO       = 0.30;  // no ofrecer leadmagnets con histórico muy malo
 const COOLDOWN_HORAS     = 24;    // no ofrecer más de uno por lead cada 24 h
@@ -89,6 +91,14 @@ export async function ofrecerLeadmagnet(
 
     // 6. Registrar ofrecimiento para actualizar score_efectividad en el futuro
     await registrarOfrecimiento(lm.id, false);  // aceptado=false hasta que el admin lo apruebe y el lead responda
+
+    // S28.7 — Si el leadmagnet activa multi-pipeline, evaluar culminación del pipeline más atrasado
+    if (lm.fases_cagc_objetivo?.length) {
+      const rutaLm = lm.fases_cagc_objetivo[0] <= 3 ? "tripwire" : "premium";
+      void inscribirEnPipeline(leadId, rutaLm).then(() =>
+        evaluarCulminacionPorLeadmagnet(leadId, rutaLm)
+      ).catch(console.error);
+    }
 
     return { ofrecido: true, leadmagnet: lm, motivo: "ofrecido" };
   } catch (err) {
