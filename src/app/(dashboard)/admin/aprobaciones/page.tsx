@@ -5,29 +5,16 @@ import { listarComprobantesPendientes } from "@/services/comprobantes";
 import { ColaKBSeccion } from "./ColaKBSeccion";
 import { ColaMatrizSeccion } from "./ColaMatrizSeccion";
 import { ColaMensajesSeccion } from "./ColaMensajesSeccion";
+import { ColaSugerenciasSeccion } from "./ColaSugerenciasSeccion";
 import {
   aprobarSugerenciaAction, rechazarSugerenciaAction,
+  aprobarClusterAction, rechazarClusterAction,
   aprobarEtiquetaAction, archivarEtiquetaAction,
   aprobarComprobanteAction, rechazarComprobanteAction,
 } from "./actions";
 
 export const metadata = { title: "Cola de Aprobaciones · ECMatic" };
 export const revalidate = 0;
-
-const TIPO_COLOR: Record<string, string> = {
-  kb:      "bg-blue-100 text-blue-700 border-blue-200",
-  matriz:  "bg-orange-100 text-orange-700 border-orange-200",
-  pipeline:"bg-amber-100 text-amber-700 border-amber-200",
-  flujo:   "bg-green-100 text-green-700 border-green-200",
-  avatar:  "bg-purple-100 text-purple-700 border-purple-200",
-  general: "bg-gray-100 text-gray-700 border-gray-200",
-};
-
-const PRIORIDAD_COLOR: Record<string, string> = {
-  urgente:       "bg-red-600 text-white",
-  importante:    "bg-orange-500 text-white",
-  puede_esperar: "bg-gray-300 text-gray-700",
-};
 
 function diasDesde(fecha: string) {
   return Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
@@ -36,16 +23,26 @@ function diasDesde(fecha: string) {
 export default async function AprobacionesPage() {
   const supabase = createServiceClient();
 
-  const [{ data: kb }, { data: matriz }, { data: sugerencias }, etiquetasPendientes, mensajesPendientes, comprobantesPendientes] = await Promise.all([
+  const [
+    { data: kb },
+    { data: matriz },
+    { data: sugerencias },
+    { data: clusters },
+    etiquetasPendientes,
+    mensajesPendientes,
+    comprobantesPendientes,
+  ] = await Promise.all([
     supabase.from("recursos_conocimiento")
       .select("id, tipo, titulo, contenido, origen, created_at")
       .eq("aprobado", false).order("created_at"),
     supabase.from("matriz_nd")
       .select("id, dimensiones, respuesta_sugerida, origen, created_at")
       .eq("aprobado", false).order("created_at"),
-    supabase.from("sugerencias_ia")
-      .select("id, tipo, titulo, descripcion, prioridad, created_at")
+    (supabase as any).from("sugerencias_ia")
+      .select("id, tipo, titulo, descripcion, prioridad, created_at, tipo_brief, servicio_id, cluster_id, metadata")
       .is("aprobado", null).order("prioridad").order("created_at"),
+    (supabase as any).from("clusters_sugerencias")
+      .select("id, titulo_generado, conteo").order("conteo", { ascending: false }),
     listarPendientes(),
     listarMensajesPendientes(),
     listarComprobantesPendientes(),
@@ -68,13 +65,10 @@ export default async function AprobacionesPage() {
         </div>
       )}
 
-      {/* S18.1–S18.5 — Base de conocimiento con edición inline */}
       <ColaKBSeccion items={kb ?? []} />
 
-      {/* S18.5 — Matriz nD con edición inline */}
       <ColaMatrizSeccion items={(matriz ?? []).map((m) => ({ ...m, dimensiones: m.dimensiones as Record<string, string> }))} />
 
-      {/* S14.3 — Etiquetas sugeridas por IA */}
       {etiquetasPendientes.length > 0 && (
         <section className="space-y-2">
           <p className="text-sm font-medium flex items-center gap-2">
@@ -108,7 +102,6 @@ export default async function AprobacionesPage() {
         </section>
       )}
 
-      {/* S18.2 — Comprobantes de pago */}
       {comprobantesPendientes.length > 0 && (
         <section className="space-y-2">
           <p className="text-sm font-medium flex items-center gap-2">
@@ -143,40 +136,20 @@ export default async function AprobacionesPage() {
         </section>
       )}
 
-      {/* S17.3/S17.4 — Mensajes en cola con edición inline */}
       <ColaMensajesSeccion items={mensajesPendientes} />
 
-      {/* Sugerencias generales IA */}
-      {(sugerencias ?? []).length > 0 && (
-        <section className="space-y-2">
-          <p className="text-sm font-medium flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-purple-500" />
-            Sugerencias generales ({sugerencias?.length})
-          </p>
-          {(sugerencias ?? []).map((item) => (
-            <div key={item.id} className="rounded-lg border p-4 space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs rounded border px-1.5 py-0.5 ${TIPO_COLOR[item.tipo] ?? TIPO_COLOR.general}`}>{item.tipo}</span>
-                    <span className={`text-xs rounded px-1.5 py-0.5 ${PRIORIDAD_COLOR[item.prioridad]}`}>{item.prioridad.replace("_", " ")}</span>
-                  </div>
-                  <p className="font-medium text-sm mt-1">{item.titulo}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.descripcion}</p>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <form action={aprobarSugerenciaAction.bind(null, item.id)}>
-                    <button type="submit" className="rounded bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700">Aprobar</button>
-                  </form>
-                  <form action={rechazarSugerenciaAction.bind(null, item.id)}>
-                    <button type="submit" className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">Rechazar</button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
+      {/* S33.5 + S33.9 — Sugerencias con Brief de Diseño y vista por Clusters */}
+      <ColaSugerenciasSeccion
+        items={(sugerencias ?? []).map((s: Record<string, unknown>) => ({
+          ...s,
+          metadata: (s.metadata ?? {}) as Record<string, unknown>,
+        }))}
+        clusters={clusters ?? []}
+        aprobarAction={aprobarSugerenciaAction}
+        rechazarAction={rechazarSugerenciaAction}
+        aprobarClusterAction={aprobarClusterAction}
+        rechazarClusterAction={rechazarClusterAction}
+      />
     </div>
   );
 }

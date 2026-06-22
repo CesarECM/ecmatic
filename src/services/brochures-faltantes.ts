@@ -112,9 +112,9 @@ export async function scanearBrochuresFaltantes(): Promise<ResultadoScanBrochure
       titulo:      `Brochure faltante: ${s.titulo_servicio}`,
       descripcion: `El servicio no tiene brochure y el patrón de conversaciones lo justifica. ${s.justificacion}`,
       prioridad:   "puede_esperar",
+      servicio_id: s.servicio_id,
       metadata:    {
-        categoria:   "brochure_faltante",
-        servicio_id: s.servicio_id,
+        categoria:       "brochure_faltante",
         titulo_servicio: s.titulo_servicio,
       } satisfies Record<string, unknown>,
     });

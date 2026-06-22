@@ -56,6 +56,7 @@ Responde SOLO en JSON con este formato exacto:
 
 // Punto de entrada — llamar fire-and-forget desde crearRecurso
 export async function generarPaqueteServicioNuevo(
+  servicioId: string,
   tituloServicio: string,
   contenidoServicio: string
 ): Promise<void> {
@@ -64,12 +65,13 @@ export async function generarPaqueteServicioNuevo(
 
   const supabase = createServiceClient();
   for (const s of sugerencias) {
-    await supabase.from("sugerencias_ia").insert({
-      tipo: s.tipo,
-      titulo: s.titulo,
+    await (supabase as any).from("sugerencias_ia").insert({
+      tipo:        s.tipo,
+      titulo:      s.titulo,
       descripcion: s.descripcion,
-      prioridad: "importante",
-      metadata: s.metadata,
+      prioridad:   "importante",
+      servicio_id: servicioId,
+      metadata:    s.metadata,
     });
   }
 }
