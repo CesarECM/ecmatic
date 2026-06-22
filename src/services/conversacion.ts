@@ -4,43 +4,40 @@ import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { generarRespuesta, necesitaHandoff } from "@/lib/ai/motor-respuesta";
 import { enviarRespuestaWhatsApp } from "./whatsapp-sender";
 import { crearTicketHandoff } from "./tickets";
-import { detectarCompetidores } from "./competidores";
-import { detectarPromesas } from "./promesas";
-import { detectarMomentoCierre } from "./momentos-cierre";
 import { generarLinkStripe } from "./pagos";
 import { detectarAceptacion, marcarPrivacidadAceptada, mensajeAvisoPrivacidad } from "./privacidad";
-import { inferirYRegistrarFase, obtenerFaseLead } from "./cagc";
+import { obtenerFaseLead } from "./cagc";
 import { generarSolicitudDatosFaltantes } from "./limpieza-leads";
 import { obtenerEtiquetasLead } from "./etiquetas";
 import { obtenerConfig } from "./sistema";
-import { evaluarYAsignarTarea } from "./motor-tareas";
-import { generarOfertaConsultiva } from "./oferta-consultiva";
-import { ofrecerLeadmagnet } from "./selector-leadmagnet";
-import { ofrecerBrochure } from "./selector-brochure";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { capturarContactoPasivo } from "./captura-contacto";
-import { actualizarContextoIA } from "./contexto";
 import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from "./citas";
 import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
-import { actualizarScoreSalud } from "./score-salud";
 import { createServiceClient } from "@/lib/supabase/service";
+import { dispararHooksPostConversacion } from "./post-conversacion";
+// S31 — Arquitectura de Objeciones
+import { evaluarFaseSetter } from "@/lib/ai/setter-protocol";
+import { evaluarCualificacion } from "@/lib/ai/cualificacion";
+import { filtrarResistencia } from "@/lib/ai/filtro-objecion";
+import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
+import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
+import { obtenerRolDinamico } from "./rol-dinamico";
 
-// Orquestador principal — ejecutado después de drenar el buffer
 export async function procesarConversacion(
   telefono: string,
   mensajes: string[],
   waMessageId?: string
 ) {
-  // 1. Obtener o crear lead — lanza si está en blacklist (S15.3)
   let lead: Awaited<ReturnType<typeof obtenerOCrearLead>>;
   try {
     lead = await obtenerOCrearLead(telefono);
   } catch {
-    return; // número en blacklist — descartar silenciosamente
+    return;
   }
 
-  // S18.2 — Comprobante de pago: respuesta canned + salir (admin revisa en panel)
+  // Comprobante de pago: respuesta canned + salir
   if (mensajes.some((m) => m.startsWith("[Imagen: comprobante]"))) {
     for (const contenido of mensajes) {
       await guardarMensaje({ leadId: lead.id, contenido, direccion: "entrante", waMessageId });
@@ -51,7 +48,7 @@ export async function procesarConversacion(
     return;
   }
 
-  // S12.9 — Privacidad LFPDPPP: si el lead acepta en este mensaje, registrar y salir
+  // Privacidad: si el lead acepta en este mensaje, registrar y salir
   const textoEntrada = mensajes.join(" ");
   if (!lead.privacidad_aceptada && detectarAceptacion(textoEntrada)) {
     await marcarPrivacidadAceptada(lead.id);
@@ -64,15 +61,9 @@ export async function procesarConversacion(
     return;
   }
 
-  // 2. S1.7 — rama cliente previo
+  // Rama cliente previo
   if (lead.compra_previa) {
-    await guardarMensaje({
-      leadId: lead.id,
-      contenido: mensajes.join("\n"),
-      direccion: "entrante",
-      waMessageId,
-    });
-    // Respuesta diferenciada para clientes activos
+    await guardarMensaje({ leadId: lead.id, contenido: mensajes.join("\n"), direccion: "entrante", waMessageId });
     await enviarRespuestaWhatsApp(telefono, [
       "¡Hola! Veo que ya eres parte de nuestra familia en Centro ECM 🎓",
       "¿En qué puedo apoyarte hoy con tu proceso de certificación?",
@@ -80,44 +71,33 @@ export async function procesarConversacion(
     return;
   }
 
-  // 3. Historial para contexto IA
   const historial = await obtenerHistorial(lead.id);
-
-  // 4. S1.3 — Clasificar intención
   const intencion = await clasificarIntencion(mensajes, historial);
 
-  // 5. Guardar mensajes entrantes
   for (const [i, contenido] of mensajes.entries()) {
     await guardarMensaje({
-      leadId: lead.id,
-      contenido,
-      direccion: "entrante",
+      leadId: lead.id, contenido, direccion: "entrante",
       intencion: i === 0 ? intencion : null,
       waMessageId: i === 0 ? waMessageId : undefined,
     });
   }
 
-  // S20.5 — Captura pasiva de email/nombre desde el texto entrante (fire-and-forget)
   void capturarContactoPasivo(lead.id, mensajes).catch(console.error);
-
-  // 6. S1.8 — Inferir y actualizar etapa de pipeline
   await inferirEtapaPipeline(lead.id, historial, intencion);
-
-  // 7. S1.9 — Inferir temperamento (silencioso, sin bloquear)
   inferirTemperamento(lead.id, mensajes).catch(console.error);
 
-  // 8. S1.4 — Generar respuesta
   const supabase = createServiceClient();
   const [{ data: leadActualizado }, estadoCagc, etiquetasLead] = await Promise.all([
     supabase
       .from("leads")
-      .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa")
+      .select("nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado")
       .eq("id", lead.id)
       .single(),
     obtenerFaseLead(lead.id).catch(() => null),
     obtenerEtiquetasLead(lead.id).catch(() => []),
   ]);
 
+  // Slots / cita
   let slotsParaAI = undefined;
   let meetLinkParaAI: string | null = null;
 
@@ -127,12 +107,11 @@ export async function procesarConversacion(
       if (vendedorId) {
         slotsParaAI = await obtenerSlotsDisponibles(vendedorId);
         void logAgen({ paso: "slots_consultados", leadId: lead.id, vendedorId,
-          detalle: `Intención quiere_agendar — ${slotsParaAI.length} slots disponibles`,
-          metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId } });
+          detalle: `${slotsParaAI.length} slots disponibles`, metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId } });
       }
     } catch (err) {
       void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
-        detalle: `Error obteniendo slots: ${err instanceof Error ? err.message : String(err)}` });
+        detalle: `Error slots: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
 
@@ -146,13 +125,64 @@ export async function procesarConversacion(
           const { citaId, meetLink } = await crearCitaConMeet({ leadId: lead.id, vendedorId, inicio: slot.inicio, fin: slot.fin });
           meetLinkParaAI = meetLink;
           void logAgen({ paso: "cita_creada", citaId, leadId: lead.id, vendedorId,
-            detalle: "Cita creada desde conversación WA", metadata: { meetLink, inicio: slot.inicio.toISOString() } });
+            detalle: "Cita creada desde WA", metadata: { meetLink, inicio: slot.inicio.toISOString() } });
         }
       }
     } catch (err) {
       void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
-        detalle: `Error creando cita: ${err instanceof Error ? err.message : String(err)}` });
+        detalle: `Error cita: ${err instanceof Error ? err.message : String(err)}` });
     }
+  }
+
+  // S31 — Preparar contexto de Setter, Objeción y Rol Dinámico en paralelo
+  const setterFaseActual: number = (leadActualizado?.setter_fase_actual as number | null) ?? 1;
+  const setterCalificado: boolean | null = (leadActualizado?.setter_calificado as boolean | null) ?? null;
+  const esObjecion = intencion === "objecion_precio" || intencion === "objecion_confianza";
+  const setterActivo = setterCalificado === null; // se desactiva al calificar o descalificar
+
+  const [setterEstado, filtroResult, rolesDinamicos] = await Promise.all([
+    setterActivo && historial
+      ? evaluarFaseSetter(setterFaseActual, mensajes, historial, leadActualizado?.temperamento_inferido ?? null).catch(() => null)
+      : Promise.resolve(null),
+    esObjecion
+      ? filtrarResistencia(mensajes, historial).catch(() => null)
+      : Promise.resolve(null),
+    obtenerRolDinamico(lead.id).catch(() => []),
+  ]);
+
+  // Si el setter avanzó de fase, persistir en BD (fire-and-forget)
+  if (setterEstado?.debeAvanzar && setterEstado.faseNueva !== setterFaseActual) {
+    void (async () => {
+      await supabase.from("leads").update({ setter_fase_actual: setterEstado!.faseNueva }).eq("id", lead.id);
+    })().catch(console.error);
+  }
+
+  // Si llegamos a fase 5 (cualificación), evaluar y persistir resultado
+  if (setterActivo && (setterEstado?.faseNueva === 5 || setterFaseActual === 5)) {
+    const serviciosAncla: string[] = [];
+    evaluarCualificacion(mensajes, historial, leadActualizado?.nombre ?? null, serviciosAncla)
+      .then(async (result) => {
+        await supabase.from("leads").update({
+          setter_calificado: result.califica,
+          ...(result.razonDescalificacion && { setter_razon_descalificacion: result.razonDescalificacion }),
+        }).eq("id", lead.id);
+
+        // Si no califica: enviar despedida amable + activar nurturing
+        if (!result.califica && result.mensajeDesacuerdo) {
+          await enviarRespuestaWhatsApp(telefono, [result.mensajeDesacuerdo]);
+          await guardarMensaje({ leadId: lead.id, contenido: result.mensajeDesacuerdo, direccion: "saliente" });
+        }
+      })
+      .catch(console.error);
+  }
+
+  // Construir protocolo de objeción si aplica
+  let protocoloObjecion = null;
+  if (filtroResult) {
+    const desconfianza = filtroResult.tipo === "objecion"
+      ? await identificarDesconfianza(mensajes, historial).catch(() => null)
+      : null;
+    protocoloObjecion = construirProtocoloObjecion(filtroResult.tipo, desconfianza?.tipo ?? null);
   }
 
   const { texto: respuesta, scoreConfianza } = await generarRespuesta(mensajes, {
@@ -166,130 +196,70 @@ export async function procesarConversacion(
     etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
     slotsDisponibles: slotsParaAI,
     meetLink: meetLinkParaAI,
+    setterEstado,
+    protocoloObjecion,
+    rolesDinamicos,
   });
 
-  // 8.5. S8.1 — Si la intención es compra inmediata, generar link Stripe
+  // Compra inmediata: adjuntar link Stripe
   if (intencion === "compra_inmediata" || intencion === "compra") {
     const linkStripe = await generarLinkStripe(lead.id).catch(() => null);
     if (linkStripe) {
-      await enviarRespuestaWhatsApp(telefono, [
-        ...dividirRespuesta(respuesta),
-        `💳 Puedes completar tu inscripción aquí: ${linkStripe}`,
-      ]);
+      await enviarRespuestaWhatsApp(telefono, [...dividirRespuesta(respuesta), `💳 Puedes completar tu inscripción aquí: ${linkStripe}`]);
       await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
       return;
     }
   }
 
-  // 9. S1.10 — Detectar handoff
   const requiereHandoff = await necesitaHandoff(mensajes, respuesta);
-  if (requiereHandoff) {
-    await crearTicketHandoff(lead.id, mensajes.join("\n"));
-  }
+  if (requiereHandoff) await crearTicketHandoff(lead.id, mensajes.join("\n"));
 
-  // 10. S1.5 + S1.6 — Enviar respuesta (o encolar según modo S17.3/S17.4)
   const bloques = dividirRespuesta(respuesta);
   const config = await obtenerConfig().catch(() => ({ modo_operacion: "automatico" as const, umbral_confianza: 0.80 }));
 
   if (config.modo_operacion === "seguro") {
-    // S17.3 — Modo Seguro: cola siempre
     await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques });
     await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
     return;
   }
 
   if (config.modo_operacion === "seguro_automatico" && scoreConfianza < config.umbral_confianza) {
-    // S17.4 — Modo Seguro Automático: cola solo si score bajo
     await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques, scoreConfianza });
     await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
     return;
   }
 
   await enviarRespuestaWhatsApp(telefono, bloques);
+  const msgSaliente = await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
 
-  // 11. Guardar respuesta saliente
-  const msgSaliente = await guardarMensaje({
-    leadId: lead.id,
-    contenido: respuesta,
-    direccion: "saliente",
-  });
-
-  // S12.9 — En primera interacción, añadir aviso de privacidad (fire-and-forget)
   if (!lead.privacidad_aceptada && !historial) {
     void enviarRespuestaWhatsApp(telefono, [mensajeAvisoPrivacidad()]).catch(console.error);
   }
 
-  // S5.8 — Detectar competidores mencionados (fire-and-forget)
-  const textoCompleto = mensajes.join(" ");
-  void detectarCompetidores(textoCompleto, lead.id).catch(console.error);
-
-  // S5.10 — Detectar promesas en los mensajes del lead (fire-and-forget)
-  if (msgSaliente?.id) {
-    void detectarPromesas(textoCompleto, lead.id, msgSaliente.id).catch(console.error);
-  }
-
-  // S5.9 — Detectar momentos de cierre en la respuesta (fire-and-forget)
-  if (msgSaliente?.id) {
-    void detectarMomentoCierre(lead.id, msgSaliente.id, textoCompleto, intencion).catch(console.error);
-  }
-
-  // S13.2 — Inferir y actualizar fase CAGC del lead (fire-and-forget, silencioso)
-  void inferirYRegistrarFase(lead.id, mensajes, historial).catch(console.error);
-
-  // S19.6/S19.7 — Escáner de señales situacionales + oferta consultiva (fire-and-forget)
-  // Solo actúa si hay historial y el lead ya definió su problema (fase ≥ 3)
-  if (historial && (estadoCagc?.fase_numero ?? 0) >= 3) {
-    void generarOfertaConsultiva(lead.id, telefono).catch(console.error);
-  }
-
-  // S20.2 — Motor de selección y oferta de leadmagnet (fire-and-forget)
-  // Solo si hay historial y fase CAGC conocida (el leadmagnet filtra por fase internamente)
-  if (historial && estadoCagc !== null) {
-    void ofrecerLeadmagnet(lead.id, telefono, estadoCagc.fase_numero).catch(console.error);
-  }
-
-  // S24.3 — Oferta proactiva de brochure (fire-and-forget, cooldown independiente)
-  if (historial && estadoCagc !== null) {
-    void ofrecerBrochure(lead.id, telefono, estadoCagc.fase_numero).catch(console.error);
-  }
-
-  // S14.2 — Sugerir etiquetas (fire-and-forget, solo si hay historial)
-  if (historial) {
-    const { sugerirEtiquetasParaLead } = await import("@/lib/ai/etiquetas-ia");
-    void sugerirEtiquetasParaLead(lead.id, mensajes, historial).catch(console.error);
-  }
-
-  // S17.6 — Reevaluar tarea de fondo tras cada conversación (fire-and-forget)
-  void evaluarYAsignarTarea(lead.id, "conversacion").catch(console.error);
-
-  // S23.3 — Actualizar Contexto interpretativo del lead (fire-and-forget)
-  const accionContexto = `Conversación WhatsApp — intención: ${intencion}`;
-  void actualizarContextoIA(lead.id, accionContexto).catch(console.error);
-
-  // ES-1/S30.1 — Recalcular score de salud tras cada conversación (fire-and-forget)
-  void actualizarScoreSalud(lead.id).catch(console.error);
-
-  // S15.2 — Solicitar datos faltantes si hay señal positiva y la conversación ya avanzó
+  // Datos faltantes (S15.2)
   if (historial && (!lead.nombre || !lead.email)) {
     const solicitud = await generarSolicitudDatosFaltantes(
-      { id: lead.id, nombre: lead.nombre ?? null, email: lead.email ?? null },
-      historial
+      { id: lead.id, nombre: lead.nombre ?? null, email: lead.email ?? null }, historial
     ).catch(() => null);
     if (solicitud) {
       void enviarRespuestaWhatsApp(telefono, [solicitud]).catch(console.error);
       void guardarMensaje({ leadId: lead.id, contenido: solicitud, direccion: "saliente" }).catch(console.error);
     }
   }
+
+  // Hooks fire-and-forget (extraídos a post-conversacion.ts)
+  dispararHooksPostConversacion({
+    leadId: lead.id, telefono, mensajes, historial, intencion,
+    mensajeSalienteId: msgSaliente?.id,
+    estadoCagc,
+  });
 }
 
-// S1.5 — Divide respuestas largas en bloques de ≤160 caracteres
 function dividirRespuesta(texto: string): string[] {
   if (texto.length <= 160) return [texto];
-
   const oraciones = texto.match(/[^.!?]+[.!?]+/g) ?? [texto];
   const bloques: string[] = [];
   let bloque = "";
-
   for (const oracion of oraciones) {
     if ((bloque + oracion).length > 160) {
       if (bloque) bloques.push(bloque.trim());

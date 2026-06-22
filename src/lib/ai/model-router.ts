@@ -15,7 +15,11 @@ export type TareaIA =
   | "SENALES"
   | "LEADMAGNET"
   | "CONTEXTO"          // S23.1 — actualización incremental del Contexto del lead
-  | "PAQUETE_SERVICIO"; // S23.5 — sugerencias automáticas al crear un servicio nuevo
+  | "PAQUETE_SERVICIO"  // S23.5 — sugerencias automáticas al crear un servicio nuevo
+  | "SETTER"            // S31.2 — evalúa si el lead avanzó de fase setter
+  | "CUALIFICACION"     // S31.3 — cualifica lead en 3 ejes
+  | "OBJECION"          // S31.4 — filtro Condición vs. Objeción
+  | "DESCONFIANZA";     // S31.5 — mapeo a Tres Desconfianzas Raíz
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -38,8 +42,12 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   VISION:        "sonnet",  // clasificación de imágenes (requiere visión)
   SENALES:          "haiku",
   LEADMAGNET:       "haiku",
-  CONTEXTO:         "haiku",   // S23.1 — resumen interpretativo del lead
-  PAQUETE_SERVICIO: "haiku",   // S23.5 — sugerencias al registrar un servicio nuevo
+  CONTEXTO:         "haiku",
+  PAQUETE_SERVICIO: "haiku",
+  SETTER:           "haiku",
+  CUALIFICACION:    "haiku",
+  OBJECION:         "haiku",
+  DESCONFIANZA:     "haiku",
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.

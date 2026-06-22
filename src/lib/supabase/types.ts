@@ -44,6 +44,12 @@ export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento"
 export type TipoLeadmagnet = "pre-creado" | "generable-ia" | "requiere-humano";
 export type TipoPagoServicio = "landing" | "pasarela";
 
+// S31.4 — Capa 2: tipo de resistencia del lead
+export type TipoResistencia = "condicion" | "objecion";
+
+// S31.5 — Capa 3: desconfianza raíz de la objeción
+export type TipoDesconfianza = "empresa" | "profesional" | "propia";
+
 // S23.1 — Entrada del historial versionado del Contexto del lead
 export interface EntradaContexto {
   id: string;
@@ -170,6 +176,10 @@ export interface Database {
           contexto: string | null;
           contexto_historial: EntradaContexto[];
           contexto_updated_at: string | null;
+          // S31.1 — Protocolo Setter
+          setter_fase_actual: number | null;
+          setter_calificado: boolean | null;
+          setter_razon_descalificacion: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -196,6 +206,9 @@ export interface Database {
           contexto?: string | null;
           contexto_historial?: EntradaContexto[];
           contexto_updated_at?: string | null;
+          setter_fase_actual?: number | null;
+          setter_calificado?: boolean | null;
+          setter_razon_descalificacion?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: Relationship[];

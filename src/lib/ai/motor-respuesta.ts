@@ -9,8 +9,12 @@ import { inferirRespuestaMatriz } from "@/services/matriz-ia";
 import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
 import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
 import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
+import { instruccionReglaOroCierre } from "./regla-oro-cierre";
+import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
+import type { EstadoSetter } from "./setter-protocol";
+import type { ProtocoloObjecion } from "./protocolo-objecion";
 
 interface ContextoLead {
   nombre: string | null;
@@ -21,8 +25,12 @@ interface ContextoLead {
   pipelineRuta?: PipelineRuta;
   faseCAGC?: number;
   etiquetas?: string[];
-  slotsDisponibles?: SlotDisponible[]; // inyectados cuando intención = quiere_agendar
-  meetLink?: string | null;            // inyectado cuando intención = confirmando_slot y la cita se creó
+  slotsDisponibles?: SlotDisponible[];
+  meetLink?: string | null;
+  // S31 — Arquitectura de Objeciones
+  setterEstado?: EstadoSetter | null;
+  protocoloObjecion?: ProtocoloObjecion | null;
+  rolesDinamicos?: RolPorServicio[];
 }
 
 // S22.4 — Tipo de recurso enriquecido (incluye ficha de servicio)
@@ -212,8 +220,32 @@ export async function generarRespuesta(
       ].join("\n")
     : "";
 
+  // S31.2 — Bloque Protocolo Setter
+  const setterLinea = contexto.setterEstado
+    ? [
+        `\nPROTOCOLO SETTER — FASE ${contexto.setterEstado.faseNueva}: ${contexto.setterEstado.nombreFase}`,
+        `Objetivo: ${contexto.setterEstado.descripcionFase}`,
+        contexto.setterEstado.preguntaGuia
+          ? `Pregunta guía (úsala de forma natural, nunca como interrogatorio): "${contexto.setterEstado.preguntaGuia}"`
+          : "",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  // S31.4-31.6 — Bloque Protocolo de Objeción
+  const objecionLinea = contexto.protocoloObjecion?.instruccion
+    ? `\n${contexto.protocoloObjecion.instruccion}`
+    : "";
+
+  // S31.7 — Bloque Rol Dinámico
+  const rolLinea = contexto.rolesDinamicos?.length
+    ? formatearRolDinamicoParaPrompt(contexto.rolesDinamicos)
+    : "";
+
+  // S31.8 — Regla de Oro del Cierre (instrucción permanente)
+  const reglaOroCierre = instruccionReglaOroCierre();
+
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${meetLinkLinea}${slotsLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}
@@ -239,7 +271,8 @@ INSTRUCCIONES:
 - Si detectas intención de compra, ofrece el link de pago de forma natural; si el lead no puede usarlo, proporciona los datos de transferencia bancaria del contexto
 - Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
-- Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad`;
+- Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
+${reglaOroCierre}`;
 
   const response = await anthropic.messages.create({
     model: modeloPorTarea("RESPUESTA"),
