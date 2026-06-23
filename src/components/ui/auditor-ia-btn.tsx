@@ -57,8 +57,9 @@ export function AuditorIABtn({ tipo, id, nombre, pendientesIniciales = 0, classN
       </button>
 
       <Dialog open={abierto} onOpenChange={(v: boolean) => { if (!v) setAbierto(false); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
+          {/* Header fijo */}
+          <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2 pr-6">
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-br from-pink-500 to-orange-400 text-white text-[10px] font-bold shrink-0">
                 ✦
@@ -67,20 +68,23 @@ export function AuditorIABtn({ tipo, id, nombre, pendientesIniciales = 0, classN
             </DialogTitle>
           </DialogHeader>
 
-          {cargando && !estado && (
-            <div className="py-10 text-center text-sm text-muted-foreground animate-pulse">
-              Consultando estado de auditoría…
-            </div>
-          )}
+          {/* Área scrollable */}
+          <div className="overflow-y-auto flex-1 px-5 py-4">
+            {cargando && !estado && (
+              <div className="py-10 text-center text-sm text-muted-foreground animate-pulse">
+                Consultando estado de auditoría…
+              </div>
+            )}
 
-          {estado && (
-            <AuditorIAModalContent
-              estado={estado}
-              tipo={tipo}
-              entityId={id}
-              onRefrescar={fetchEstado}
-            />
-          )}
+            {estado && (
+              <AuditorIAModalContent
+                estado={estado}
+                tipo={tipo}
+                entityId={id}
+                onRefrescar={fetchEstado}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </>
