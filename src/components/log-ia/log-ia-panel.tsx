@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { LogIARow, GrupoLogIA } from "@/services/log-ia";
+import type { LogIARow, EventoLogIA } from "@/services/log-ia";
 import { LogIAFiltros } from "./log-ia-filtros";
 import { LogIAGrupo } from "./log-ia-grupo";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 interface Props {
-  grupos: GrupoLogIA[];
+  eventos: EventoLogIA[];
   legacy: LogIARow[];
   totalRegistros: number;
   tokensTotal: number;
@@ -17,27 +17,6 @@ interface Props {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TIPO_LABEL: Record<string, string> = {
-  CLASIFICAR:"Clasificar", RESPUESTA:"Respuesta WA", CONTEXTO:"Contexto",
-  SETTER:"Setter", OBJECION:"Objeción", DESCONFIANZA:"Desconfianza",
-  CAGC_INFERIR:"Fase CAGC", SUGERIR_KB:"Sugerir KB",
-};
-
-function textoGrupoExport(grupo: GrupoLogIA): string {
-  const fecha = new Date(grupo.timestamp).toLocaleString("es-MX");
-  const lines = [`=== ${TIPO_LABEL[grupo.tipo_accion] ?? grupo.tipo_accion} · ${fecha} [req: ${grupo.request_id.slice(0,8)}] ===`];
-  for (const log of grupo.logs) {
-    const m = log.metadata ?? {};
-    let det = "";
-    if (log.fase === "llamado")   det = `model: ${m.model_seleccionado} | msgs: ${m.messages_count} | system: "${String(m.system_prompt_extract ?? "").slice(0, 80)}..."`;
-    else if (log.fase === "peticion")  det = `model: ${m.model} | max_tokens: ${m.max_tokens} | chars: ${m.chars_total_est}`;
-    else if (log.fase === "respuesta") det = `${log.resultado ?? ""} | tokens: ${m.tokens_input}+${m.tokens_output} | ${m.duracion_ms}ms`;
-    else det = log.resultado ?? String(m.error_message ?? "");
-    lines.push(`  [${log.fase ?? "?"}] ${det}`);
-  }
-  return lines.join("\n");
-}
-
 function textoLegacy(log: LogIARow): string {
   const fecha = new Date(log.created_at).toLocaleString("es-MX");
   const m = log.metadata ?? {};
@@ -45,14 +24,31 @@ function textoLegacy(log: LogIARow): string {
   return `[${fecha}] ${log.tipo_accion} | ${log.resultado ?? "—"} | ${tokens} tok | ${m.duracion_ms ?? "?"}ms`;
 }
 
+function textoEventoExport(evento: EventoLogIA): string {
+  const fecha = new Date(evento.timestamp).toLocaleString("es-MX");
+  const lines = [`=== ${evento.tipo_accion} · ${fecha} [trace: ${evento.traceId.slice(0,8)}] ===`];
+  const todos = [...evento.debugLogs, ...evento.claudeLogs].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+  for (const log of todos) {
+    const m = log.metadata ?? {};
+    let det = log.resultado ?? "";
+    if (log.fase === "llamado")   det = `model: ${m.model_seleccionado} | msgs: ${m.messages_count}`;
+    else if (log.fase === "peticion")  det = `model: ${m.model} | max_tokens: ${m.max_tokens}`;
+    else if (log.fase === "respuesta") det = `${log.resultado ?? ""} | tokens: ${m.tokens_input}+${m.tokens_output} | ${m.duracion_ms}ms`;
+    lines.push(`  [${log.fase ?? "?"}] ${det}`);
+  }
+  return lines.join("\n");
+}
+
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtros }: Props) {
+export function LogIAPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros }: Props) {
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
   const [todoExpand, setTodoExpand] = useState(false);
   const [copiadoTodo, setCopiadoTodo] = useState(false);
 
-  const toggleGrupo = useCallback((id: string) => {
+  const toggleEvento = useCallback((id: string) => {
     setAbiertos(prev => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
@@ -64,10 +60,10 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
     if (todoExpand) {
       setAbiertos(new Set());
     } else {
-      setAbiertos(new Set(grupos.map(g => g.request_id)));
+      setAbiertos(new Set(eventos.map(e => e.traceId)));
     }
     setTodoExpand(v => !v);
-  }, [todoExpand, grupos]);
+  }, [todoExpand, eventos]);
 
   const copiarTodo = useCallback(() => {
     const lineas: string[] = [
@@ -79,9 +75,9 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
       "",
     ].filter(Boolean);
 
-    lineas.push(...grupos.map(textoGrupoExport));
+    lineas.push(...eventos.map(textoEventoExport));
     if (legacy.length) {
-      lineas.push("", "--- Registros legacy (sin trace) ---");
+      lineas.push("", "--- Registros sin agrupación ---");
       lineas.push(...legacy.map(textoLegacy));
     }
 
@@ -89,9 +85,11 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
       setCopiadoTodo(true);
       setTimeout(() => setCopiadoTodo(false), 2000);
     });
-  }, [grupos, legacy, filtros]);
+  }, [eventos, legacy, filtros]);
 
   const filtrosActivos = [filtros.tipo, filtros.fase, filtros.desde, filtros.hasta].filter(Boolean).length;
+  const totalEventos   = eventos.length;
+  const conTrace       = eventos.filter(e => !e.sinTrace).length;
 
   return (
     <div className="space-y-4">
@@ -100,15 +98,15 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
         <div>
           <h1 className="text-xl font-semibold">Log de acciones IA</h1>
           <p className="text-sm text-muted-foreground">
-            {grupos.length > 0
-              ? <>{grupos.length} llamadas · {legacy.length} legacy · <span className="font-medium">{tokensTotal.toLocaleString("es-MX")} tokens</span> en vista</>
-              : <>{totalRegistros} registros · <span className="font-medium">{tokensTotal.toLocaleString("es-MX")} tokens</span> en vista</>
+            {totalEventos > 0
+              ? <>{totalEventos} eventos · {conTrace} con trace · {legacy.length} sueltos · <span className="font-medium">{tokensTotal.toLocaleString("es-MX")} tokens</span></>
+              : <>{totalRegistros} registros · <span className="font-medium">{tokensTotal.toLocaleString("es-MX")} tokens</span></>
             }
             {filtrosActivos > 0 && <span className="ml-2 text-xs text-amber-600">({filtrosActivos} filtro{filtrosActivos > 1 ? "s" : ""} activo{filtrosActivos > 1 ? "s" : ""})</span>}
           </p>
         </div>
         <div className="flex gap-2">
-          {grupos.length > 0 && (
+          {eventos.length > 0 && (
             <button onClick={toggleTodos}
               className="rounded border px-2.5 py-1.5 text-xs hover:bg-gray-50 transition-colors">
               {todoExpand ? "Colapsar todo" : "Expandir todo"}
@@ -125,31 +123,31 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
       <LogIAFiltros {...filtros} />
 
       {/* Sin resultados */}
-      {grupos.length === 0 && legacy.length === 0 && (
+      {eventos.length === 0 && legacy.length === 0 && (
         <div className="rounded border border-dashed p-8 text-center text-sm text-muted-foreground">
           Sin registros. Las acciones de IA aparecerán aquí conforme el sistema procese mensajes.
         </div>
       )}
 
-      {/* Grupos con trace (request_id) */}
-      {grupos.length > 0 && (
+      {/* Lista unificada de eventos */}
+      {eventos.length > 0 && (
         <div className="space-y-1.5">
-          {grupos.map(g => (
+          {eventos.map(e => (
             <LogIAGrupo
-              key={g.request_id}
-              grupo={g}
-              abierto={abiertos.has(g.request_id)}
-              onToggle={() => toggleGrupo(g.request_id)}
+              key={e.traceId}
+              evento={e}
+              abierto={abiertos.has(e.traceId)}
+              onToggle={() => toggleEvento(e.traceId)}
             />
           ))}
         </div>
       )}
 
-      {/* Registros legacy (sin request_id) */}
+      {/* Registros sueltos (sin trace ni request_id) */}
       {legacy.length > 0 && (
         <div>
           <p className="text-xs text-muted-foreground mb-2">
-            Registros sin trace — legacy y logs de depuración de flujo
+            Registros sin agrupación — logs anteriores al sistema de trazabilidad
           </p>
           <div className="rounded border overflow-x-auto">
             <table className="w-full text-xs">
@@ -179,7 +177,7 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
                   const pillCls = FASE_PILL[fase] ?? "bg-green-100 text-green-700";
                   return (
                     <tr key={r.id} className="border-t hover:bg-gray-50">
-                      <td className="p-2 font-medium text-gray-700">{TIPO_LABEL[r.tipo_accion] ?? r.tipo_accion}</td>
+                      <td className="p-2 font-medium text-gray-700">{r.tipo_accion}</td>
                       <td className="p-2">
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${pillCls}`}>{fase}</span>
                       </td>

@@ -1,4 +1,4 @@
-import { listarLogIA, agruparRegistros } from "@/services/log-ia";
+import { listarLogIA, agruparEventos } from "@/services/log-ia";
 import { LogIAPanel } from "@/components/log-ia/log-ia-panel";
 
 export const metadata = { title: "Log de IA · ECMatic" };
@@ -23,11 +23,11 @@ export default async function LogIAPage({ searchParams }: Props) {
     return sum + ((m?.tokens_input as number ?? 0) + (m?.tokens_output as number ?? 0));
   }, 0);
 
-  const { grupos, legacy } = agruparRegistros(registros);
+  const { eventos, legacy } = agruparEventos(registros);
 
   return (
     <LogIAPanel
-      grupos={grupos}
+      eventos={eventos}
       legacy={legacy}
       totalRegistros={registros.length}
       tokensTotal={tokensTotal}

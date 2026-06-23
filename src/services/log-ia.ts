@@ -30,6 +30,16 @@ export interface GrupoLogIA {
   logs: LogIARow[];
 }
 
+// Evento unificado: agrupa logs de Claude + logs debug del mismo flujo (por trace_id)
+export interface EventoLogIA {
+  traceId: string;
+  tipo_accion: string;
+  timestamp: string;
+  claudeLogs: LogIARow[];
+  debugLogs: LogIARow[];
+  sinTrace: boolean; // true si viene de request_id sin trace_id (legacy Claude)
+}
+
 // S10.8 — Registra una acción de IA en el log (para callers que no usan callClaudeIA)
 export async function registrarAccionIA(params: {
   tipoAccion: TipoAccionIA;
@@ -103,13 +113,62 @@ export function agruparRegistros(registros: LogIARow[]): {
   return { grupos, legacy };
 }
 
+// Agrupación unificada: por trace_id (metadata) primero, luego por request_id, luego legacy sueltos
+export function agruparEventos(registros: LogIARow[]): {
+  eventos: EventoLogIA[];
+  legacy: LogIARow[];
+} {
+  const legacy: LogIARow[] = [];
+  const mapaTrace = new Map<string, { claude: LogIARow[]; debug: LogIARow[] }>();
+  const tieneTrazaReal = new Set<string>(); // traceIds que vienen de metadata.trace_id
+
+  for (const r of registros) {
+    const traceId = (r.metadata as Record<string, unknown> | null)?.trace_id as string | undefined;
+
+    if (traceId) {
+      if (!mapaTrace.has(traceId)) mapaTrace.set(traceId, { claude: [], debug: [] });
+      tieneTrazaReal.add(traceId);
+      const entry = mapaTrace.get(traceId)!;
+      if (r.request_id) entry.claude.push(r);
+      else              entry.debug.push(r);
+    } else if (r.request_id) {
+      // grupo Claude sin trace_id (logs previos a la migración)
+      if (!mapaTrace.has(r.request_id)) mapaTrace.set(r.request_id, { claude: [], debug: [] });
+      mapaTrace.get(r.request_id)!.claude.push(r);
+    } else {
+      legacy.push(r);
+    }
+  }
+
+  const by = (a: LogIARow, b: LogIARow) =>
+    new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+
+  const eventos: EventoLogIA[] = [];
+  for (const [traceId, { claude, debug }] of mapaTrace) {
+    const sorted = [...claude, ...debug].sort(by);
+    const first  = sorted[0];
+    eventos.push({
+      traceId,
+      tipo_accion: first?.tipo_accion ?? "?",
+      timestamp:   first?.created_at  ?? new Date().toISOString(),
+      claudeLogs:  claude.sort(by),
+      debugLogs:   debug.sort(by),
+      sinTrace:    !tieneTrazaReal.has(traceId),
+    });
+  }
+
+  eventos.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return { eventos, legacy };
+}
+
 // Escribe un log de depuración en log_ia para trazar pasos post-Claude
 // (parse, cooldown, inserts). Usar void para no-críticos, await en catch blocks.
 export async function logDebugIA(
   tipoAccion: string,
   paso: string,
   metadata: Record<string, unknown> = {},
-  fase: "debug" | "warn" | "error" = "debug"
+  fase: "debug" | "warn" | "error" = "debug",
+  traceId?: string
 ): Promise<void> {
   try {
     const supabase = createServiceClient();
@@ -118,7 +177,7 @@ export async function logDebugIA(
       lead_id:     null,
       fase,
       resultado:   paso.slice(0, 400),
-      metadata,
+      metadata:    traceId ? { ...metadata, trace_id: traceId } : metadata,
     });
     if (error) console.error("[logDebugIA]", error.message);
   } catch (err) {

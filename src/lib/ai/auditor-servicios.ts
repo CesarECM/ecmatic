@@ -2,6 +2,7 @@
 // crear, editar, unir, separar o eliminar servicios.
 // Se dispara fire-and-forget en cada operación CRUD sobre un servicio.
 
+import { randomUUID } from "crypto";
 import { callClaudeIA } from "./client";
 import { logDebugIA } from "@/services/log-ia";
 import type { Servicio } from "@/services/servicios";
@@ -27,6 +28,7 @@ export async function auditarServicio(
   catalogo: ServicioResumen[],
   tipo_cambio: TipoCambioServicio
 ): Promise<SugerenciaAuditorServicio[]> {
+  const traceId = randomUUID();
   const otros = catalogo.filter(s => s.id !== servicio.id);
 
   const systemPrompt = `Eres el Auditor de Servicios de ECMatic, un CRM para un centro de certificación CONOCER en México.
@@ -72,17 +74,17 @@ ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
-    });
+    }, { traceId });
     raw = (resp.content[0] as { text: string }).text.trim();
     if (resp.stop_reason === "max_tokens") {
       void logDebugIA("AUDITOR_SERVICIO", `[MAX_TOKENS] Respuesta truncada — JSON probablemente inválido`, {
         stop_reason: resp.stop_reason, raw_tail: raw.slice(-200), servicio_id: servicio.id,
-      }, "warn");
+      }, "warn", traceId);
     }
   } catch (err) {
     await logDebugIA("AUDITOR_SERVICIO", `[CLAUDE_ERROR] callClaudeIA falló: ${String(err)}`, {
       error: String(err), servicio_id: servicio.id, tipo_cambio,
-    }, "error");
+    }, "error", traceId);
     return [];
   }
 
@@ -95,19 +97,19 @@ ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("
     raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length,
     raw_total: raw.length, extra_chars: raw.length - cleaned.length,
     servicio_id: servicio.id,
-  });
+  }, "debug", traceId);
 
   try {
     const json = JSON.parse(cleaned) as { sugerencias: SugerenciaAuditorServicio[] };
     const count = json.sugerencias?.length ?? 0;
     void logDebugIA("AUDITOR_SERVICIO", `[PARSE_OK] ${count} sugerencias`, {
       count, titulos: (json.sugerencias ?? []).map(s => s.titulo),
-    });
+    }, "debug", traceId);
     return json.sugerencias ?? [];
   } catch (err) {
     await logDebugIA("AUDITOR_SERVICIO", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
       raw_preview: cleaned.slice(0, 600), error: String(err), servicio_id: servicio.id,
-    }, "error");
+    }, "error", traceId);
     return [];
   }
 }

@@ -42,12 +42,13 @@ export async function callClaudeIA(
   tarea: TareaIA,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: Record<string, any>,
-  meta?: { leadId?: string }
+  meta?: { leadId?: string; traceId?: string }
 ): Promise<Anthropic.Message> {
   const model     = modeloPorTarea(tarea);
   const inicio    = Date.now();
   const requestId = randomUUID();
   const leadId    = meta?.leadId ?? null;
+  const traceId   = meta?.traceId;
 
   const systemRaw = typeof params.system === "string" ? params.system : "";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,6 +68,7 @@ export async function callClaudeIA(
       messages_count:        msgs.length,
       system_prompt_extract: systemRaw.slice(0, 500),
       tarea,
+      ...(traceId ? { trace_id: traceId } : {}),
     },
   });
 
@@ -80,6 +82,7 @@ export async function callClaudeIA(
       max_tokens:      params.max_tokens ?? null,
       chars_total_est: charsEst,
       messages_count:  msgs.length,
+      ...(traceId ? { trace_id: traceId } : {}),
     },
   });
 
@@ -106,6 +109,7 @@ export async function callClaudeIA(
       metadata: {
         model, duracion_ms: durMs,
         error_message: err instanceof Error ? err.message : String(err),
+        ...(traceId ? { trace_id: traceId } : {}),
       },
     });
     throw err;
@@ -124,6 +128,7 @@ export async function callClaudeIA(
       tokens_output: response.usage.output_tokens,
       duracion_ms:   Date.now() - inicio,
       stop_reason:   response.stop_reason,
+      ...(traceId ? { trace_id: traceId } : {}),
     },
   });
 

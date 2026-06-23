@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { callClaudeIA } from "./client";
 import { logDebugIA } from "@/services/log-ia";
 import type { Pipeline } from "@/services/pipelines-admin";
@@ -53,6 +54,7 @@ Responde SOLO en JSON con este formato:
 }
 Si no hay sugerencias, responde: {"sugerencias": []}`;
 
+  const traceId = randomUUID();
   const etapasSummary = etapas.map((e) => ({
     nombre:            e.nombre,
     orden:             e.orden,
@@ -89,17 +91,17 @@ ${JSON.stringify(etapasSummary, null, 2)}`;
       max_tokens: 3000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
-    });
+    }, { traceId });
     raw = (resp.content[0] as { text: string }).text.trim();
     if (resp.stop_reason === "max_tokens") {
       void logDebugIA("AUDITOR_PIPELINE", `[MAX_TOKENS] Respuesta truncada — JSON probablemente inválido`, {
         stop_reason: resp.stop_reason, raw_tail: raw.slice(-200), pipeline_ruta: pipeline.ruta,
-      }, "warn");
+      }, "warn", traceId);
     }
   } catch (err) {
     await logDebugIA("AUDITOR_PIPELINE", `[CLAUDE_ERROR] callClaudeIA falló: ${String(err)}`, {
       error: String(err), pipeline_ruta: pipeline.ruta, tipoCambio,
-    }, "error");
+    }, "error", traceId);
     return [];
   }
 
@@ -112,19 +114,19 @@ ${JSON.stringify(etapasSummary, null, 2)}`;
     raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length,
     raw_total: raw.length, extra_chars: raw.length - cleaned.length,
     pipeline_ruta: pipeline.ruta,
-  });
+  }, "debug", traceId);
 
   try {
     const json = JSON.parse(cleaned) as { sugerencias: SugerenciaPipeline[] };
     const count = json.sugerencias?.length ?? 0;
     void logDebugIA("AUDITOR_PIPELINE", `[PARSE_OK] ${count} sugerencias`, {
       count, titulos: (json.sugerencias ?? []).map(s => s.titulo),
-    });
+    }, "debug", traceId);
     return json.sugerencias ?? [];
   } catch (err) {
     await logDebugIA("AUDITOR_PIPELINE", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
       raw_preview: cleaned.slice(0, 600), error: String(err), pipeline_ruta: pipeline.ruta,
-    }, "error");
+    }, "error", traceId);
     return [];
   }
 }
