@@ -40,9 +40,32 @@ export async function buscarRecursos(query: string, limitePorPool = 3): Promise<
     supabase.rpc("buscar_servicios",  { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
   ]);
 
+  let servicios = (svcRes.data ?? []) as RecursoKB[];
+
+  // Fallback de texto: nombres de marca propios no embedan bien — si el vector search
+  // no encuentra nada, buscar por palabras del query en titulo y contenido.
+  if (servicios.length === 0) {
+    const palabras = query.trim().split(/\s+/).filter(p => p.length > 3);
+    if (palabras.length > 0) {
+      const orClause = palabras.flatMap(p =>
+        [`titulo.ilike.%${p}%`, `contenido.ilike.%${p}%`, `caracteristicas.ilike.%${p}%`]
+      ).join(",");
+      const { data: textData } = await supabase
+        .from("servicios")
+        .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es")
+        .eq("activo", true).eq("aprobado", true)
+        .or(orClause)
+        .limit(limitePorPool);
+      if (textData?.length) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        servicios = (textData as any[]).map(r => ({ ...r, tipo: "servicio" }));
+      }
+    }
+  }
+
   return {
-    servicios: (svcRes.data ?? []) as RecursoKB[],
-    kb:        (kbRes.data  ?? []) as RecursoKB[],
+    servicios,
+    kb: (kbRes.data ?? []) as RecursoKB[],
   };
 }
 
