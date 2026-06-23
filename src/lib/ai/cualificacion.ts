@@ -1,6 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export interface ResultadoCualificacion {
   califica: boolean;
@@ -53,14 +51,11 @@ Reglas:
 - El mensaje de despedida debe ser humano, empático, nunca condescendiente`;
 
   try {
-    const response = await anthropic.messages.create({
-      model: modeloPorTarea("CUALIFICACION"),
+    const response = await callClaudeIA("CUALIFICACION", {
       max_tokens: 300,
       system: "Eres un experto en cualificación de leads para procesos de certificación profesional en México. Responde SOLO en JSON.",
       messages: [{ role: "user", content: prompt }],
     });
-
-    void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
     const texto = (response.content[0] as { text: string }).text.trim();
     const json = JSON.parse(texto.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {

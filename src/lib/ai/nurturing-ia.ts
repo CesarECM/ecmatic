@@ -1,9 +1,7 @@
 // S20.7 — Analiza el rendimiento de secuencias de nurturing y propone ajustes continuos.
 // Entrada: tabla de métricas por secuencia. Salida: ajustes sugeridos en JSON.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export interface MetricaSecuencia {
   id:                string;
@@ -55,15 +53,11 @@ export async function analizarRendimientoNurturing(
     `tasa:${(m.tasa_respuesta * 100).toFixed(1)}%`
   ).join("\n");
 
-  const modelo = modeloPorTarea("ANALISIS");
-  const response = await anthropic.messages.create({
-    model:      modelo,
+  const response = await callClaudeIA("ANALISIS", {
     max_tokens: 800,
     system:     SYSTEM,
     messages:   [{ role: "user", content: `MÉTRICAS DE SECUENCIAS:\n${tabla}` }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   try {
     const texto = (response.content[0] as { text: string }).text.trim();

@@ -2,9 +2,7 @@
 // Una señal es un dato contextual (evento, fecha, tercero, urgencia)
 // que puede cambiar la estrategia de comunicación de la IA.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export type TipoSenal =
   | "evento"
@@ -53,18 +51,13 @@ export async function detectarSenalesSituacionales(
     .map((m) => `[${m.direccion === "entrante" ? "LEAD" : "ECM"}] ${m.contenido}`)
     .join("\n");
 
-  const modelo = modeloPorTarea("SENALES");
-
-  const response = await anthropic.messages.create({
-    model: modelo,
+  const response = await callClaudeIA("SENALES", {
     max_tokens: 800,
     messages: [
       { role: "user", content: `Conversación:\n${dialogo.slice(0, 5000)}` },
     ],
     system: SYSTEM,
   });
-
-  void registrarUsoIA("anthropic", response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0).catch(() => {});
 
   const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "[]";
 

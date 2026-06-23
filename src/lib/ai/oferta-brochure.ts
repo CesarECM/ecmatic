@@ -1,9 +1,7 @@
 // S24.3 — Genera el mensaje WhatsApp que ofrece un brochure al lead.
 // Tono: informativo, sin presión, enmarcado como material de consulta.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 interface ContextoOfertaBrochure {
   nombreLead: string | null;
@@ -34,14 +32,11 @@ Fase CAGC del comprador: ${ctx.faseCAGC}
 
 Genera el mensaje de oferta ahora.`;
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("LEADMAGNET"),
+  const response = await callClaudeIA("LEADMAGNET", {
     max_tokens: 120,
     system: SYSTEM,
     messages: [{ role: "user", content: userContent }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   return ((response.content[0] as { text: string }).text ?? "").trim();
 }

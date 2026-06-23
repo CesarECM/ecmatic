@@ -1,9 +1,7 @@
 // S20.2 — Genera el mensaje WhatsApp que ofrece un leadmagnet al lead.
 // Tono: amigable, sin presión, enmarcado como recurso gratuito de valor.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 import type { TipoLeadmagnet } from "@/lib/supabase/types";
 
 interface ContextoOfertaLeadmagnet {
@@ -35,15 +33,11 @@ Fase CAGC del comprador: ${ctx.faseCAGC}
 
 Genera el mensaje de oferta ahora.`;
 
-  const modelo = modeloPorTarea("LEADMAGNET");
-  const response = await anthropic.messages.create({
-    model: modelo,
+  const response = await callClaudeIA("LEADMAGNET", {
     max_tokens: 120,
     system: SYSTEM,
     messages: [{ role: "user", content: userContent }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   return ((response.content[0] as { text: string }).text ?? "").trim();
 }

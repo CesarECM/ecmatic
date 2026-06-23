@@ -1,6 +1,5 @@
 // S23.5 — Genera sugerencias en cola de aprobación al crear un servicio nuevo
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 
 interface SugerenciaPaquete {
@@ -15,8 +14,7 @@ async function generarSugerencias(
   tituloServicio: string,
   contenidoServicio: string
 ): Promise<SugerenciaPaquete[]> {
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("PAQUETE_SERVICIO"),
+  const response = await callClaudeIA("PAQUETE_SERVICIO", {
     max_tokens: 600,
     system: `Eres el motor de configuración de ECMatic. Al registrarse un nuevo servicio de certificación CONOCER, generas 3 sugerencias concretas para el admin:
 1. Pipeline / rama CAGC: qué fases del comprador (0-16) son más relevantes para este servicio y qué etapas de pipeline crear.

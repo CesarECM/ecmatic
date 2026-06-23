@@ -2,9 +2,7 @@
 // Tono profesional-resolutivo: reconoce la situación, presenta la solución,
 // propone un paso concreto. Optimizado para WhatsApp (≤ 3 oraciones).
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 import type { SenalGuardada } from "@/services/senales-situacionales";
 
 interface ContextoOferta {
@@ -52,15 +50,11 @@ ${ctx.brandLinea}
 
 Genera el mensaje WhatsApp consultivo ahora.`;
 
-  const modelo = modeloPorTarea("RESPUESTA");
-  const response = await anthropic.messages.create({
-    model: modelo,
+  const response = await callClaudeIA("RESPUESTA", {
     max_tokens: 200,
     system: SYSTEM,
     messages: [{ role: "user", content: userContent }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   return ((response.content[0] as { text: string }).text ?? "").trim();
 }

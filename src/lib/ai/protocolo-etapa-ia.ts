@@ -1,5 +1,4 @@
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 
 interface SugerenciaProtocolo {
   reglaAvance: string;
@@ -42,8 +41,7 @@ Responde SOLO en JSON con este formato exacto:
 }`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("ANALISIS"),
+    const res = await callClaudeIA("ANALISIS", {
       max_tokens: 400,
       messages: [{ role: "user", content: prompt }],
     });

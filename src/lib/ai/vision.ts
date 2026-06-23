@@ -1,7 +1,5 @@
 // S18.1 — Clasificación de imágenes entrantes con Claude Vision
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export type ClasificacionImagen = "comprobante" | "documento" | "otro";
 
@@ -40,8 +38,7 @@ export async function clasificarImagen(
 
   const base64 = buffer.toString("base64");
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("VISION"),
+  const response = await callClaudeIA("VISION", {
     max_tokens: 20,
     messages: [
       {
@@ -67,8 +64,6 @@ Responde ÚNICAMENTE con una palabra: comprobante, documento, u otro.`,
       },
     ],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   const raw = (response.content[0] as { text: string }).text.trim().toLowerCase();
   const tipo: ClasificacionImagen =

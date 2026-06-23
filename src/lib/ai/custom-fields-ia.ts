@@ -1,9 +1,7 @@
 // S20.6 — Detecta patrones de datos en conversaciones que no tienen campo propio en el CRM.
 // Analiza muestras de múltiples leads y propone custom fields a capturar.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export interface CampoSugerido {
   nombre_campo: string;   // snake_case, ej. "empresa_empleadora"
@@ -44,15 +42,11 @@ export async function detectarCustomFieldsSugeridos(
   const userContent = `MUESTRAS DE CONVERSACIONES (${muestrasConversacion.length} leads distintos):\n\n` +
     muestrasConversacion.map((m, i) => `--- Lead ${i + 1} ---\n${m}`).join("\n\n");
 
-  const modelo = modeloPorTarea("ANALISIS");
-  const response = await anthropic.messages.create({
-    model:      modelo,
+  const response = await callClaudeIA("ANALISIS", {
     max_tokens: 600,
     system:     SYSTEM,
     messages:   [{ role: "user", content: userContent }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   try {
     const texto = (response.content[0] as { text: string }).text.trim();

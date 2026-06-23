@@ -1,9 +1,7 @@
 // S24.4 — Detecta servicios sin brochure que el patrón de conversaciones justifica crear.
 // Recibe servicios candidatos + muestra de conversaciones recientes y devuelve cuáles necesitan brochure.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export interface ServicioCandidato {
   id: string;
@@ -51,14 +49,11 @@ ${muestrasConversacion.map((m, i) => `--- Lead ${i + 1} ---\n${m}`).join("\n\n")
 
 ¿Cuáles de estos servicios necesitan un brochure basándote en las conversaciones?`;
 
-  const response = await anthropic.messages.create({
-    model:      modeloPorTarea("ANALISIS"),
+  const response = await callClaudeIA("ANALISIS", {
     max_tokens: 500,
     system:     SYSTEM,
     messages:   [{ role: "user", content: userContent }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   try {
     const texto = (response.content[0] as { text: string }).text.trim();

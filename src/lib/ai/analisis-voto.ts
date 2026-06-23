@@ -1,9 +1,7 @@
 // S21.2 — Analiza una respuesta IA marcada como "mala" por el admin
 // e identifica qué mejorar en KB, matriz nD o comportamiento de pipeline.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "./client";
 
 export interface SugerenciaVoto {
   area:        "kb" | "matriz" | "pipeline";
@@ -45,15 +43,11 @@ export async function analizarVotoNegativo(
     ctx.intencion ? `Intención detectada: ${ctx.intencion}` : "",
   ].filter(Boolean).join("\n\n");
 
-  const modelo = modeloPorTarea("ANALISIS");
-  const response = await anthropic.messages.create({
-    model:      modelo,
+  const response = await callClaudeIA("ANALISIS", {
     max_tokens: 500,
     system:     SYSTEM,
     messages:   [{ role: "user", content: userContent }],
   });
-
-  void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
   try {
     const texto = (response.content[0] as { text: string }).text.trim();

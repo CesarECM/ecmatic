@@ -1,8 +1,7 @@
 // S33.3 — Generador de Brief de Diseño para assets faltantes.
 // Trigger: auditoría de assets detecta que un servicio carece de imagen para un canal.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 
 export type CanalImagen = "whatsapp" | "email" | "landing";
 
@@ -26,8 +25,7 @@ export async function generarBriefDiseno(
   contenidoServicio: string,
   canal: CanalImagen
 ): Promise<BriefDiseno> {
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("BRIEF_DISENO"),
+  const response = await callClaudeIA("BRIEF_DISENO", {
     max_tokens: 500,
     system: `Eres el director creativo de ECMatic, CRM para certificaciones CONOCER en México.
 Generas briefs de diseño precisos para assets digitales de marketing de servicios de certificación.

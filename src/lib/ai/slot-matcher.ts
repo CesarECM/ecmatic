@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import type { SlotDisponible } from "@/services/citas";
 
 // Usa haiku para detectar cuál slot eligió el lead según su mensaje
@@ -16,8 +15,7 @@ export async function detectarSlotSeleccionado(
     return `${i + 1}. ${fecha} a las ${hora} (hora del Centro de México)`;
   }).join("\n");
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("CLASIFICAR"),
+  const response = await callClaudeIA("CLASIFICAR", {
     max_tokens: 5,
     system: `El usuario seleccionó un horario de una lista. Responde SOLO con el número (1, 2 o 3) del horario elegido, o "0" si no eligió ninguno con claridad.
 
