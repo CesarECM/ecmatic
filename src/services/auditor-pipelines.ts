@@ -75,6 +75,7 @@ export async function dispararAuditoriaPipeline(
         }, "warn");
       }
 
+      // pipeline_ruta siempre viene del parámetro real — no de Claude (Claude puede generarlo mal)
       const { error: insertError } = await db().from("sugerencias_ia").insert({
         tipo:        "general",
         titulo:      sug.titulo,
@@ -85,9 +86,10 @@ export async function dispararAuditoriaPipeline(
           categoria:     "auditor_pipeline",
           accion:        sug.accion,
           urgencia:      sug.urgencia,
-          pipeline_ruta: sug.pipeline_ruta,
+          pipeline_ruta: pipelineRuta,
           etapa_nombre:  sug.etapa_nombre ?? null,
           tipo_cambio:   tipoCambio,
+          claude_ruta:   sug.pipeline_ruta,
         },
       });
 
@@ -100,8 +102,9 @@ export async function dispararAuditoriaPipeline(
           message: insertError.message,
         }, "error");
       } else {
-        void logDebugIA("AUDITOR_PIPELINE", `[INSERT_OK] Sugerencia guardada: "${sug.titulo}"`, {
+        void logDebugIA("AUDITOR_PIPELINE", `[INSERT_OK] "${sug.titulo}" | pipeline_ruta=${pipelineRuta}`, {
           titulo: sug.titulo, accion: sug.accion, urgencia: sug.urgencia,
+          pipeline_ruta: pipelineRuta, claude_ruta_original: sug.pipeline_ruta,
         });
       }
     }
