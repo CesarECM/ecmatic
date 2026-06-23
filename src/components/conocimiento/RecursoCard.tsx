@@ -15,6 +15,7 @@ import {
   restaurarVersionAction,
   eliminarRecursoAction,
 } from "@/app/(dashboard)/admin/conocimiento/actions";
+import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 
 type Version = { titulo: string; contenido: string; fecha: string };
 
@@ -140,9 +141,12 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
               <span className="text-xs text-muted-foreground">{versiones.length}v</span>
             )}
           </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            score {(r.score_confianza * 100).toFixed(0)}% · {r.score_uso} usos
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              score {(r.score_confianza * 100).toFixed(0)}% · {r.score_uso} usos
+            </span>
+            <AuditorIABtn tipo="kb" id={r.id} nombre={r.titulo} />
+          </div>
         </div>
         <CardTitle
           className="text-sm font-medium cursor-pointer hover:text-primary"

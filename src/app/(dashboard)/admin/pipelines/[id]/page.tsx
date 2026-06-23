@@ -6,6 +6,7 @@ import { listarEtapasAdmin } from "@/services/etapas-admin";
 import { EtapaCard } from "@/components/pipelines/etapa-card";
 import { NuevaEtapaForm } from "./NuevaEtapaForm";
 import { EditarPipelineForm } from "./EditarPipelineForm";
+import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 
 export const revalidate = 0;
 
@@ -64,7 +65,10 @@ export default async function PipelineDetallePage({ params }: Props) {
             )}
           </div>
         </div>
-        <EditarPipelineForm pipeline={pipeline} />
+        <div className="flex items-center gap-2">
+          <AuditorIABtn tipo="pipeline" id={pipeline.ruta} nombre={pipeline.nombre} />
+          <EditarPipelineForm pipeline={pipeline} />
+        </div>
       </div>
 
       {/* Alerta de etapas incompletas */}

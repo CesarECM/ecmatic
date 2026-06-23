@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EtapaForm } from "./etapa-form";
 import { actualizarEtapaAction, eliminarEtapaAction } from "@/app/(dashboard)/admin/pipelines/actions";
 import type { EtapaAdmin, ActualizarEtapaInput } from "@/services/etapas-admin";
+import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 
 interface Props {
   etapa: EtapaAdmin;
@@ -55,7 +56,8 @@ export function EtapaCard({ etapa, todasEtapas, pipelineId, ruta }: Props) {
             </div>
           </div>
         </div>
-        <div className="flex gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          <AuditorIABtn tipo="etapa" id={etapa.id} nombre={etapa.nombre} />
           <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)} className="text-xs h-7 px-2">
             {editando ? "Cerrar" : "Editar"}
           </Button>

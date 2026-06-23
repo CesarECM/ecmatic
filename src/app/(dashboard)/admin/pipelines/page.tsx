@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { listarPipelines } from "@/services/pipelines-admin";
 import { NuevoPipelineForm } from "./NuevoPipelineForm";
+import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const metadata = { title: "Pipelines · ECMatic" };
 export const revalidate = 0;
@@ -20,7 +22,23 @@ function faseBadge(n: number | null) {
 }
 
 export default async function PipelinesPage() {
-  const pipelines = await listarPipelines();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createServiceClient() as any;
+
+  const [pipelines, { data: sugerencias }] = await Promise.all([
+    listarPipelines(),
+    supabase
+      .from("sugerencias_ia")
+      .select("metadata")
+      .eq("categoria", "auditor_pipeline")
+      .is("aprobado", null),
+  ]);
+
+  const pendientesPorRuta = new Map<string, number>();
+  (sugerencias ?? []).forEach((s: { metadata: Record<string, unknown> }) => {
+    const ruta = s.metadata?.pipeline_ruta as string | undefined;
+    if (ruta) pendientesPorRuta.set(ruta, (pendientesPorRuta.get(ruta) ?? 0) + 1);
+  });
 
   return (
     <div className="space-y-5">
@@ -44,45 +62,54 @@ export default async function PipelinesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {pipelines.map((p) => (
-          <Link
-            key={p.id}
-            href={`/admin/pipelines/${p.id}`}
-            className="block rounded-lg border bg-card p-4 hover:border-primary/40 hover:shadow-sm transition-all space-y-3"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="font-medium text-sm leading-snug">{p.nombre}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                  {p.descripcion ?? "Sin descripción"}
-                </p>
+          <div key={p.id} className="relative">
+            <Link
+              href={`/admin/pipelines/${p.id}`}
+              className="block rounded-lg border bg-card p-4 pr-10 hover:border-primary/40 hover:shadow-sm transition-all space-y-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-medium text-sm leading-snug">{p.nombre}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                    {p.descripcion ?? "Sin descripción"}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0 mr-1">
+                  <Badge variant={p.tipo === "tronco" ? "default" : "secondary"} className="text-xs">
+                    {p.tipo}
+                  </Badge>
+                  {!p.activo && <Badge variant="outline" className="text-xs">Inactivo</Badge>}
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <Badge variant={p.tipo === "tronco" ? "default" : "secondary"} className="text-xs">
-                  {p.tipo}
-                </Badge>
-                {!p.activo && <Badge variant="outline" className="text-xs">Inactivo</Badge>}
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-md bg-muted/50 p-2">
-                <p className="text-muted-foreground mb-0.5">Fase inicio</p>
-                <p className="font-medium truncate">{faseBadge(p.fase_cagc_inicio)}</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md bg-muted/50 p-2">
+                  <p className="text-muted-foreground mb-0.5">Fase inicio</p>
+                  <p className="font-medium truncate">{faseBadge(p.fase_cagc_inicio)}</p>
+                </div>
+                <div className="rounded-md bg-muted/50 p-2">
+                  <p className="text-muted-foreground mb-0.5">Fase fin</p>
+                  <p className="font-medium truncate">{faseBadge(p.fase_cagc_fin)}</p>
+                </div>
               </div>
-              <div className="rounded-md bg-muted/50 p-2">
-                <p className="text-muted-foreground mb-0.5">Fase fin</p>
-                <p className="font-medium truncate">{faseBadge(p.fase_cagc_fin)}</p>
-              </div>
-            </div>
 
-            <div className="flex gap-3 text-xs text-muted-foreground border-t pt-2">
-              <span>🔀 {p.total_etapas} etapas</span>
-              <span>·</span>
-              <span>👥 {p.leads_activos} leads activos</span>
-              <span>·</span>
-              <span className="truncate font-mono text-[10px]">{p.ruta}</span>
-            </div>
-          </Link>
+              <div className="flex gap-3 text-xs text-muted-foreground border-t pt-2">
+                <span>🔀 {p.total_etapas} etapas</span>
+                <span>·</span>
+                <span>👥 {p.leads_activos} leads activos</span>
+                <span>·</span>
+                <span className="truncate font-mono text-[10px]">{p.ruta}</span>
+              </div>
+            </Link>
+
+            <AuditorIABtn
+              tipo="pipeline"
+              id={p.ruta}
+              nombre={p.nombre}
+              pendientesIniciales={pendientesPorRuta.get(p.ruta) ?? 0}
+              className="absolute top-2 right-2 z-10"
+            />
+          </div>
         ))}
       </div>
     </div>

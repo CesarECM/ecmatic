@@ -9,6 +9,7 @@ import { ContextoLead } from "@/components/leads/contexto-lead";
 import { FacturacionCard } from "@/components/leads/facturacion-card";
 import type { EntradaContexto } from "@/lib/supabase/types";
 import { ScoreSaludHistorial } from "@/components/leads/score-salud-historial";
+import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 
 type EntradaScoreHistorial = { score: number; timestamp: string };
 
@@ -51,7 +52,14 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
       <div className="flex items-start gap-3">
         <a href="/admin/leads" className="text-muted-foreground hover:text-foreground text-sm mt-1">← Leads</a>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{lead.nombre ?? lead.telefono ?? "Sin nombre"}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{lead.nombre ?? lead.telefono ?? "Sin nombre"}</h1>
+            <AuditorIABtn
+              tipo="lead"
+              id={lead.id}
+              nombre={lead.nombre ?? lead.telefono ?? "Este lead"}
+            />
+          </div>
           <div className="flex gap-2 mt-1 flex-wrap">
             <Badge>{lead.pipeline_stage}</Badge>
             <Badge variant="secondary">{lead.pipeline_ruta}</Badge>
