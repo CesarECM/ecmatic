@@ -35,11 +35,13 @@ Responde SOLO en JSON con este formato exacto:
   });
 
   const raw = (response.content[0] as { text: string }).text.trim();
-  void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_INICIO] ${raw.length} chars: ${raw.slice(0, 120)}`, {
-    raw_preview: raw.slice(0, 600), raw_length: raw.length, servicio: tituloServicio,
+  // Claude a veces envuelve el JSON en ```json ... ``` — limpiar antes de parsear
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_INICIO] ${cleaned.length} chars: ${cleaned.slice(0, 120)}`, {
+    raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length, tenia_backticks: raw !== cleaned, servicio: tituloServicio,
   });
   try {
-    const items = JSON.parse(raw) as Array<{
+    const items = JSON.parse(cleaned) as Array<{
       tipo: "pipeline" | "general";
       titulo: string;
       descripcion: string;
@@ -56,7 +58,7 @@ Responde SOLO en JSON con este formato exacto:
     }));
   } catch (err) {
     await logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
-      raw_preview: raw.slice(0, 600), error: String(err),
+      raw_preview: cleaned.slice(0, 600), error: String(err),
     }, "error");
     return [];
   }

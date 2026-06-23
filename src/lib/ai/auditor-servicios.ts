@@ -81,12 +81,15 @@ ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("
     return [];
   }
 
-  void logDebugIA("AUDITOR_SERVICIO", `[PARSE_INICIO] ${raw.length} chars: ${raw.slice(0, 120)}`, {
-    raw_preview: raw.slice(0, 600), raw_length: raw.length, servicio_id: servicio.id,
+  // Claude a veces envuelve el JSON en ```json ... ``` — limpiar antes de parsear
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+  void logDebugIA("AUDITOR_SERVICIO", `[PARSE_INICIO] ${cleaned.length} chars: ${cleaned.slice(0, 120)}`, {
+    raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length, tenia_backticks: raw !== cleaned, servicio_id: servicio.id,
   });
 
   try {
-    const json = JSON.parse(raw) as { sugerencias: SugerenciaAuditorServicio[] };
+    const json = JSON.parse(cleaned) as { sugerencias: SugerenciaAuditorServicio[] };
     const count = json.sugerencias?.length ?? 0;
     void logDebugIA("AUDITOR_SERVICIO", `[PARSE_OK] ${count} sugerencias`, {
       count, titulos: (json.sugerencias ?? []).map(s => s.titulo),
@@ -94,7 +97,7 @@ ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("
     return json.sugerencias ?? [];
   } catch (err) {
     await logDebugIA("AUDITOR_SERVICIO", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
-      raw_preview: raw.slice(0, 600), error: String(err), servicio_id: servicio.id,
+      raw_preview: cleaned.slice(0, 600), error: String(err), servicio_id: servicio.id,
     }, "error");
     return [];
   }

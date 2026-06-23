@@ -98,12 +98,15 @@ ${JSON.stringify(etapasSummary, null, 2)}`;
     return [];
   }
 
-  void logDebugIA("AUDITOR_PIPELINE", `[PARSE_INICIO] ${raw.length} chars: ${raw.slice(0, 120)}`, {
-    raw_preview: raw.slice(0, 600), raw_length: raw.length, pipeline_ruta: pipeline.ruta,
+  // Claude a veces envuelve el JSON en ```json ... ``` — limpiar antes de parsear
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+  void logDebugIA("AUDITOR_PIPELINE", `[PARSE_INICIO] ${cleaned.length} chars: ${cleaned.slice(0, 120)}`, {
+    raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length, tenia_backticks: raw !== cleaned, pipeline_ruta: pipeline.ruta,
   });
 
   try {
-    const json = JSON.parse(raw) as { sugerencias: SugerenciaPipeline[] };
+    const json = JSON.parse(cleaned) as { sugerencias: SugerenciaPipeline[] };
     const count = json.sugerencias?.length ?? 0;
     void logDebugIA("AUDITOR_PIPELINE", `[PARSE_OK] ${count} sugerencias`, {
       count, titulos: (json.sugerencias ?? []).map(s => s.titulo),
@@ -111,7 +114,7 @@ ${JSON.stringify(etapasSummary, null, 2)}`;
     return json.sugerencias ?? [];
   } catch (err) {
     await logDebugIA("AUDITOR_PIPELINE", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
-      raw_preview: raw.slice(0, 600), error: String(err), pipeline_ruta: pipeline.ruta,
+      raw_preview: cleaned.slice(0, 600), error: String(err), pipeline_ruta: pipeline.ruta,
     }, "error");
     return [];
   }
