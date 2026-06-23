@@ -1,6 +1,7 @@
 // S34.3 — CRON diario 7am: ejecuta pasos de secuencias de prospección omnicanal.
 import { NextRequest, NextResponse } from "next/server";
 import { ejecutarSecuencias } from "@/services/prospeccion-secuencial";
+import { registrarEjecucionCron } from "@/services/cron-log";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const resultado = await ejecutarSecuencias();
+    await registrarEjecucionCron("ejecutar-prospeccion-secuencial", resultado).catch(() => {});
     return NextResponse.json(resultado);
   } catch (err) {
     return NextResponse.json(

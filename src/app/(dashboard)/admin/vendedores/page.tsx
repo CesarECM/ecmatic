@@ -5,6 +5,7 @@ import { isConfigured } from "@/lib/google/calendar";
 import { PesoInput } from "@/components/vendedores/peso-input";
 import { AgregarVendedorBtn } from "@/components/vendedores/agregar-vendedor-btn";
 import { ReenviarBtn } from "@/components/vendedores/reenviar-btn";
+import { AsignacionOptimaCard } from "./AsignacionOptimaCard";
 
 export const revalidate = 0;
 
@@ -51,6 +52,14 @@ export default async function VendedoresPage() {
   }
 
   const googleOk = isConfigured();
+
+  // Leads sin vendedor para la card de asignación óptima
+  const { data: leadsSinVendedor } = await supabase
+    .from("leads")
+    .select("id, nombre, telefono")
+    .eq("activo", true)
+    .is("vendedor_id", null)
+    .limit(20);
 
   // Métricas — falla silenciosamente por vendedor si hay error
   const metricas = await Promise.all(
@@ -141,6 +150,12 @@ export default async function VendedoresPage() {
           </tbody>
         </table>
       </div>
+
+      {/* S35.3 — Asignación óptima */}
+      <AsignacionOptimaCard
+        vendedores={(vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre }))}
+        leads={(leadsSinVendedor ?? []).map((l) => ({ id: l.id, nombre: l.nombre, telefono: l.telefono }))}
+      />
     </div>
   );
 }

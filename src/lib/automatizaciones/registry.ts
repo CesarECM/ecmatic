@@ -1,0 +1,63 @@
+// S35.1 — Registro estático de CRONs para el panel /admin/automatizaciones
+export interface DefinicionCron {
+  name: string;       // clave única = nombre en vercel.json
+  label: string;      // nombre legible
+  descripcion: string;
+  schedule: string;   // texto legible del cron
+  path: string;       // endpoint que se dispara
+}
+
+export const CRONS: DefinicionCron[] = [
+  { name: "procesar-cola", label: "Cola de mensajes WA", schedule: "Cada 5 min", path: "/api/admin/procesar-cola",
+    descripcion: "Procesa la cola de mensajes WhatsApp pendientes y los envía via Meta API." },
+  { name: "recordatorios", label: "Recordatorios de citas", schedule: "Cada 30 min", path: "/api/admin/recordatorios",
+    descripcion: "Envía recordatorios de citas a leads y vendedores: 24h, 2h y 30min antes." },
+  { name: "health", label: "Health check", schedule: "Cada 15 min", path: "/api/admin/health",
+    descripcion: "Heartbeat de disponibilidad del sistema." },
+  { name: "polling-templates-wa", label: "Polling templates WA", schedule: "Cada 2h", path: "/api/admin/polling-templates-wa",
+    descripcion: "Consulta Meta y actualiza el estado (PENDING→APPROVED/REJECTED) de los templates WhatsApp enviados." },
+  { name: "nurturing", label: "Nurturing de leads", schedule: "Lun–Vie 8am CDMX", path: "/api/admin/nurturing",
+    descripcion: "Envía mensajes de nurturing a leads activos según sus secuencias configuradas." },
+  { name: "resumen-semanal", label: "Resumen semanal", schedule: "Lunes 8am", path: "/api/admin/resumen-semanal",
+    descripcion: "Genera y envía el resumen semanal de actividad del CRM al administrador." },
+  { name: "gatillos", label: "Gatillos mentales", schedule: "Diario 7am", path: "/api/admin/gatillos",
+    descripcion: "Evalúa y actualiza los gatillos mentales activos (escasez, urgencia, precio)." },
+  { name: "contacto-validador", label: "Validador de contacto", schedule: "Diario 6am", path: "/api/admin/contacto-validador",
+    descripcion: "Detecta leads con tarea activa sin punto de contacto programado y genera alertas." },
+  { name: "ejecutar-prospeccion-secuencial", label: "Prospección secuencial", schedule: "Diario 7am", path: "/api/admin/ejecutar-prospeccion-secuencial",
+    descripcion: "Evalúa y dispara el paso actual (email o WA) de cada contacto en secuencias de prospección omnicanal." },
+  { name: "vendedor-monitor", label: "Monitor de vendedores", schedule: "Diario 1am", path: "/api/admin/vendedor-monitor",
+    descripcion: "Detecta anomalías en el desempeño de vendedores y genera sugerencias de ajuste de peso." },
+  { name: "cerrar-tareas-vencidas", label: "Tareas vencidas", schedule: "Diario 11pm", path: "/api/admin/cerrar-tareas-vencidas",
+    descripcion: "Cierra automáticamente tareas de fondo que llevan más días sin cierre del umbral configurado." },
+  { name: "auditoria-integridad", label: "Auditoría de integridad", schedule: "Diario 11pm", path: "/api/admin/auditoria-integridad",
+    descripcion: "Verifica la cadena completa por lead activo: captura → pipeline → tarea → CAGC → Calendar." },
+  { name: "clustering-sugerencias", label: "Clustering de sugerencias", schedule: "Diario 4am", path: "/api/admin/clustering-sugerencias",
+    descripcion: "Agrupa sugerencias de IA similares en clusters por embeddings coseno ≥ 0.85." },
+  { name: "smartbuilder", label: "Sync SmartBuilderEC", schedule: "Diario 6am", path: "/api/admin/smartbuilder",
+    descripcion: "Sincroniza el avance de candidatos en la plataforma SmartBuilderEC." },
+  { name: "score-salud", label: "Score de salud", schedule: "Domingos 10pm", path: "/api/admin/score-salud",
+    descripcion: "Recalibra los scores de salud de todos los leads activos con el modelo de features ponderadas." },
+  { name: "actualizar-scores-imagen", label: "Scores de imágenes", schedule: "Domingos 6am", path: "/api/admin/actualizar-scores-imagen",
+    descripcion: "Sincroniza pipeline_ab_imagenes → imagenes_servicio actualizando score_conversion, veces_mostrada y veces_respondida." },
+  { name: "archivar-inactivos", label: "Archivar inactivos", schedule: "Domingos 12am", path: "/api/admin/archivar-inactivos",
+    descripcion: "Archiva leads sin actividad en los últimos N días según la ruta (tripwire/premium)." },
+  { name: "pipeline-ab", label: "Test A/B pipeline", schedule: "Lunes 12am", path: "/api/admin/pipeline-ab",
+    descripcion: "Evalúa los tests A/B activos de pipeline, declara ganadores o aplica benchmarks de industria." },
+  { name: "pipeline-detector", label: "Detector de ramas pipeline", schedule: "Lunes 1am", path: "/api/admin/pipeline-detector",
+    descripcion: "Detecta leads elegibles para abrir ramas paralelas en el pipeline según señales CAGC." },
+  { name: "calidad-kb", label: "Calidad de KB", schedule: "Lunes 1am", path: "/api/admin/calidad-kb",
+    descripcion: "Evalúa la calidad de los recursos de la base de conocimiento y sugiere mejoras." },
+  { name: "brochures-scan", label: "Scan de brochures", schedule: "Lunes 2am", path: "/api/admin/brochures-scan",
+    descripcion: "Detecta servicios con uso frecuente sin brochure asociado y genera sugerencias." },
+  { name: "auditoria-assets", label: "Auditoría de assets", schedule: "Lunes 2am", path: "/api/admin/auditoria-assets",
+    descripcion: "Detecta servicios activos sin imagen por canal (WA/Email/Landing) y genera briefs de diseño." },
+  { name: "protocolo-sugerencias", label: "Protocolos de etapa", schedule: "Martes 3am", path: "/api/admin/protocolo-sugerencias",
+    descripcion: "Genera sugerencias de protocolos de avance/retroceso para etapas de pipeline sin regla definida." },
+  { name: "custom-fields-scan", label: "Scan custom fields", schedule: "Miércoles 2am", path: "/api/admin/custom-fields-scan",
+    descripcion: "Analiza conversaciones recientes y sugiere campos personalizados por avatar y canal." },
+  { name: "nurturing-ajustes", label: "Ajustes de nurturing", schedule: "Miércoles 3am", path: "/api/admin/nurturing-ajustes",
+    descripcion: "Propone ajustes a las secuencias de nurturing con base en las tasas de apertura y respuesta." },
+  { name: "auditor-autoaprobacion", label: "Auditor de auto-aprobación", schedule: "Día 1 de cada mes", path: "/api/admin/auditor-autoaprobacion",
+    descripcion: "Evalúa la efectividad del auto-aprobado de sugerencias y ajusta el umbral de similitud ±0.02." },
+];

@@ -183,6 +183,7 @@ export interface Database {
           contexto: string | null;
           contexto_historial: EntradaContexto[];
           contexto_updated_at: string | null;
+          score_salud_historial: { score: number; timestamp: string }[];
           // S31.1 — Protocolo Setter
           setter_fase_actual: number | null;
           setter_calificado: boolean | null;
@@ -213,6 +214,7 @@ export interface Database {
           contexto?: string | null;
           contexto_historial?: EntradaContexto[];
           contexto_updated_at?: string | null;
+          score_salud_historial?: { score: number; timestamp: string }[];
           setter_fase_actual?: number | null;
           setter_calificado?: boolean | null;
           setter_razon_descalificacion?: string | null;
@@ -1122,6 +1124,19 @@ export interface Database {
           orden?: number; activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["etapa_contenido"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      // ── Sprint 35 · cron_log ─────────────────────────────────────
+      cron_log: {
+        Row: {
+          id: string; cron_name: string; ejecutado_at: string;
+          resultado: Record<string, unknown> | null; detalle: string | null;
+        };
+        Insert: {
+          id?: string; cron_name: string; ejecutado_at?: string;
+          resultado?: Record<string, unknown> | null; detalle?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["cron_log"]["Insert"]>;
         Relationships: Relationship[];
       };
       // ── Sprint 34 · Prospección Omnicanal + Templates ────────────

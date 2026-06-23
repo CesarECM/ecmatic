@@ -115,7 +115,19 @@ export async function actualizarScoreSalud(leadId: string): Promise<void> {
   if (!features) return;
 
   const score = calcularScore(features, pesos);
-  await supabase.from("leads").update({ score_salud: score }).eq("id", leadId);
+
+  // S35.5 — Agregar entrada al historial (cap: últimas 90 entradas)
+  const { data: leadActual } = await supabase
+    .from("leads").select("score_salud_historial").eq("id", leadId).maybeSingle();
+  const historial: { score: number; timestamp: string }[] =
+    (leadActual as { score_salud_historial?: unknown })?.score_salud_historial as { score: number; timestamp: string }[] ?? [];
+  historial.push({ score, timestamp: new Date().toISOString() });
+  const historialCap = historial.slice(-90);
+
+  await supabase
+    .from("leads")
+    .update({ score_salud: score, score_salud_historial: historialCap })
+    .eq("id", leadId);
 }
 
 // S30.1 — Recalcula scores de todos los leads activos (para el cron semanal).

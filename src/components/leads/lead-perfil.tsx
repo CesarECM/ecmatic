@@ -8,6 +8,9 @@ import { MensajesLead } from "@/components/leads/mensajes-lead";
 import { ContextoLead } from "@/components/leads/contexto-lead";
 import { FacturacionCard } from "@/components/leads/facturacion-card";
 import type { EntradaContexto } from "@/lib/supabase/types";
+import { ScoreSaludHistorial } from "@/components/leads/score-salud-historial";
+
+type EntradaScoreHistorial = { score: number; timestamp: string };
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
@@ -16,6 +19,7 @@ type Lead = {
   metadata: Record<string, unknown> | null;
   privacidad_aceptada: boolean; privacidad_fecha: string | null;
   contexto: string | null; contexto_historial: EntradaContexto[]; contexto_updated_at: string | null;
+  score_salud_historial?: EntradaScoreHistorial[];
 };
 type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
@@ -251,6 +255,12 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
           </CardContent>
         </Card>
       )}
+
+      {/* S35.5 — Historial de score de salud */}
+      <ScoreSaludHistorial
+        historial={lead.score_salud_historial ?? []}
+        scoreActual={lead.score_salud}
+      />
 
       {/* S21.1 — Mensajes recientes con votación de calidad */}
       <MensajesLead mensajes={mensajes} />

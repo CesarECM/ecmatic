@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { ImportarCSV } from "@/components/prospeccion/importar-csv";
 import { SecuenciasPanel } from "./SecuenciasPanel";
+import { ReconexionStandalone } from "@/components/prospeccion/reconexion-standalone";
 
 interface TemplateWA { id: string; nombre: string; estado_meta: string }
 
 const TABS = [
   { id: "importar", label: "Importar CSV" },
+  { id: "reconexion", label: "Reconexión" },
   { id: "secuencias", label: "Secuencias" },
 ] as const;
 
@@ -34,6 +36,7 @@ export function ProspeccionTabs({ templates }: { templates: TemplateWA[] }) {
         ))}
       </div>
       {tab === "importar" && <ImportarCSV />}
+      {tab === "reconexion" && <ReconexionStandalone />}
       {tab === "secuencias" && <SecuenciasPanel templates={templates} />}
     </div>
   );

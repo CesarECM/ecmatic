@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { listarExperimentos } from "@/services/experimentos";
 import { ReporteKB } from "./components/ReporteKB";
+import { PipelineAbDashboard } from "./components/PipelineAbDashboard";
 import { crearExperimentoAction, declararGanadorAction } from "./actions";
 
 export const metadata = { title: "Analítica · ECMatic" };
@@ -12,12 +13,17 @@ const fmt = (centavos: number) =>
 export default async function AnaliticaPage() {
   const supabase = createServiceClient();
 
-  const [experimentos, { data: competidores }, { data: calidades }] = await Promise.all([
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [experimentos, { data: competidores }, { data: calidades }, { data: testsAB }] = await Promise.all([
     listarExperimentos(),
     supabase.from("competidores").select("*").order("menciones", { ascending: false }).limit(10),
     supabase.from("calidad_conversacional")
       .select("score_total, ganada, created_at, vendedores(nombre)")
       .order("created_at", { ascending: false }).limit(20),
+    (supabase as any).from("pipeline_ab_tests")
+      .select("id, nombre, etapa_nombre, ruta, asignaciones_a, conversiones_a, asignaciones_b, conversiones_b, activo, ganador")
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const promedioCalidad = calidades?.length
@@ -151,6 +157,12 @@ export default async function AnaliticaPage() {
             <button type="submit" className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">Crear</button>
           </form>
         </details>
+      </section>
+
+      {/* S35.4 — Pipeline A/B Thompson Sampling */}
+      <section className="space-y-3">
+        <p className="text-sm font-medium">Tests A/B de pipeline — Thompson Sampling</p>
+        <PipelineAbDashboard tests={testsAB ?? []} />
       </section>
 
       {/* S11.7 — Reporte KB */}

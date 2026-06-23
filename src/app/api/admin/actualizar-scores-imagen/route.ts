@@ -1,6 +1,7 @@
 // S34.8 — CRON domingos 6am: actualiza score_conversion en imagenes_servicio.
 import { NextRequest, NextResponse } from "next/server";
 import { actualizarScoresImagenes } from "@/services/actualizar-scores-imagen";
+import { registrarEjecucionCron } from "@/services/cron-log";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const resultado = await actualizarScoresImagenes();
+    await registrarEjecucionCron("actualizar-scores-imagen", resultado).catch(() => {});
     return NextResponse.json(resultado);
   } catch (err) {
     return NextResponse.json(

@@ -59,6 +59,8 @@ const SECTIONS: NavSection[] = [
       { href: "/admin/debug-agendamiento",    label: "Debug Agendamiento",  emoji: "🗓️", roles: ["admin"] },
       { href: "/admin/auditoria-integridad", label: "Integridad",          emoji: "🔍", roles: ["admin"] },
       { href: "/admin/sistema",             label: "Estado sistema",      emoji: "🔌", roles: ["admin"] },
+      { href: "/admin/automatizaciones",label: "Automatizaciones",    emoji: "⚙️", roles: ["admin"] },
+      { href: "/admin/guia",          label: "Guía de uso",         emoji: "📖", roles: ["admin"] },
       { href: "/admin/sandbox",       label: "Widget de Pruebas",   emoji: "🧪", roles: ["admin"] },
       { href: "/admin/lanzamiento",   label: "Lanzamiento",         emoji: "🚀", roles: ["admin"] },
     ],
