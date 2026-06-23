@@ -14,6 +14,7 @@ import { RelacionesCard } from "./components/RelacionesCard";
 import { ImagenesCard } from "./components/ImagenesCard";
 import { BrochuresCard } from "./components/BrochuresCard";
 import { AuditoriaCard } from "./components/AuditoriaCard";
+import { regenerarEmbeddingAction } from "../actions";
 
 export const revalidate = 0;
 
@@ -81,10 +82,17 @@ export default async function ServicioDetallePage({ params }: { params: Promise<
               </Badge>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {servicio.score_uso} usos · {servicio.modalidad?.replace("_", " ") ?? "Sin modalidad"}
-            {ahorro ? ` · Descuento ${ahorro}%` : ""}
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-xs text-muted-foreground">
+              {servicio.score_uso} usos · {servicio.modalidad?.replace("_", " ") ?? "Sin modalidad"}
+              {ahorro ? ` · Descuento ${ahorro}%` : ""}
+            </p>
+            <form action={regenerarEmbeddingAction.bind(null, id)}>
+              <button type="submit" className="text-[10px] text-blue-600 hover:underline">
+                ↺ Regenerar embedding
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 

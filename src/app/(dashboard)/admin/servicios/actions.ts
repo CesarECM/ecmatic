@@ -82,6 +82,21 @@ export async function eliminarServicioAction(id: string) {
   revalidatePath("/admin/servicios");
 }
 
+export async function regenerarEmbeddingAction(id: string) {
+  const { obtenerServicio } = await import("@/services/servicios");
+  const { generarEmbedding } = await import("@/lib/ai/client");
+  const { createServiceClient } = await import("@/lib/supabase/service");
+
+  const s = await obtenerServicio(id);
+  const textoEmbed = [s.titulo, s.contenido, s.caracteristicas, s.beneficios, s.ventajas]
+    .filter(Boolean).join("\n");
+  const embedding = await generarEmbedding(textoEmbed);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (createServiceClient() as any).from("servicios").update({ embedding }).eq("id", id);
+  revalidatePath(`/admin/servicios/${id}`);
+}
+
 // ── Links de pago ────────────────────────────────────────────
 
 export async function crearPagoAction(formData: FormData) {
