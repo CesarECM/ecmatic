@@ -10,6 +10,12 @@ export interface RecursoKB {
   ventajas?: string | null; para_quien_es?: string | null; para_quien_no_es?: string | null;
 }
 
+// Pools independientes: servicios y KB nunca compiten por el mismo límite.
+export interface ResultadosBusqueda {
+  servicios: RecursoKB[];
+  kb: RecursoKB[];
+}
+
 // S22.5 — Formato enriquecido para recursos tipo servicio
 export function formatearRecursoKB(r: RecursoKB): string {
   if (r.tipo !== "servicio") return `[${r.tipo.toUpperCase()}] ${r.titulo}:\n${r.contenido}`;
@@ -22,26 +28,22 @@ export function formatearRecursoKB(r: RecursoKB): string {
   return partes.join("\n");
 }
 
-// S1.4 — Búsqueda semántica en KB + tabla servicios independiente (Sprint 36)
-export async function buscarRecursos(query: string, limite = 4): Promise<RecursoKB[]> {
+// Pools independientes: cada uno obtiene hasta limitePorPool resultados propios.
+// Servicios y FAQs ya no compiten — ambos siempre están representados.
+export async function buscarRecursos(query: string, limitePorPool = 3): Promise<ResultadosBusqueda> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServiceClient() as any;
   const embedding = await generarEmbedding(query);
 
   const [kbRes, svcRes] = await Promise.all([
-    supabase.rpc("buscar_recursos", { query_embedding: embedding, limite, umbral: 0.65 }),
-    supabase.rpc("buscar_servicios", { query_embedding: embedding, limite, umbral: 0.65 }),
+    supabase.rpc("buscar_recursos",   { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
+    supabase.rpc("buscar_servicios",  { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
   ]);
 
-  const kb  = (kbRes.data  ?? []) as (RecursoKB & { similitud: number })[];
-  const svc = (svcRes.data ?? []) as (RecursoKB & { similitud: number })[];
-
-  // Fusionar, deduplicar por id, ordenar por similitud descendente, recortar a límite
-  const seen = new Set<string>();
-  return [...kb, ...svc]
-    .sort((a, b) => (b.similitud ?? 0) - (a.similitud ?? 0))
-    .filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
-    .slice(0, limite);
+  return {
+    servicios: (svcRes.data ?? []) as RecursoKB[],
+    kb:        (kbRes.data  ?? []) as RecursoKB[],
+  };
 }
 
 // Score heurístico de confianza: recursos KB y matriz elevan; frases de incertidumbre bajan.

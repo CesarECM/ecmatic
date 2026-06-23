@@ -10,6 +10,12 @@ import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
 import { createServiceClient } from "@/lib/supabase/service";
 import { capturarContactoPasivo } from "./captura-contacto";
+// S31 — Paridad con conversacion.ts
+import { evaluarFaseSetter } from "@/lib/ai/setter-protocol";
+import { filtrarResistencia } from "@/lib/ai/filtro-objecion";
+import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
+import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
+import { obtenerRolDinamico } from "./rol-dinamico";
 
 export interface SandboxResult {
   respuesta: string;
@@ -36,7 +42,7 @@ export async function procesarSandbox(
   const { data: lead, error } = await supabase
     .from("leads")
     .upsert(row, { onConflict: "telefono" })
-    .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa")
+    .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado")
     .single();
 
   if (error || !lead) throw new Error(`No se pudo crear lead de prueba: ${error?.message}`);
@@ -101,6 +107,36 @@ export async function procesarSandbox(
     }
   }
 
+  // S31 — Setter, Objeción, Rol Dinámico (paridad con conversacion.ts)
+  const setterFaseActual: number = (lead.setter_fase_actual as number | null) ?? 1;
+  const setterCalificado: boolean | null = (lead.setter_calificado as boolean | null) ?? null;
+  const esObjecion = intencion === "objecion_precio" || intencion === "objecion_confianza";
+  const setterActivo = setterCalificado === null;
+
+  const [setterEstado, filtroResult, rolesDinamicos] = await Promise.all([
+    setterActivo && historial
+      ? evaluarFaseSetter(setterFaseActual, [mensaje], historial, lead.temperamento_inferido ?? null).catch(() => null)
+      : Promise.resolve(null),
+    esObjecion
+      ? filtrarResistencia([mensaje], historial).catch(() => null)
+      : Promise.resolve(null),
+    obtenerRolDinamico(lead.id).catch(() => []),
+  ]);
+
+  if (setterEstado?.debeAvanzar && setterEstado.faseNueva !== setterFaseActual) {
+    void (async () => {
+      await supabase.from("leads").update({ setter_fase_actual: setterEstado!.faseNueva }).eq("id", lead.id);
+    })().catch(console.error);
+  }
+
+  let protocoloObjecion = null;
+  if (filtroResult) {
+    const desconfianza = filtroResult.tipo === "objecion"
+      ? await identificarDesconfianza([mensaje], historial).catch(() => null)
+      : null;
+    protocoloObjecion = construirProtocoloObjecion(filtroResult.tipo, desconfianza?.tipo ?? null);
+  }
+
   // Generar respuesta con el mismo motor que usa WhatsApp
   const { texto: respuesta, scoreConfianza } = await generarRespuesta([mensaje], {
     nombre: lead.nombre ?? null,
@@ -114,6 +150,9 @@ export async function procesarSandbox(
     slotsDisponibles: slotsParaAI,
     meetLink: meetLinkParaAI,
     canal_origen: "whatsapp",
+    setterEstado,
+    protocoloObjecion,
+    rolesDinamicos,
   });
 
   // Detectar si la respuesta activaría handoff

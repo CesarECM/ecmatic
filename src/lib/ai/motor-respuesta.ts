@@ -12,6 +12,7 @@ import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuen
 import { instruccionReglaOroCierre } from "./regla-oro-cierre";
 import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
 import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
+import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
 import type { EstadoSetter } from "./setter-protocol";
@@ -57,16 +58,26 @@ export async function generarRespuesta(
     ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
   };
 
-  const [recursos, gatillos, sugerenciaMatriz, identidad] = await Promise.all([
+  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline] = await Promise.all([
     buscarRecursos(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
     obtenerIdentidad().catch(() => null),
+    obtenerContextoPipeline(contexto.pipelineRuta as string | undefined, contexto.pipelineStage)
+      .catch(() => ({ servicio: null, etapa: null })),
   ]);
-  void registrarUso(recursos.map((r) => r.id));
-  if (recursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
-  const serviciosAncla = recursos.filter((r) => r.tipo === "servicio");
+  const { servicios: serviciosSemánticos, kb } = resultadosBusqueda;
+
+  // Servicio garantizado por pipeline FK (prioridad 1) + hasta 2 adicionales semánticos sin duplicados
+  const serviciosPipeline = contextoPipeline.servicio ? [contextoPipeline.servicio] : [];
+  const idsPipeline = new Set(serviciosPipeline.map(s => s.id));
+  const serviciosExtra = serviciosSemánticos.filter(s => !idsPipeline.has(s.id)).slice(0, 2);
+  const serviciosAncla = [...serviciosPipeline, ...serviciosExtra];
+
+  const todosRecursos = [...serviciosSemánticos, ...kb];
+  void registrarUso(todosRecursos.map((r) => r.id));
+  if (todosRecursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
 
   // S32.8 — Seleccionar imagen activa del canal para el servicio principal
   const canalParaImagen = (contexto.canal_origen === "email" ? "email"
@@ -108,21 +119,27 @@ export async function generarRespuesta(
       ].filter(Boolean).join("\n")
     : "";
 
+  // Servicios — siempre con ficha completa, antes que cualquier otra información
+  const serviciosTexto = serviciosAncla.map(formatearRecursoKB).join("\n\n");
   const anclaLinea = serviciosAncla.length > 0
-    ? [`\nSERVICIO(S) QUE ESTÁS VENDIENDO EN ESTA CONVERSACIÓN:\n${serviciosAncla.map((s) => `• ${s.titulo}`).join("\n")}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
+    ? [`\nSERVICIO(S) QUE ESTÁS VENDIENDO — revisa esta información antes de responder:\n${serviciosTexto}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
         pagosConLink.length > 0
           ? `\nLINKS DE PAGO (comparte el link cuando detectes intención de compra):\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}${p.pago!.descripcion ? ` (${p.pago!.descripcion})` : ""}`).join("\n")}` : "",
         cuentasBancariasLinea].join("\n")
     : "";
+
+  // Protocolo y plantillas de la etapa actual del pipeline
+  const pipelineContextoLinea = formatearContextoPipelineParaPrompt(contextoPipeline, contexto.pipelineStage);
 
   const { data: practicas } = await createServiceClient()
     .from("recursos_conocimiento").select("contenido")
     .eq("tipo", "practica_venta").eq("aprobado", true).eq("activo", true)
     .order("score_confianza", { ascending: false }).limit(3);
 
-  const recursosTexto = recursos.length > 0
-    ? recursos.map(formatearRecursoKB).join("\n\n")
-    : "No se encontraron recursos específicos. Responde con información general del Centro ECM.";
+  // KB: solo FAQs y recursos genéricos — los servicios ya están en anclaLinea
+  const recursosTexto = kb.length > 0
+    ? kb.map(formatearRecursoKB).join("\n\n")
+    : "No se encontraron recursos específicos en la KB. Responde con información general del Centro ECM.";
   const practicasTexto = practicas?.length
     ? `\nMEJORES PRÁCTICAS DE VENTA APLICABLES:\n${practicas.map((p) => `• ${p.contenido}`).join("\n")}` : "";
   const faseCagcLinea = contexto.faseCAGC !== undefined
@@ -167,7 +184,7 @@ export async function generarRespuesta(
     : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}
@@ -180,7 +197,7 @@ ${etiquetasLinea}
 HISTORIAL RECIENTE:
 ${contexto.historial || "(primera interacción)"}
 
-INFORMACIÓN DISPONIBLE:
+BASE DE CONOCIMIENTO — FAQs y recursos adicionales:
 ${recursosTexto}
 ${practicasTexto}
 ${formatearGatillosParaPrompt(gatillos)}${matrizLinea}
@@ -206,8 +223,8 @@ ${instruccionReglaOroCierre()}`;
 
   void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
   void registrarAccionIA({ tipoAccion: "generar_respuesta", resultado: "enviado",
-    metadata: { recursos_usados: recursos.length } }).catch(() => {});
+    metadata: { recursos_usados: todosRecursos.length } }).catch(() => {});
 
   const texto = (response.content[0] as { text: string }).text.trim();
-  return { texto, scoreConfianza: calcularScore(recursos, sugerenciaMatriz, texto), imagenUrl: imagenActivaUrl };
+  return { texto, scoreConfianza: calcularScore(todosRecursos, sugerenciaMatriz, texto), imagenUrl: imagenActivaUrl };
 }
