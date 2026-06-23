@@ -22,6 +22,9 @@
     { "path": "/api/admin/score-salud",            "schedule": "0 4 * * 0" },
     { "path": "/api/admin/auditoria-assets",        "schedule": "0 8 * * 1" },
     { "path": "/api/admin/clustering-sugerencias",  "schedule": "0 4 * * *" },
-    { "path": "/api/admin/auditor-autoaprobacion",  "schedule": "0 0 1 * *" }
+    { "path": "/api/admin/auditor-autoaprobacion",  "schedule": "0 0 1 * *" },
+    { "path": "/api/admin/ejecutar-prospeccion-secuencial", "schedule": "0 7 * * *" },
+    { "path": "/api/admin/polling-templates-wa",            "schedule": "0 */2 * * *" },
+    { "path": "/api/admin/actualizar-scores-imagen",        "schedule": "0 6 * * 0" }
   ]
 }

@@ -18,6 +18,7 @@ const SECTIONS: NavSection[] = [
       { href: "/admin/tickets",       label: "Tickets",             emoji: "🎫", roles: ["admin", "vendedor"] },
       { href: "/admin/citas",         label: "Citas",               emoji: "📅", roles: ["admin"] },
       { href: "/admin/prospeccion",   label: "Prospección",         emoji: "📋", roles: ["admin"] },
+      { href: "/admin/plantillas-wa", label: "Plantillas WA",        emoji: "💬", roles: ["admin"] },
       { href: "/vendedor/agenda",     label: "Mi agenda",           emoji: "🗓️", roles: ["vendedor"] },
       { href: "/vendedor/llamadas",   label: "Mis llamadas",        emoji: "📞", roles: ["vendedor"] },
       { href: "/vendedor/comisiones", label: "Mis comisiones",      emoji: "💵", roles: ["vendedor"] },

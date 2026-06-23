@@ -44,6 +44,13 @@ export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento"
 export type TipoLeadmagnet = "pre-creado" | "generable-ia" | "requiere-humano";
 export type TipoPagoServicio = "landing" | "pasarela";
 
+// S34 — Prospección omnicanal + Templates Meta
+export type CanalProspeccion = "email" | "whatsapp";
+export type CondicionTriggerProsp = "siempre" | "sin_respuesta";
+export type EstadoWaTemplate = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "PAUSED";
+export type CategoriaWaTemplate = "MARKETING" | "UTILITY" | "AUTHENTICATION";
+export type EstadoContactoSec = "activo" | "completado" | "pausado";
+
 // S31.4 — Capa 2: tipo de resistencia del lead
 export type TipoResistencia = "condicion" | "objecion";
 
@@ -1115,6 +1122,92 @@ export interface Database {
           orden?: number; activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["etapa_contenido"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      // ── Sprint 34 · Prospección Omnicanal + Templates ────────────
+      wa_templates: {
+        Row: {
+          id: string;
+          nombre: string;
+          categoria: CategoriaWaTemplate;
+          idioma: string;
+          componentes: Record<string, unknown>[];
+          estado_meta: EstadoWaTemplate;
+          imagen_servicio_id: string | null;
+          meta_template_id: string | null;
+          enviado_a_meta_at: string | null;
+          aprobado_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          nombre: string;
+          categoria?: CategoriaWaTemplate;
+          idioma?: string;
+          componentes?: Record<string, unknown>[];
+          estado_meta?: EstadoWaTemplate;
+          imagen_servicio_id?: string | null;
+          meta_template_id?: string | null;
+          enviado_a_meta_at?: string | null;
+          aprobado_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["wa_templates"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      prospeccion_secuencias: {
+        Row: {
+          id: string; nombre: string; activa: boolean;
+          created_at: string; updated_at: string;
+        };
+        Insert: { id?: string; nombre: string; activa?: boolean };
+        Update: Partial<Database["public"]["Tables"]["prospeccion_secuencias"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      prospeccion_secuencia_pasos: {
+        Row: {
+          id: string; secuencia_id: string; orden: number;
+          canal: CanalProspeccion; delay_dias: number;
+          condicion_trigger: CondicionTriggerProsp;
+          template_wa_id: string | null;
+          asunto_email: string | null; cuerpo_email: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string; secuencia_id: string; orden?: number;
+          canal: CanalProspeccion; delay_dias?: number;
+          condicion_trigger?: CondicionTriggerProsp;
+          template_wa_id?: string | null;
+          asunto_email?: string | null; cuerpo_email?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospeccion_secuencia_pasos"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      prospeccion_contacto_secuencia: {
+        Row: {
+          id: string; lead_id: string; secuencia_id: string;
+          paso_actual_orden: number; estado: EstadoContactoSec;
+          iniciado_at: string; ultimo_paso_at: string | null; updated_at: string;
+        };
+        Insert: {
+          id?: string; lead_id: string; secuencia_id: string;
+          paso_actual_orden?: number; estado?: EstadoContactoSec;
+          iniciado_at?: string; ultimo_paso_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["prospeccion_contacto_secuencia"]["Insert"]>;
+        Relationships: Relationship[];
+      };
+      pipeline_ab_imagenes: {
+        Row: {
+          id: string; template_id: string; imagen_servicio_id: string;
+          asignaciones: number; respuestas: number;
+          created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; template_id: string; imagen_servicio_id: string;
+          asignaciones?: number; respuestas?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["pipeline_ab_imagenes"]["Insert"]>;
         Relationships: Relationship[];
       };
       llamadas_vendedor: {
