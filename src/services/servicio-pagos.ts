@@ -60,7 +60,8 @@ export async function actualizarServicioPago(
   campos: Partial<Omit<ServicioPago, "id" | "created_at" | "updated_at">>
 ): Promise<ServicioPago> {
   const supabase = createServiceClient();
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from("servicio_pagos")
     .update(campos)
     .eq("id", id)

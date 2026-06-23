@@ -55,7 +55,7 @@ export function FichaComercialCard({ servicio }: { servicio: Servicio }) {
                 <label className="text-xs text-muted-foreground">{label}</label>
                 <Textarea
                   name={name}
-                  defaultValue={(servicio as Record<string, unknown>)[name] as string ?? ""}
+                  defaultValue={((servicio as unknown) as Record<string, unknown>)[name] as string ?? ""}
                   rows={2}
                   placeholder={label}
                 />
