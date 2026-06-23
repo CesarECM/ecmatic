@@ -515,11 +515,13 @@ export interface Database {
           id: string; tipo_accion: string; lead_id: string | null;
           recurso_kb_id: string | null; resultado: string | null;
           metadata: Record<string, unknown>; created_at: string;
+          fase: string | null; request_id: string | null;
         };
         Insert: {
           id?: string; tipo_accion: string; lead_id?: string | null;
           recurso_kb_id?: string | null; resultado?: string | null;
           metadata?: Record<string, unknown>;
+          fase?: string | null; request_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["log_ia"]["Insert"]>;
         Relationships: Relationship[];
