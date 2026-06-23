@@ -13,7 +13,7 @@ export default async function LeadPerfilPage({
   const { id } = await params;
   const supabase = createServiceClient();
 
-  const [{ data: lead }, historial, { data: mensajes }, etapasTripwire, etapasPremium, { data: vendedores }] =
+  const [{ data: lead }, historial, { data: mensajes }, etapasTripwire, etapasPremium, { data: vendedores }, { data: senales }] =
     await Promise.all([
       supabase.from("leads").select("*").eq("id", id).single(),
       obtenerHistorialPipeline(id),
@@ -26,6 +26,12 @@ export default async function LeadPerfilPage({
       obtenerEtapas("tripwire"),
       obtenerEtapas("premium"),
       supabase.from("vendedores").select("id, nombre, email").eq("activo", true),
+      (supabase as any)
+        .from("lead_senales_situacionales")
+        .select("id, tipo, descripcion, fragmento, confianza, created_at")
+        .eq("lead_id", id)
+        .eq("activa", true)
+        .order("confianza", { ascending: false }),
     ]);
 
   if (!lead) notFound();
@@ -39,6 +45,7 @@ export default async function LeadPerfilPage({
       historial={historial}
       mensajes={mensajes ?? []}
       vendedores={vendedores ?? []}
+      senales={senales ?? []}
     />
   );
 }

@@ -21,11 +21,15 @@ type Lead = {
   privacidad_aceptada: boolean; privacidad_fecha: string | null;
   contexto: string | null; contexto_historial: EntradaContexto[]; contexto_updated_at: string | null;
   score_salud_historial?: EntradaScoreHistorial[];
+  setter_fase_actual?: number | null;
+  setter_calificado?: boolean | null;
+  setter_razon_descalificacion?: string | null;
 };
 type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
 type Movimiento = { id: string; etapa_anterior: string | null; etapa_nueva: string; motivo: string | null; movido_por: string; created_at: string };
 type Mensaje = { id: string; canal: string; direccion: string; contenido: string; intencion_clasificada: string | null; created_at: string };
+type SenalSituacional = { id: string; tipo: string; descripcion: string; fragmento: string; confianza: number; created_at: string };
 
 interface LeadPerfilProps {
   lead: Lead;
@@ -33,6 +37,7 @@ interface LeadPerfilProps {
   historial: Movimiento[];
   mensajes: Mensaje[];
   vendedores: Vendedor[];
+  senales: SenalSituacional[];
 }
 
 const DISC_COLORS: Record<string, string> = {
@@ -40,8 +45,17 @@ const DISC_COLORS: Record<string, string> = {
   S: "bg-green-100 text-green-800", C: "bg-blue-100 text-blue-800",
 };
 
+const SENAL_COLORS: Record<string, string> = {
+  evento:           "bg-purple-100 text-purple-800",
+  fecha_limite:     "bg-red-100 text-red-800",
+  tercero:          "bg-blue-100 text-blue-800",
+  urgencia:         "bg-orange-100 text-orange-800",
+  situacion_laboral:"bg-yellow-100 text-yellow-800",
+  otro:             "bg-gray-100 text-gray-800",
+};
 
-export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: LeadPerfilProps) {
+
+export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores, senales }: LeadPerfilProps) {
   const scoreColor = lead.score_salud >= 67 ? "text-green-600" : lead.score_salud >= 34 ? "text-yellow-600" : "text-red-600";
   const rfc = lead.metadata?.rfc as string | undefined;
   const cfdiUuid = lead.metadata?.cfdi_uuid as string | undefined;
@@ -230,6 +244,48 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores }: Le
         historial={lead.contexto_historial ?? []}
         contextoFecha={lead.contexto_updated_at}
       />
+
+      {/* S19.6 — Señales situacionales detectadas por IA */}
+      {senales.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Señales situacionales IA</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {senales.map((s) => (
+              <div key={s.id} className="flex items-start gap-2 text-sm">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${SENAL_COLORS[s.tipo] ?? "bg-gray-100 text-gray-800"}`}>
+                  {s.tipo.replace(/_/g, " ")}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p>{s.descripcion}</p>
+                  {s.fragmento && (
+                    <p className="text-xs text-muted-foreground italic truncate">"{s.fragmento}"</p>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{Math.round(s.confianza * 100)}%</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* S31.3 — Resultado de cualificación setter */}
+      {lead.setter_calificado !== null && lead.setter_calificado !== undefined && (
+        <Card className={lead.setter_calificado ? "border-green-300" : "border-red-300"}>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Cualificación setter</CardTitle></CardHeader>
+          <CardContent className="text-sm">
+            {lead.setter_calificado ? (
+              <p className="text-green-700 font-medium">Lead calificado — pasó los 3 ejes del protocolo setter.</p>
+            ) : (
+              <>
+                <p className="text-red-700 font-medium">Lead no calificado.</p>
+                {lead.setter_razon_descalificacion && (
+                  <p className="text-muted-foreground mt-1">{lead.setter_razon_descalificacion}</p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* S12.6 — Facturación (solo si hay RFC) */}
       {rfc && (
