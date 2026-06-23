@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { listarServicios } from "@/services/servicios";
 import { NuevoServicioForm } from "./NuevoServicioForm";
+import { RegenerarTodosBtn } from "./RegenerarTodosBtn";
 import { createServiceClient } from "@/lib/supabase/service";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 
@@ -42,7 +43,10 @@ export default async function ServiciosPage() {
             </Link>
           </p>
         </div>
-        <NuevoServicioForm />
+        <div className="flex items-center gap-2">
+          <RegenerarTodosBtn total={servicios.length} />
+          <NuevoServicioForm />
+        </div>
       </div>
 
       {servicios.length === 0 && (

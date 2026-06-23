@@ -82,6 +82,30 @@ export async function eliminarServicioAction(id: string) {
   revalidatePath("/admin/servicios");
 }
 
+export async function regenerarTodosEmbeddingsAction(): Promise<number> {
+  const { generarEmbedding } = await import("@/lib/ai/client");
+  const { createServiceClient } = await import("@/lib/supabase/service");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createServiceClient() as any;
+  const { data: servicios } = await supabase
+    .from("servicios")
+    .select("id, titulo, contenido, caracteristicas, beneficios, ventajas")
+    .eq("activo", true);
+
+  let actualizados = 0;
+  for (const s of servicios ?? []) {
+    const texto = [s.titulo, s.contenido, s.caracteristicas, s.beneficios, s.ventajas]
+      .filter(Boolean).join("\n");
+    const embedding = await generarEmbedding(texto);
+    await supabase.from("servicios").update({ embedding }).eq("id", s.id);
+    actualizados++;
+  }
+
+  revalidatePath("/admin/servicios");
+  return actualizados;
+}
+
 export async function regenerarEmbeddingAction(id: string) {
   const { obtenerServicio } = await import("@/services/servicios");
   const { generarEmbedding } = await import("@/lib/ai/client");
