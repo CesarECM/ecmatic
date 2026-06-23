@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { generarEmbedding } from "@/lib/ai/client";
 import { auditarPipeline } from "@/lib/ai/auditor-pipelines-ia";
 import { listarEtapasAdmin } from "@/services/etapas-admin";
+import { logDebugIA } from "@/services/log-ia";
 import type { TipoCambioPipeline } from "@/lib/ai/auditor-pipelines-ia";
 
 function db() {
@@ -13,6 +14,10 @@ export async function dispararAuditoriaPipeline(
   pipelineRuta: string,
   tipoCambio: TipoCambioPipeline
 ): Promise<void> {
+  void logDebugIA("AUDITOR_PIPELINE", `[INICIO] tipoCambio=${tipoCambio} ruta=${pipelineRuta}`, {
+    pipelineRuta, tipoCambio,
+  });
+
   try {
     const [pipelineRes, etapas] = await Promise.all([
       db().from("pipelines").select("*").eq("ruta", pipelineRuta).single(),
@@ -20,9 +25,25 @@ export async function dispararAuditoriaPipeline(
     ]);
 
     const pipeline = pipelineRes.data;
-    if (!pipeline) return;
+
+    if (!pipeline) {
+      await logDebugIA("AUDITOR_PIPELINE", `[FETCH_ERROR] Pipeline "${pipelineRuta}" no encontrado`, {
+        pipelineRuta, db_error: pipelineRes.error?.message,
+      }, "error");
+      return;
+    }
+
+    void logDebugIA("AUDITOR_PIPELINE", `[FETCH_OK] "${pipeline.nombre}" | ${etapas.length} etapas`, {
+      nombre: pipeline.nombre, etapas_count: etapas.length, tipo: pipeline.tipo,
+    });
 
     const sugerencias = await auditarPipeline(pipeline, etapas, tipoCambio);
+
+    void logDebugIA("AUDITOR_PIPELINE", `[IA_OK] ${sugerencias.length} sugerencias retornadas`, {
+      count: sugerencias.length,
+      titulos: sugerencias.map(s => s.titulo),
+    });
+
     if (!sugerencias.length) return;
 
     const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -33,16 +54,28 @@ export async function dispararAuditoriaPipeline(
       .gte("created_at", hace24h);
     const titulosRecientes = new Set((recientes ?? []).map((r: { titulo: string }) => r.titulo));
 
-    for (const sug of sugerencias) {
-      if (titulosRecientes.has(sug.titulo)) continue;
+    const nuevas    = sugerencias.filter(s => !titulosRecientes.has(s.titulo));
+    const bloqueadas = sugerencias.filter(s => titulosRecientes.has(s.titulo));
 
+    void logDebugIA(
+      "AUDITOR_PIPELINE",
+      `[COOLDOWN] ${nuevas.length} pasan | ${bloqueadas.length} bloqueadas por 24h`,
+      { pasan: nuevas.map(s => s.titulo), bloqueadas: bloqueadas.map(s => s.titulo) },
+      nuevas.length === 0 ? "warn" : "debug"
+    );
+
+    for (const sug of nuevas) {
       const contenidoCompleto = `${sug.titulo}\n\n${sug.descripcion}\nPipeline: ${sug.pipeline_ruta}${sug.etapa_nombre ? ` · Etapa: ${sug.etapa_nombre}` : ""}`;
       let embedding: number[] | null = null;
       try {
         embedding = await generarEmbedding(contenidoCompleto);
-      } catch { /* no bloquear */ }
+      } catch (embErr) {
+        void logDebugIA("AUDITOR_PIPELINE", `[EMBED_WARN] Embedding falló para "${sug.titulo}"`, {
+          error: String(embErr), titulo: sug.titulo,
+        }, "warn");
+      }
 
-      await db().from("sugerencias_ia").insert({
+      const { error: insertError } = await db().from("sugerencias_ia").insert({
         tipo:        "general",
         titulo:      sug.titulo,
         descripcion: sug.descripcion,
@@ -57,8 +90,28 @@ export async function dispararAuditoriaPipeline(
           tipo_cambio:   tipoCambio,
         },
       });
+
+      if (insertError) {
+        await logDebugIA("AUDITOR_PIPELINE", `[INSERT_ERROR] "${sug.titulo}": ${insertError.message}`, {
+          titulo:  sug.titulo,
+          code:    insertError.code,
+          details: insertError.details,
+          hint:    insertError.hint,
+          message: insertError.message,
+        }, "error");
+      } else {
+        void logDebugIA("AUDITOR_PIPELINE", `[INSERT_OK] Sugerencia guardada: "${sug.titulo}"`, {
+          titulo: sug.titulo, accion: sug.accion, urgencia: sug.urgencia,
+        });
+      }
     }
+
   } catch (err) {
+    await logDebugIA("AUDITOR_PIPELINE", `[ERROR_FATAL] ${String(err)}`, {
+      pipelineRuta, tipoCambio,
+      error: String(err),
+      stack: err instanceof Error ? err.stack?.slice(0, 600) : undefined,
+    }, "error");
     console.error("[auditor-pipelines] Error:", err);
   }
 }

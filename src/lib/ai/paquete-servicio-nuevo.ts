@@ -1,6 +1,7 @@
 // S23.5 — Genera sugerencias en cola de aprobación al crear un servicio nuevo
 import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
+import { logDebugIA } from "@/services/log-ia";
 
 interface SugerenciaPaquete {
   tipo: "pipeline" | "general";
@@ -33,21 +34,30 @@ Responde SOLO en JSON con este formato exacto:
     }],
   });
 
+  const raw = (response.content[0] as { text: string }).text.trim();
+  void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_INICIO] ${raw.length} chars: ${raw.slice(0, 120)}`, {
+    raw_preview: raw.slice(0, 600), raw_length: raw.length, servicio: tituloServicio,
+  });
   try {
-    const raw = (response.content[0] as { text: string }).text.trim();
     const items = JSON.parse(raw) as Array<{
       tipo: "pipeline" | "general";
       titulo: string;
       descripcion: string;
       categoria: string;
     }>;
+    void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_OK] ${items.length} sugerencias`, {
+      count: items.length, titulos: items.map(i => i.titulo),
+    });
     return items.map((i) => ({
       tipo: i.tipo,
       titulo: i.titulo,
       descripcion: i.descripcion,
       metadata: { categoria: i.categoria, servicio_titulo: tituloServicio },
     }));
-  } catch {
+  } catch (err) {
+    await logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
+      raw_preview: raw.slice(0, 600), error: String(err),
+    }, "error");
     return [];
   }
 }
@@ -61,9 +71,13 @@ export async function generarPaqueteServicioNuevo(
   const sugerencias = await generarSugerencias(tituloServicio, contenidoServicio);
   if (sugerencias.length === 0) return;
 
+  void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[INICIO] Insertando ${sugerencias.length} sugerencias para servicio ${servicioId}`, {
+    servicioId, count: sugerencias.length,
+  });
+
   const supabase = createServiceClient();
   for (const s of sugerencias) {
-    await (supabase as any).from("sugerencias_ia").insert({
+    const { error: insertError } = await (supabase as any).from("sugerencias_ia").insert({
       tipo:        s.tipo,
       titulo:      s.titulo,
       descripcion: s.descripcion,
@@ -71,5 +85,14 @@ export async function generarPaqueteServicioNuevo(
       servicio_id: servicioId,
       metadata:    s.metadata,
     });
+    if (insertError) {
+      await logDebugIA("PAQUETE_SERVICIO_NUEVO", `[INSERT_ERROR] "${s.titulo}": ${insertError.message}`, {
+        titulo: s.titulo, code: insertError.code, message: insertError.message, details: insertError.details,
+      }, "error");
+    } else {
+      void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[INSERT_OK] "${s.titulo}"`, {
+        titulo: s.titulo, tipo: s.tipo,
+      });
+    }
   }
 }

@@ -10,7 +10,7 @@ export type TipoAccionIA =
   | "detectar_promesa" | "detectar_momento_cierre" | "generar_slot_cita"
   | "calcular_churn" | "upsell";
 
-export type FaseIA = "llamado" | "peticion" | "respuesta" | "timeout" | "error";
+export type FaseIA = "llamado" | "peticion" | "respuesta" | "timeout" | "error" | "debug" | "warn";
 
 export interface LogIARow {
   id: string;
@@ -101,6 +101,29 @@ export function agruparRegistros(registros: LogIARow[]): {
 
   grupos.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   return { grupos, legacy };
+}
+
+// Escribe un log de depuración en log_ia para trazar pasos post-Claude
+// (parse, cooldown, inserts). Usar void para no-críticos, await en catch blocks.
+export async function logDebugIA(
+  tipoAccion: string,
+  paso: string,
+  metadata: Record<string, unknown> = {},
+  fase: "debug" | "warn" | "error" = "debug"
+): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+    const { error } = await supabase.from("log_ia").insert({
+      tipo_accion: tipoAccion,
+      lead_id:     null,
+      fase,
+      resultado:   paso.slice(0, 400),
+      metadata,
+    });
+    if (error) console.error("[logDebugIA]", error.message);
+  } catch (err) {
+    console.error("[logDebugIA catch]", err);
+  }
 }
 
 // S10.3 — Cola de aprobaciones

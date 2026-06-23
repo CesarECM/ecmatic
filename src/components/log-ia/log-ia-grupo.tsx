@@ -31,6 +31,7 @@ const MODELO_COLOR: Record<string, string> = {
 };
 const FASE_DOT: Record<string, string> = {
   llamado:"🟡", peticion:"🔵", respuesta:"🟢", timeout:"🟠", error:"🔴",
+  debug:"⚪", warn:"🟡",
 };
 const FASE_BG: Record<string, string> = {
   llamado:"bg-yellow-50 text-yellow-800",
@@ -38,6 +39,8 @@ const FASE_BG: Record<string, string> = {
   respuesta:"bg-green-50 text-green-800",
   timeout:"bg-orange-50 text-orange-800",
   error:"bg-red-50 text-red-800",
+  debug:"bg-gray-50 text-gray-600",
+  warn:"bg-yellow-50 text-yellow-700",
 };
 
 // ── Helpers de texto para copiar ─────────────────────────────────────────────

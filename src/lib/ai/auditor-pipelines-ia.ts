@@ -1,4 +1,5 @@
 import { callClaudeIA } from "./client";
+import { logDebugIA } from "@/services/log-ia";
 import type { Pipeline } from "@/services/pipelines-admin";
 import type { EtapaAdmin } from "@/services/etapas-admin";
 
@@ -82,17 +83,36 @@ Activo: ${pipeline.activo ? "Sí" : "No"}
 ETAPAS (${etapas.length} total):
 ${JSON.stringify(etapasSummary, null, 2)}`;
 
+  let raw = "";
   try {
     const resp = await callClaudeIA("SUGERIR_KB", {
       max_tokens: 1400,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
+    raw = (resp.content[0] as { text: string }).text.trim();
+  } catch (err) {
+    await logDebugIA("AUDITOR_PIPELINE", `[CLAUDE_ERROR] callClaudeIA falló: ${String(err)}`, {
+      error: String(err), pipeline_ruta: pipeline.ruta, tipoCambio,
+    }, "error");
+    return [];
+  }
 
-    const raw = (resp.content[0] as { text: string }).text.trim();
+  void logDebugIA("AUDITOR_PIPELINE", `[PARSE_INICIO] ${raw.length} chars: ${raw.slice(0, 120)}`, {
+    raw_preview: raw.slice(0, 600), raw_length: raw.length, pipeline_ruta: pipeline.ruta,
+  });
+
+  try {
     const json = JSON.parse(raw) as { sugerencias: SugerenciaPipeline[] };
+    const count = json.sugerencias?.length ?? 0;
+    void logDebugIA("AUDITOR_PIPELINE", `[PARSE_OK] ${count} sugerencias`, {
+      count, titulos: (json.sugerencias ?? []).map(s => s.titulo),
+    });
     return json.sugerencias ?? [];
-  } catch {
+  } catch (err) {
+    await logDebugIA("AUDITOR_PIPELINE", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
+      raw_preview: raw.slice(0, 600), error: String(err), pipeline_ruta: pipeline.ruta,
+    }, "error");
     return [];
   }
 }

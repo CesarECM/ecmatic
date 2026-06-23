@@ -3,6 +3,7 @@
 // Se dispara fire-and-forget en cada operación CRUD sobre un servicio.
 
 import { callClaudeIA } from "./client";
+import { logDebugIA } from "@/services/log-ia";
 import type { Servicio } from "@/services/servicios";
 
 export type TipoCambioServicio = "crear" | "editar" | "eliminar";
@@ -65,17 +66,36 @@ Activo: ${servicio.activo ? "Sí" : "No"}
 CATÁLOGO ACTUAL (${otros.length} servicios):
 ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("\n")}`;
 
+  let raw = "";
   try {
     const resp = await callClaudeIA("SUGERIR_KB", {
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
+    raw = (resp.content[0] as { text: string }).text.trim();
+  } catch (err) {
+    await logDebugIA("AUDITOR_SERVICIO", `[CLAUDE_ERROR] callClaudeIA falló: ${String(err)}`, {
+      error: String(err), servicio_id: servicio.id, tipo_cambio,
+    }, "error");
+    return [];
+  }
 
-    const raw = (resp.content[0] as { text: string }).text.trim();
+  void logDebugIA("AUDITOR_SERVICIO", `[PARSE_INICIO] ${raw.length} chars: ${raw.slice(0, 120)}`, {
+    raw_preview: raw.slice(0, 600), raw_length: raw.length, servicio_id: servicio.id,
+  });
+
+  try {
     const json = JSON.parse(raw) as { sugerencias: SugerenciaAuditorServicio[] };
+    const count = json.sugerencias?.length ?? 0;
+    void logDebugIA("AUDITOR_SERVICIO", `[PARSE_OK] ${count} sugerencias`, {
+      count, titulos: (json.sugerencias ?? []).map(s => s.titulo),
+    });
     return json.sugerencias ?? [];
-  } catch {
+  } catch (err) {
+    await logDebugIA("AUDITOR_SERVICIO", `[PARSE_ERROR] JSON.parse falló: ${String(err)}`, {
+      raw_preview: raw.slice(0, 600), error: String(err), servicio_id: servicio.id,
+    }, "error");
     return [];
   }
 }

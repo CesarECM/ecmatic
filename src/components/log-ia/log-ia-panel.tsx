@@ -149,13 +149,14 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
       {legacy.length > 0 && (
         <div>
           <p className="text-xs text-muted-foreground mb-2">
-            Registros legacy (anteriores a la migración de fases)
+            Registros sin trace — legacy y logs de depuración de flujo
           </p>
           <div className="rounded border overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-[10px] uppercase text-gray-500">
                 <tr>
                   <th className="p-2 text-left">Acción</th>
+                  <th className="p-2 text-left">Fase</th>
                   <th className="p-2 text-left">Lead</th>
                   <th className="p-2 text-left">Resultado</th>
                   <th className="p-2 text-right">Tokens</th>
@@ -169,11 +170,21 @@ export function LogIAPanel({ grupos, legacy, totalRegistros, tokensTotal, filtro
                   const m = r.metadata ?? {};
                   const tIn = m.tokens_input as number | undefined;
                   const tOut = m.tokens_output as number | undefined;
+                  const fase = r.fase ?? "respuesta";
+                  const FASE_PILL: Record<string, string> = {
+                    debug: "bg-gray-100 text-gray-500",
+                    warn:  "bg-yellow-100 text-yellow-700",
+                    error: "bg-red-100 text-red-700",
+                  };
+                  const pillCls = FASE_PILL[fase] ?? "bg-green-100 text-green-700";
                   return (
                     <tr key={r.id} className="border-t hover:bg-gray-50">
                       <td className="p-2 font-medium text-gray-700">{TIPO_LABEL[r.tipo_accion] ?? r.tipo_accion}</td>
+                      <td className="p-2">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${pillCls}`}>{fase}</span>
+                      </td>
                       <td className="p-2 text-muted-foreground">{lead?.nombre ?? lead?.telefono ?? "—"}</td>
-                      <td className="p-2 text-muted-foreground max-w-[180px] truncate" title={r.resultado ?? ""}>{r.resultado ?? "—"}</td>
+                      <td className="p-2 text-muted-foreground max-w-[200px] truncate" title={r.resultado ?? ""}>{r.resultado ?? "—"}</td>
                       <td className="p-2 text-right text-muted-foreground">{tIn !== undefined && tOut !== undefined ? (tIn + tOut).toLocaleString() : "—"}</td>
                       <td className="p-2 text-right text-muted-foreground">{m.duracion_ms as number ?? "—"}</td>
                       <td className="p-2 text-center text-muted-foreground whitespace-nowrap">

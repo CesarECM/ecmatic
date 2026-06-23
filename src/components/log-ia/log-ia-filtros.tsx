@@ -7,6 +7,7 @@ const TIPOS = [
   "CLASIFICAR","RESPUESTA","CONTEXTO","SETTER","OBJECION","DESCONFIANZA",
   "CAGC_INFERIR","SUGERIR_KB","ANALISIS","VISION","LEADMAGNET","CUALIFICACION",
   "SENALES","PAQUETE_SERVICIO","BRIEF_DISENO","CLUSTERING",
+  "AUDITOR_SERVICIO","AUDITOR_PIPELINE","PAQUETE_SERVICIO_NUEVO",
 ];
 const TIPO_LABEL: Record<string, string> = {
   CLASIFICAR:"Clasificar",    RESPUESTA:"Respuesta WA",   CONTEXTO:"Contexto",
@@ -15,11 +16,13 @@ const TIPO_LABEL: Record<string, string> = {
   VISION:"Visión",            LEADMAGNET:"Leadmagnet",    CUALIFICACION:"Cualificación",
   SENALES:"Señales",          PAQUETE_SERVICIO:"Paquete", BRIEF_DISENO:"Brief",
   CLUSTERING:"Clustering",
+  AUDITOR_SERVICIO:"🔍 Auditor Servicio", AUDITOR_PIPELINE:"🔀 Auditor Pipeline",
+  PAQUETE_SERVICIO_NUEVO:"📦 Paquete Nuevo",
 };
-const FASES = ["llamado","peticion","respuesta","timeout","error"] as const;
+const FASES = ["llamado","peticion","respuesta","timeout","error","debug","warn"] as const;
 const FASE_LABEL: Record<string, string> = {
   llamado:"Llamado", peticion:"Petición", respuesta:"Respuesta",
-  timeout:"Timeout", error:"Error",
+  timeout:"Timeout", error:"Error", debug:"Debug", warn:"Warn",
 };
 
 interface Props {
