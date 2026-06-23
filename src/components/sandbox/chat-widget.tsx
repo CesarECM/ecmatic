@@ -41,7 +41,7 @@ export function ChatWidget() {
   const [cargando, setCargando] = useState(false);
   const [cargandoSesion, setCargandoSesion] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -51,7 +51,9 @@ export function ChatWidget() {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [mensajes.length]);
 
   useEffect(() => {
@@ -175,7 +177,7 @@ export function ChatWidget() {
         </div>
 
         {/* Mensajes */}
-        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 min-h-0">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 min-h-0">
           {mensajes.length === 0 && (
             <p className="text-center text-sm text-muted-foreground pt-10 px-4">
               Escribe un mensaje para simular una conversación de WhatsApp.
@@ -212,7 +214,6 @@ export function ChatWidget() {
             <p className="text-center text-xs text-muted-foreground py-2 animate-pulse">Cargando sesión…</p>
           )}
           {error && <p className="text-center text-xs text-red-600 py-1">{error}</p>}
-          <div ref={bottomRef} />
         </div>
 
         {/* Strip de diagnóstico — solo móvil, aparece cuando hay respuesta */}
