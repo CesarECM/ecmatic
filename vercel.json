@@ -25,6 +25,7 @@
     { "path": "/api/admin/auditor-autoaprobacion",  "schedule": "0 0 1 * *" },
     { "path": "/api/admin/ejecutar-prospeccion-secuencial", "schedule": "0 7 * * *" },
     { "path": "/api/admin/polling-templates-wa",            "schedule": "0 */2 * * *" },
-    { "path": "/api/admin/actualizar-scores-imagen",        "schedule": "0 6 * * 0" }
+    { "path": "/api/admin/actualizar-scores-imagen",        "schedule": "0 6 * * 0" },
+    { "path": "/api/admin/auditor-pipelines",              "schedule": "0 7 * * 0" }
   ]
 }
