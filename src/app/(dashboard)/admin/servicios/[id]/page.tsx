@@ -48,16 +48,16 @@ export default async function ServicioDetallePage({ params }: { params: Promise<
       supabase.from("brochures").select("id,titulo,url,fases_cagc_objetivo,activo,servicio_id").eq("servicio_id", id),
       supabase
         .from("sugerencias_ia")
-        .select("id, titulo, contenido, metadata, created_at")
+        .select("id, titulo, descripcion, metadata, created_at")
         .eq("servicio_id", id)
-        .eq("categoria", "auditor_servicio")
+        .filter("metadata->>categoria", "eq", "auditor_servicio")
         .is("aprobado", null)
         .order("created_at", { ascending: false })
         .limit(10),
     ]);
 
   const brochures = (brochuresRes.data ?? []) as { id: string; titulo: string; url: string; activo: boolean }[];
-  const sugerencias = (sugerenciasRes.data ?? []) as { id: string; titulo: string; contenido: string; metadata: Record<string, unknown>; created_at: string }[];
+  const sugerencias = (sugerenciasRes.data ?? []) as { id: string; titulo: string; descripcion: string; metadata: Record<string, unknown>; created_at: string }[];
   const ahorro = servicio.precio_centavos && servicio.precio_descuento_centavos
     ? Math.round((1 - servicio.precio_descuento_centavos / servicio.precio_centavos) * 100)
     : null;

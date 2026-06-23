@@ -10,7 +10,7 @@ import { createBrowserClient } from "@supabase/ssr";
 interface Sugerencia {
   id: string;
   titulo: string;
-  contenido: string;
+  descripcion: string;
   metadata: Record<string, unknown>;
   created_at: string;
 }
@@ -100,7 +100,7 @@ export function AuditoriaCard({ servicioId, sugerencias }: Props) {
                   )}
                 </div>
                 <p className="text-sm font-medium">{s.titulo}</p>
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{s.contenido}</p>
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{s.descripcion}</p>
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => handleAprobacion(s.id, true)}  disabled={pending} className="text-xs text-green-600 hover:underline">Marcar revisada</button>
                   <button onClick={() => handleAprobacion(s.id, false)} disabled={pending} className="text-xs text-red-600 hover:underline">Descartar</button>
