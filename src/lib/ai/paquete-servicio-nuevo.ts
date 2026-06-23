@@ -35,8 +35,10 @@ Responde SOLO en JSON con este formato exacto:
   });
 
   const raw = (response.content[0] as { text: string }).text.trim();
-  // Claude a veces envuelve el JSON en ```json ... ``` — limpiar antes de parsear
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  // Claude puede envolver el JSON en ```json...``` y añadir texto antes/después.
+  // Extraer directamente el array JSON con regex es más robusto.
+  const jsonMatch = raw.match(/\[[\s\S]*\]/);
+  const cleaned = jsonMatch ? jsonMatch[0] : raw.trim();
   void logDebugIA("PAQUETE_SERVICIO_NUEVO", `[PARSE_INICIO] ${cleaned.length} chars: ${cleaned.slice(0, 120)}`, {
     raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length, tenia_backticks: raw !== cleaned, servicio: tituloServicio,
   });

@@ -86,11 +86,15 @@ ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("
     return [];
   }
 
-  // Claude a veces envuelve el JSON en ```json ... ``` — limpiar antes de parsear
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  // Claude puede envolver el JSON en ```json...``` y añadir texto antes/después.
+  // Extraer el bloque JSON directamente con regex es más robusto que limpiar bordes.
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  const cleaned = jsonMatch ? jsonMatch[0] : raw.trim();
 
   void logDebugIA("AUDITOR_SERVICIO", `[PARSE_INICIO] ${cleaned.length} chars: ${cleaned.slice(0, 120)}`, {
-    raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length, tenia_backticks: raw !== cleaned, servicio_id: servicio.id,
+    raw_preview: cleaned.slice(0, 600), raw_length: cleaned.length,
+    raw_total: raw.length, extra_chars: raw.length - cleaned.length,
+    servicio_id: servicio.id,
   });
 
   try {
