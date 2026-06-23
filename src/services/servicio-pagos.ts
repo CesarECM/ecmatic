@@ -7,7 +7,7 @@ import type { TipoPagoServicio } from "@/lib/supabase/types";
 
 export interface ServicioPago {
   id: string;
-  recurso_id: string;
+  servicio_id: string;
   tipo: TipoPagoServicio;
   url: string;
   descripcion: string | null;
@@ -17,19 +17,20 @@ export interface ServicioPago {
 }
 
 export interface CrearServicioPagoInput {
-  recurso_id: string;
+  servicio_id: string;
   tipo: TipoPagoServicio;
   url: string;
   descripcion?: string | null;
   activo?: boolean;
 }
 
-export async function listarPagosServicio(recursoId: string): Promise<ServicioPago[]> {
+export async function listarPagosServicio(servicioId: string): Promise<ServicioPago[]> {
   const supabase = createServiceClient();
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from("servicio_pagos")
     .select("*")
-    .eq("recurso_id", recursoId)
+    .eq("servicio_id", servicioId)
     .eq("activo", true)
     .order("tipo");
   if (error) throw new Error(`[servicio-pagos] Error listando: ${error.message}`);
@@ -38,10 +39,11 @@ export async function listarPagosServicio(recursoId: string): Promise<ServicioPa
 
 export async function crearServicioPago(input: CrearServicioPagoInput): Promise<ServicioPago> {
   const supabase = createServiceClient();
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from("servicio_pagos")
     .insert({
-      recurso_id:  input.recurso_id,
+      servicio_id: input.servicio_id,
       tipo:        input.tipo,
       url:         input.url,
       descripcion: input.descripcion ?? null,

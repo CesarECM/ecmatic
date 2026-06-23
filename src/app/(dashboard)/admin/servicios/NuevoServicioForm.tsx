@@ -24,21 +24,43 @@ export function NuevoServicioForm() {
         startTransition(async () => {
           try {
             await crearServicioAction(fd);
-            toast.success("Servicio creado", { id: tid });
+            toast.success("Servicio creado — el auditor IA analizará el catálogo", { id: tid });
             setOpen(false);
-          } catch {
-            toast.error("Error al crear", { id: tid });
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Error al crear", { id: tid });
           }
         });
       }}
-      className="flex flex-col sm:flex-row gap-2 items-start"
+      className="flex flex-col gap-3 w-72 p-4 rounded-lg border bg-card shadow-sm"
     >
-      <div className="flex flex-col gap-2 w-full sm:w-auto">
-        <Input name="titulo" required placeholder="Nombre del servicio" className="text-sm w-64" />
-        <Textarea name="contenido" required placeholder="Descripción breve…" rows={2} className="text-sm w-64" />
+      <p className="text-sm font-semibold">Nuevo servicio</p>
+
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Nombre del servicio *</label>
+        <Input name="titulo" required placeholder="Ej: Evaluación EC0217.01" className="text-sm" />
       </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Descripción breve *</label>
+        <Textarea
+          name="contenido"
+          required
+          placeholder="¿Qué hace este servicio y a quién va dirigido?"
+          rows={3}
+          className="text-sm"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-muted-foreground">Estándar CONOCER (opcional)</label>
+        <Input name="estandar_conocer" placeholder="EC0217.01" className="text-sm" />
+        <p className="text-[10px] text-muted-foreground">
+          Si el título incluye varios estándares, el auditor IA sugerirá separarlos.
+        </p>
+      </div>
+
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>Crear</Button>
+        <Button type="submit" size="sm" disabled={pending} className="flex-1">Crear</Button>
         <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
       </div>
     </form>

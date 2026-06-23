@@ -28,7 +28,8 @@ const SECTIONS: NavSection[] = [
     id: "conocimiento",
     label: "Conocimiento",
     items: [
-      { href: "/admin/servicios",     label: "Servicios",           emoji: "🛍️", roles: ["admin"] },
+      { href: "/admin/servicios",           label: "Servicios",           emoji: "🛍️", roles: ["admin"] },
+      { href: "/admin/servicios/auditoria", label: "Auditoría Servicios IA", emoji: "🔍", roles: ["admin"] },
       { href: "/admin/conocimiento",  label: "Base de conocimiento",emoji: "📚", roles: ["admin"] },
       { href: "/admin/nurturing",     label: "Nurturing",           emoji: "📧", roles: ["admin"] },
       { href: "/admin/matriz",        label: "Matriz nD",           emoji: "🧮", roles: ["admin"] },

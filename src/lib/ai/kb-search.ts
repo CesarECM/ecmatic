@@ -22,16 +22,26 @@ export function formatearRecursoKB(r: RecursoKB): string {
   return partes.join("\n");
 }
 
-// S1.4 — Búsqueda semántica con pgvector
+// S1.4 — Búsqueda semántica en KB + tabla servicios independiente (Sprint 36)
 export async function buscarRecursos(query: string, limite = 4): Promise<RecursoKB[]> {
-  const supabase = createServiceClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createServiceClient() as any;
   const embedding = await generarEmbedding(query);
-  const { data } = await supabase.rpc("buscar_recursos", {
-    query_embedding: embedding,
-    limite,
-    umbral: 0.65,
-  });
-  return (data ?? []) as RecursoKB[];
+
+  const [kbRes, svcRes] = await Promise.all([
+    supabase.rpc("buscar_recursos", { query_embedding: embedding, limite, umbral: 0.65 }),
+    supabase.rpc("buscar_servicios", { query_embedding: embedding, limite, umbral: 0.65 }),
+  ]);
+
+  const kb  = (kbRes.data  ?? []) as (RecursoKB & { similitud: number })[];
+  const svc = (svcRes.data ?? []) as (RecursoKB & { similitud: number })[];
+
+  // Fusionar, deduplicar por id, ordenar por similitud descendente, recortar a límite
+  const seen = new Set<string>();
+  return [...kb, ...svc]
+    .sort((a, b) => (b.similitud ?? 0) - (a.similitud ?? 0))
+    .filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
+    .slice(0, limite);
 }
 
 // Score heurístico de confianza: recursos KB y matriz elevan; frases de incertidumbre bajan.
