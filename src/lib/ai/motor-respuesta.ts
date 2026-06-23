@@ -18,6 +18,14 @@ import type { ProtocoloObjecion } from "./protocolo-objecion";
 
 export { necesitaHandoff } from "./handoff";
 
+function normalizarRespuesta(texto: string): string {
+  return texto
+    .replace(/^[—–] /gm, "")      // viñeta con raya al inicio de línea → quitar
+    .replace(/ [—–]$/gm, ".")     // raya al final de oración → punto
+    .replace(/ [—–] /g, ", ")     // raya entre dos frases → coma
+    .replace(/[—–]/g, ", ");      // cualquier raya restante → coma
+}
+
 interface ContextoLead {
   nombre: string | null;
   temperamento: string | null;
@@ -220,6 +228,7 @@ ${instruccionReglaOroCierre()}`;
 
   void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
-  const texto = (response.content[0] as { text: string }).text.trim();
+  const raw  = (response.content[0] as { text: string }).text.trim();
+  const texto = normalizarRespuesta(raw);
   return { texto, scoreConfianza: calcularScore(todosRecursos, sugerenciaMatriz, texto), imagenUrl: imagenActivaUrl };
 }

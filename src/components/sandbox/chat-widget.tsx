@@ -52,7 +52,7 @@ export function ChatWidget() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensajes, cargando]);
+  }, [mensajes.length]);
 
   useEffect(() => {
     const firstUser = mensajes.find((m) => m.rol === "usuario");
