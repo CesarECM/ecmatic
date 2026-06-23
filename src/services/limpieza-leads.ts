@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "@/lib/ai/client";
 
 // S15.3 — Verifica si un teléfono o email está en blacklist.
 // Llamar ANTES de obtenerOCrearLead para cumplir LFPDPPP.
@@ -94,12 +92,10 @@ El lead ya mostró interés, así que es buen momento. Escribe UNA sola oración
 cálida y con razón clara (para enviarte tu información de certificación). Sin asteriscos.`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("CLASIFICAR"),
+    const res = await callClaudeIA("CLASIFICAR", {
       max_tokens: 80,
       messages: [{ role: "user", content: `Historial:\n${historial.slice(-300)}\n\n${prompt}` }],
     });
-    void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
     return (res.content[0] as { text: string }).text.trim();
   } catch {
     return null;

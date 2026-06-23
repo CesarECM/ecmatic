@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "@/lib/ai/client";
 
 type PrioridadSugerencia = "urgente" | "importante" | "puede_esperar";
 
@@ -81,8 +79,7 @@ export async function detectarObsolescenciaParcial(): Promise<void> {
 
   const textos = candidatos.map((r) => `[${r.id}] ${r.titulo}: ${r.contenido.slice(0, 200)}`).join("\n---\n");
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 300,
     messages: [{ role: "user", content: `Eres auditor de base de conocimiento de un centro de certificación CONOCER México.
 Analiza estos recursos. Identifica cuáles probablemente contienen datos específicos que pueden haberse desactualizado
@@ -92,8 +89,6 @@ Analiza estos recursos. Identifica cuáles probablemente contienen datos especí
 Recursos:
 ${textos}` }],
   });
-  void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
   const raw = (res.content[0] as { text: string }).text;
   const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { ids_obsoletos?: string[] };
 
@@ -127,8 +122,7 @@ export async function detectarHuecosCobertura(): Promise<void> {
   if (!mensajes?.length) return;
   const preguntas = mensajes.map((m) => m.contenido).join("\n");
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 200,
     messages: [{ role: "user", content: `Analiza estas preguntas de leads sobre certificaciones CONOCER.
 Identifica temas recurrentes que probablemente no están cubiertos en una base de conocimiento básica.
@@ -137,8 +131,6 @@ Lista máx 3 temas como JSON: {"huecos": ["tema1", "tema2"]}
 Preguntas:
 ${preguntas}` }],
   });
-  void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
   const raw = (res.content[0] as { text: string }).text;
   const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { huecos?: string[] };
 

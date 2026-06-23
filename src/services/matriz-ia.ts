@@ -1,5 +1,4 @@
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 import { crearCelda, listarMatriz, buscarEnMatriz } from "./matriz";
 import type { DimensionesMatriz } from "@/lib/supabase/types";
 
@@ -51,8 +50,7 @@ Ajusta el mensaje al momento del comprador: si está en fases tempranas (0-4) ed
 en fases medias (5-8) resuelve objeciones y genera confianza; en fases de decisión (9-10) facilita el cierre.
 No menciones el perfil internamente. Responde en español.`;
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 200,
     messages: [{ role: "user", content: prompt }],
   });
@@ -108,8 +106,7 @@ para el siguiente perfil de lead (máx 2 oraciones, orientada al cierre, en espa
 - Servicio: ${dims.servicio ?? "proceso completo"}
 - Tipo cliente: ${dims.tipo_cliente ?? "B2C"}`;
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 150,
     messages: [{ role: "user", content: prompt }],
   });

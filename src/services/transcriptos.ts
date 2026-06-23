@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 import type { TemperaturaCierre } from "@/lib/supabase/types";
 
 // S7.7 — Guarda un transcripto y dispara el procesamiento por IA
@@ -40,8 +39,8 @@ Responde en JSON:
 }`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("ANALISIS"), max_tokens: 500,
+    const res = await callClaudeIA("ANALISIS", {
+      max_tokens: 500,
       messages: [{ role: "user", content: prompt }],
     });
     const raw = (res.content[0] as { text: string }).text.trim();

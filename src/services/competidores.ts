@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 
 // S5.8 — Detecta menciones de competidores en el texto de una conversación.
 // Registra en la tabla competidores e inyecta en metadata del lead.
@@ -16,8 +15,7 @@ Mensaje: "${texto}"`;
 
   let nombresDetectados: string[] = [];
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("COMPETIDORES"),
+    const res = await callClaudeIA("COMPETIDORES", {
       max_tokens: 100,
       messages: [{ role: "user", content: prompt }],
     });

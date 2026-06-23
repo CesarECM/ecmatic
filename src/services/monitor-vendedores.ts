@@ -1,8 +1,7 @@
 // S25.5 + S25.6 — Monitor de desempeño y sugerencias de ajuste de peso por vendedor
 import { createServiceClient } from "@/lib/supabase/service";
 import { calcularMetricasVendedor } from "@/services/vendedor-metricas";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 
 const UMBRAL_SHOW_RATE_BAJO = 0.4;
 const UMBRAL_CONVERSION_ALTA = 0.5;
@@ -67,8 +66,7 @@ export async function ejecutarMonitorVendedores(): Promise<{ alertas: number; su
 
     if (await alertaReciente(supabase, v.id, "ajuste_peso", COOLDOWN_PESO_DIAS)) continue;
 
-    const justificacion = await anthropic.messages.create({
-      model: modeloPorTarea("COACHING"),
+    const justificacion = await callClaudeIA("COACHING", {
       max_tokens: 200,
       messages: [{
         role: "user",

@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 import type { ActorPromesa } from "@/lib/supabase/types";
 
 // S5.10 — Detecta compromisos en el texto y los guarda para seguimiento.
@@ -21,8 +20,7 @@ o {"promesas": []} si no hay compromisos claros.`;
 
   let promesas: { actor: string; promesa: string; fecha_prometida: string | null }[] = [];
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("CLASIFICAR"),
+    const res = await callClaudeIA("CLASIFICAR", {
       max_tokens: 200,
       messages: [{ role: "user", content: prompt }],
     });

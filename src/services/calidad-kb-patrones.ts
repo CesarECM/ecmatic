@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
-import { registrarUsoIA } from "@/services/alertas-ia";
+import { callClaudeIA } from "@/lib/ai/client";
 import {
   crearAlertaKB,
   detectarDuplicadosSemanticos,
@@ -41,8 +39,7 @@ export async function detectarInconsistenciaCanales(): Promise<void> {
   ]);
   if (!wa?.length || !email?.length) return;
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 200,
     messages: [{ role: "user", content: `Compara estos templates de WhatsApp y email para encontrar inconsistencias:
 los que abordan el mismo tema pero con información distinta o contradictoria.
@@ -51,8 +48,6 @@ Lista máx 2 pares como JSON: {"pares": [{"wa_titulo": "X", "email_titulo": "Y",
 Templates WA: ${wa.map((t) => `"${t.titulo}"`).join(", ")}
 Templates Email: ${email.map((t) => `"${t.titulo}"`).join(", ")}` }],
   });
-  void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
   const raw = (res.content[0] as { text: string }).text;
   const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
     pares?: { wa_titulo: string; email_titulo: string; problema: string }[]
@@ -88,8 +83,7 @@ export async function detectarSesgoYDerivaTono(): Promise<void> {
   const tonoReciente = recientes?.map((r) => r.contenido.slice(0, 100)).join(" | ") ?? "";
   if (!tonoReciente) return;
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 200,
     messages: [{ role: "user", content: `Analiza estos recursos de KB antiguos (6+ meses). Identifica cuáles tienen un tono
 distinto al de los recursos recientes de la marca. JSON: {"ids_deriva": ["uuid1"]}
@@ -99,8 +93,6 @@ Tono reciente de la marca: "${tonoReciente}"
 Recursos antiguos:
 ${antiguos.map((r) => `[${r.id}] ${r.titulo}: ${r.contenido.slice(0, 150)}`).join("\n")}` }],
   });
-  void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
   const raw = (res.content[0] as { text: string }).text;
   const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { ids_deriva?: string[] };
   for (const id of json.ids_deriva ?? []) {
@@ -154,8 +146,7 @@ export async function sugerirCategoriaSuciedad(): Promise<void> {
 
   if (!alertas?.length) return;
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ANALISIS"),
+  const res = await callClaudeIA("ANALISIS", {
     max_tokens: 200,
     messages: [{ role: "user", content: `Analiza estas alertas de calidad de KB y determina si hay un patrón recurrente
 que NO está en las categorías existentes. Si encuentras uno, proponlo.
@@ -166,8 +157,6 @@ Categorías existentes: ${(existentes ?? []).map((e) => e.nombre).join(", ")}
 Alertas recientes:
 ${alertas.map((a) => `- ${a.titulo}: ${a.descripcion}`).join("\n")}` }],
   });
-  void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
   const raw = (res.content[0] as { text: string }).text;
   const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
     nueva_categoria?: { nombre: string; descripcion: string; regla: string } | null

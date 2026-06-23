@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 import type { TipoGatillo, AudienciaGatillo, PipelineRuta } from "@/lib/supabase/types";
 
 export interface Gatillo {
@@ -136,8 +135,7 @@ Responde en JSON: [{"tipo": "escasez_cupo", "razon": "..."}]
 Máximo 3 sugerencias. Solo sugiere los que tengan evidencia real en los mensajes.`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("ANALISIS"),
+    const res = await callClaudeIA("ANALISIS", {
       max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });

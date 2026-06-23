@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 
 export interface MetricasVendedor {
   vendedorId: string;
@@ -94,8 +93,8 @@ Responde en JSON: ["sugerencia 1", "sugerencia 2", "sugerencia 3"]
 Sé específico y accionable. En español.`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("COACHING"), max_tokens: 400,
+    const res = await callClaudeIA("COACHING", {
+      max_tokens: 400,
       messages: [{ role: "user", content: prompt }],
     });
     const raw = (res.content[0] as { text: string }).text.trim();

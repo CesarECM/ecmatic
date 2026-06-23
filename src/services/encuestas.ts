@@ -1,8 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 import { sendTextMessage } from "@/lib/whatsapp/client";
-import { registrarUsoIA } from "./alertas-ia";
 import { crearRecurso } from "./conocimiento";
 
 // S9.5 — Genera preguntas de encuesta personalizadas con IA
@@ -28,12 +26,10 @@ Perfil:
 Genera preguntas cortas, conversacionales, aptas para WhatsApp.
 Responde en JSON: ["pregunta 1", "pregunta 2", "pregunta 3"]`;
 
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("ENCUESTA"), max_tokens: 200,
+  const res = await callClaudeIA("ENCUESTA", {
+    max_tokens: 200,
     messages: [{ role: "user", content: prompt }],
   });
-  void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
   const raw = (res.content[0] as { text: string }).text.trim();
   const preguntas = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] ?? "[]") as string[];
   if (!preguntas.length) return null;
@@ -96,11 +92,10 @@ Responde en JSON:
 }`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("ENCUESTA"), max_tokens: 300,
+    const res = await callClaudeIA("ENCUESTA", {
+      max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });
-    void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
     const raw = (res.content[0] as { text: string }).text.trim();
     const analisis = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
       sugerencia_kb?: string; objecion_detectada?: string; info_util?: string;

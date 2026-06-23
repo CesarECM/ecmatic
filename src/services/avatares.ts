@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { callClaudeIA } from "@/lib/ai/client";
 
 export interface SugerenciaAvatar {
   tipo: "fusionar" | "eliminar";
@@ -125,8 +124,7 @@ Avatares:
 ${avatares.map((a) => `ID:${a.id} Código:${a.codigo} Tipo:${a.tipo} Leads:${conteoPorAvatar[a.id]} Características:${JSON.stringify(a.caracteristicas)}`).join("\n")}`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("ANALISIS"),
+    const res = await callClaudeIA("ANALISIS", {
       max_tokens: 600,
       messages: [{ role: "user", content: prompt }],
     });

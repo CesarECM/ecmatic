@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
-import { registrarUsoIA } from "./alertas-ia";
+import { callClaudeIA } from "@/lib/ai/client";
 
 // S11.2 — Califica la calidad de una conversación cerrada (ganada o perdida)
 export async function calcularCalidadConversacion(
@@ -46,12 +44,10 @@ Responde en JSON:
 }`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("ANALISIS"), max_tokens: 300,
+    const res = await callClaudeIA("ANALISIS", {
+      max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });
-    void registrarUsoIA("anthropic", res.usage.input_tokens, res.usage.output_tokens).catch(() => {});
-
     const raw = (res.content[0] as { text: string }).text.trim();
     const data = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
       coherencia?: number; velocidad?: number;

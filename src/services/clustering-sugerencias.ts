@@ -3,8 +3,7 @@
 // crea/actualiza clusters_sugerencias y asigna cluster_id.
 
 import { createServiceClient } from "@/lib/supabase/service";
-import { generarEmbedding, anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { generarEmbedding, callClaudeIA } from "@/lib/ai/client";
 
 const UMBRAL_CLUSTER = 0.85;
 
@@ -19,8 +18,7 @@ function coseno(a: number[], b: number[]): number {
 }
 
 async function generarTituloCluster(titulos: string[]): Promise<string> {
-  const res = await anthropic.messages.create({
-    model: modeloPorTarea("CLUSTERING"),
+  const res = await callClaudeIA("CLUSTERING", {
     max_tokens: 80,
     messages: [{
       role: "user",

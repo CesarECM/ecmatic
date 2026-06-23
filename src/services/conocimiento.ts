@@ -1,6 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { generarEmbedding, anthropic } from "@/lib/ai/client";
-import { modeloPorTarea } from "@/lib/ai/model-router";
+import { generarEmbedding, callClaudeIA } from "@/lib/ai/client";
 import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
 import type { TipoRecurso, OrigenRecurso } from "@/lib/supabase/types";
 
@@ -234,8 +233,7 @@ export async function sugerirRecursoDesdeQuery(query: string): Promise<void> {
     const identidad = await obtenerIdentidad().catch(() => null);
     const brandContext = identidad ? `\n\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
 
-    const response = await anthropic.messages.create({
-      model: modeloPorTarea("SUGERIR_KB"),
+    const response = await callClaudeIA("SUGERIR_KB", {
       max_tokens: 400,
       system: `Analiza la pregunta de un lead sobre certificaciones CONOCER en México.
 Determina si se debería crear un nuevo recurso en la base de conocimiento para responderla mejor.
@@ -262,8 +260,7 @@ export async function procesarFuenteExterna(contenido: string): Promise<number> 
   const identidad = await obtenerIdentidad().catch(() => null);
   const brandContext = identidad ? `\n\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("SUGERIR_KB"),
+  const response = await callClaudeIA("SUGERIR_KB", {
     max_tokens: 1500,
     system: `Eres un extractor de conocimiento para un centro de certificación CONOCER en México.
 Analiza el contenido y extrae hasta 5 recursos útiles: FAQs, objeciones comunes, descripciones de servicios, prácticas de venta o templates de mensajes.
