@@ -33,7 +33,7 @@ export async function dispararAuditoria(
       .from("sugerencias_ia")
       .select("titulo")
       .eq("servicio_id", servicioId)
-      .eq("categoria", "auditor_servicio")
+      .filter("metadata->>categoria", "eq", "auditor_servicio")
       .gte("created_at", hace24h);
     const titulosRecientes = new Set((recientes ?? []).map((r: { titulo: string }) => r.titulo));
 
@@ -47,16 +47,17 @@ export async function dispararAuditoria(
       } catch { /* no bloquear si falla */ }
 
       await db().from("sugerencias_ia").insert({
-        categoria:   "auditor_servicio",
+        tipo:        "general",
         titulo:      sug.titulo,
-        contenido:   sug.descripcion,
+        descripcion: sug.descripcion,
         servicio_id: servicioId,
         embedding,
         metadata: {
-          accion:               sug.accion,
-          urgencia:             sug.urgencia,
+          categoria:              "auditor_servicio",
+          accion:                 sug.accion,
+          urgencia:               sug.urgencia,
           servicio_ids_afectados: sug.servicio_ids_afectados,
-          tipo_cambio:          tipoCambio,
+          tipo_cambio:            tipoCambio,
         },
       });
     }

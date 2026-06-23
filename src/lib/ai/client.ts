@@ -95,8 +95,8 @@ export async function callClaudeIA(
   } catch (err) {
     const durMs     = Date.now() - inicio;
     const isTimeout = err instanceof Error && err.message.startsWith("TIMEOUT_");
-    // LOG 3 — timeout o error
-    void insertLogIA({
+    // LOG 3 — timeout o error (awaited: garantiza escritura antes de que la función serverless retorne)
+    await insertLogIA({
       tipo_accion: tarea, lead_id: leadId,
       fase: isTimeout ? "timeout" : "error",
       request_id: requestId,
@@ -111,8 +111,8 @@ export async function callClaudeIA(
     throw err;
   }
 
-  // LOG 3 — respuesta exitosa
-  void insertLogIA({
+  // LOG 3 — respuesta exitosa (awaited: garantiza escritura antes de que la función serverless retorne)
+  await insertLogIA({
     tipo_accion: tarea, lead_id: leadId,
     fase: "respuesta", request_id: requestId,
     resultado: response.content[0]?.type === "text"

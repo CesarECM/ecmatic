@@ -52,7 +52,7 @@ function SugerenciaRow({
         <span className="text-[10px] text-muted-foreground ml-auto">{tiempoRelativo(item.created_at)}</span>
       </div>
       <p className="text-xs font-medium">{item.titulo}</p>
-      <p className="text-[11px] text-muted-foreground leading-relaxed">{item.contenido}</p>
+      <p className="text-[11px] text-muted-foreground leading-relaxed">{item.descripcion}</p>
       <div className="flex gap-1.5 pt-1">
         <button
           onClick={() => startTransition(() => onAprobar())}

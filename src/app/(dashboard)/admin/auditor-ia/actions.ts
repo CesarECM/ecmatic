@@ -8,7 +8,7 @@ export type TipoAuditoria = "servicio" | "pipeline" | "etapa" | "kb" | "lead";
 export interface SugerenciaPanel {
   id: string;
   titulo: string;
-  contenido: string;
+  descripcion: string;
   prioridad: string;
   created_at: string;
   aprobado: boolean | null;
@@ -62,7 +62,7 @@ export async function obtenerEstadoAuditoriaAction(
   if (tipo === "servicio" || tipo === "kb") {
     const { data } = await db
       .from("sugerencias_ia")
-      .select("id, titulo, contenido, prioridad, created_at, aprobado, metadata")
+      .select("id, titulo, descripcion, prioridad, created_at, aprobado, metadata")
       .eq("servicio_id", id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -78,8 +78,8 @@ export async function obtenerEstadoAuditoriaAction(
   if (tipo === "pipeline") {
     const { data } = await db
       .from("sugerencias_ia")
-      .select("id, titulo, contenido, prioridad, created_at, aprobado, metadata")
-      .eq("categoria", "auditor_pipeline")
+      .select("id, titulo, descripcion, prioridad, created_at, aprobado, metadata")
+      .filter("metadata->>categoria", "eq", "auditor_pipeline")
       .filter("metadata->>pipeline_ruta", "eq", id)
       .order("created_at", { ascending: false })
       .limit(20);

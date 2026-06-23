@@ -29,7 +29,7 @@ export async function dispararAuditoriaPipeline(
     const { data: recientes } = await db()
       .from("sugerencias_ia")
       .select("titulo")
-      .eq("categoria", "auditor_pipeline")
+      .filter("metadata->>categoria", "eq", "auditor_pipeline")
       .gte("created_at", hace24h);
     const titulosRecientes = new Set((recientes ?? []).map((r: { titulo: string }) => r.titulo));
 
@@ -43,12 +43,13 @@ export async function dispararAuditoriaPipeline(
       } catch { /* no bloquear */ }
 
       await db().from("sugerencias_ia").insert({
-        categoria:   "auditor_pipeline",
+        tipo:        "general",
         titulo:      sug.titulo,
-        contenido:   sug.descripcion,
+        descripcion: sug.descripcion,
         servicio_id: pipeline.servicio_id ?? null,
         embedding,
         metadata: {
+          categoria:     "auditor_pipeline",
           accion:        sug.accion,
           urgencia:      sug.urgencia,
           pipeline_ruta: sug.pipeline_ruta,

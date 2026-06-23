@@ -50,6 +50,15 @@ export function LogIAFiltros({ tipo: tInit = "", fase: fInit = "", desde: dInit 
     router.push("/admin/log-ia");
   }, [router]);
 
+  const ultimosCincoMin = useCallback(() => {
+    const desde = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const p = new URLSearchParams();
+    if (tipo) p.set("tipo", tipo);
+    if (fase) p.set("fase", fase);
+    p.set("desde", desde);
+    router.push(`/admin/log-ia?${p.toString()}`);
+  }, [tipo, fase, router]);
+
   const chip = (activo: boolean) =>
     `rounded border px-2 py-1 text-xs cursor-pointer select-none transition-colors ${
       activo ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50"
@@ -103,10 +112,14 @@ export function LogIAFiltros({ tipo: tInit = "", fase: fInit = "", desde: dInit 
       </div>
 
       {/* Acciones */}
-      <div className="flex gap-2 pt-1">
+      <div className="flex flex-wrap gap-2 pt-1">
         <button onClick={aplicar}
           className="rounded bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700 transition-colors">
           Aplicar filtros
+        </button>
+        <button onClick={ultimosCincoMin}
+          className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors">
+          ⚡ Últimos 5 min
         </button>
         <button onClick={limpiar}
           className="rounded border px-3 py-1.5 text-xs hover:bg-gray-100 transition-colors">
