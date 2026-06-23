@@ -86,11 +86,16 @@ ${JSON.stringify(etapasSummary, null, 2)}`;
   let raw = "";
   try {
     const resp = await callClaudeIA("SUGERIR_KB", {
-      max_tokens: 1400,
+      max_tokens: 3000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
     raw = (resp.content[0] as { text: string }).text.trim();
+    if (resp.stop_reason === "max_tokens") {
+      void logDebugIA("AUDITOR_PIPELINE", `[MAX_TOKENS] Respuesta truncada — JSON probablemente inválido`, {
+        stop_reason: resp.stop_reason, raw_tail: raw.slice(-200), pipeline_ruta: pipeline.ruta,
+      }, "warn");
+    }
   } catch (err) {
     await logDebugIA("AUDITOR_PIPELINE", `[CLAUDE_ERROR] callClaudeIA falló: ${String(err)}`, {
       error: String(err), pipeline_ruta: pipeline.ruta, tipoCambio,

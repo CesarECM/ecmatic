@@ -69,11 +69,16 @@ ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("
   let raw = "";
   try {
     const resp = await callClaudeIA("SUGERIR_KB", {
-      max_tokens: 1200,
+      max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
     raw = (resp.content[0] as { text: string }).text.trim();
+    if (resp.stop_reason === "max_tokens") {
+      void logDebugIA("AUDITOR_SERVICIO", `[MAX_TOKENS] Respuesta truncada — JSON probablemente inválido`, {
+        stop_reason: resp.stop_reason, raw_tail: raw.slice(-200), servicio_id: servicio.id,
+      }, "warn");
+    }
   } catch (err) {
     await logDebugIA("AUDITOR_SERVICIO", `[CLAUDE_ERROR] callClaudeIA falló: ${String(err)}`, {
       error: String(err), servicio_id: servicio.id, tipo_cambio,
