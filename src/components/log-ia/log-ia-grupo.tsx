@@ -6,6 +6,7 @@ import type { EventoLogIA, LogIARow } from "@/services/log-ia";
 // ── Constantes de display ─────────────────────────────────────────────────────
 
 const TIPO_LABEL: Record<string, string> = {
+  CONVERSACION:"Conversación WA",          CONVERSACION_SANDBOX:"Sandbox",
   CLASIFICAR:"Clasificar",       RESPUESTA:"Respuesta WA",     CONTEXTO:"Contexto",
   SETTER:"Setter",               OBJECION:"Objeción",          DESCONFIANZA:"Desconfianza",
   CAGC_INFERIR:"Fase CAGC",     SUGERIR_KB:"Sugerir KB",      ANALISIS:"Análisis",
@@ -16,6 +17,7 @@ const TIPO_LABEL: Record<string, string> = {
   PAQUETE_SERVICIO_NUEVO:"Paquete Nuevo",
 };
 const TIPO_COLOR: Record<string, string> = {
+  CONVERSACION:"bg-emerald-100 text-emerald-700", CONVERSACION_SANDBOX:"bg-slate-100 text-slate-700",
   CLASIFICAR:"bg-sky-100 text-sky-700",         RESPUESTA:"bg-green-100 text-green-700",
   CONTEXTO:"bg-indigo-100 text-indigo-700",     SETTER:"bg-orange-100 text-orange-700",
   OBJECION:"bg-red-100 text-red-700",           DESCONFIANZA:"bg-rose-100 text-rose-700",

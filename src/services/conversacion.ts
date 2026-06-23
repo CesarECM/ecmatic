@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { obtenerOCrearLead, inferirEtapaPipeline, inferirTemperamento } from "./leads";
 import { guardarMensaje, obtenerHistorial } from "./mensajes";
 import { clasificarIntencion } from "@/lib/ai/clasificador";
@@ -15,6 +16,7 @@ import { capturarContactoPasivo } from "./captura-contacto";
 import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from "./citas";
 import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
+import { logDebugIA } from "./log-ia";
 import { createServiceClient } from "@/lib/supabase/service";
 import { dispararHooksPostConversacion } from "./post-conversacion";
 // S31 — Arquitectura de Objeciones
@@ -30,10 +32,14 @@ export async function procesarConversacion(
   mensajes: string[],
   waMessageId?: string
 ) {
+  const traceId = randomUUID();
+  void logDebugIA("CONVERSACION", `[CONV_INICIO] tel=${telefono} msgs=${mensajes.length}`, { texto: mensajes.join(" ").slice(0, 120) }, "debug", traceId);
+
   let lead: Awaited<ReturnType<typeof obtenerOCrearLead>>;
   try {
     lead = await obtenerOCrearLead(telefono);
   } catch {
+    void logDebugIA("CONVERSACION", "[CONV_ERROR] obtenerOCrearLead", { telefono }, "error", traceId);
     return;
   }
 
@@ -73,6 +79,7 @@ export async function procesarConversacion(
 
   const historial = await obtenerHistorial(lead.id);
   const intencion = await clasificarIntencion(mensajes, historial);
+  void logDebugIA("CONVERSACION", `[CLASIFICACION] ${intencion}`, { lead_id: lead.id, historial: !!historial }, "debug", traceId);
 
   for (const [i, contenido] of mensajes.entries()) {
     await guardarMensaje({
@@ -84,6 +91,7 @@ export async function procesarConversacion(
 
   void capturarContactoPasivo(lead.id, mensajes).catch(console.error);
   await inferirEtapaPipeline(lead.id, historial, intencion);
+  void logDebugIA("CONVERSACION", `[PIPELINE] inferido`, { lead_id: lead.id, intencion }, "debug", traceId);
   inferirTemperamento(lead.id, mensajes).catch(console.error);
 
   const supabase = createServiceClient();
@@ -97,6 +105,8 @@ export async function procesarConversacion(
     obtenerEtiquetasLead(lead.id).catch(() => []),
   ]);
 
+  void logDebugIA("CONVERSACION", `[CAGC] fase=${estadoCagc?.fase_numero ?? "?"} etapa=${leadActualizado?.pipeline_stage}`, { pipeline_ruta: leadActualizado?.pipeline_ruta }, "debug", traceId);
+
   // Slots / cita
   let slotsParaAI = undefined;
   let meetLinkParaAI: string | null = null;
@@ -108,10 +118,13 @@ export async function procesarConversacion(
         slotsParaAI = await obtenerSlotsDisponibles(vendedorId);
         void logAgen({ paso: "slots_consultados", leadId: lead.id, vendedorId,
           detalle: `${slotsParaAI.length} slots disponibles`, metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId } });
+        void logDebugIA("CONVERSACION", `[CALENDARIO] slots=${slotsParaAI.length}`, { vendedor_id: vendedorId }, "debug", traceId);
       }
     } catch (err) {
       void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
         detalle: `Error slots: ${err instanceof Error ? err.message : String(err)}` });
+      void logDebugIA("CONVERSACION", `[CONV_ERROR] slots: ${err instanceof Error ? err.message : String(err)}`,
+        { error: String(err) }, "error", traceId);
     }
   }
 
@@ -126,11 +139,14 @@ export async function procesarConversacion(
           meetLinkParaAI = meetLink;
           void logAgen({ paso: "cita_creada", citaId, leadId: lead.id, vendedorId,
             detalle: "Cita creada desde WA", metadata: { meetLink, inicio: slot.inicio.toISOString() } });
+          void logDebugIA("CONVERSACION", `[CALENDARIO] cita=${citaId} meet=${!!meetLink}`, { inicio: slot.inicio.toISOString() }, "debug", traceId);
         }
       }
     } catch (err) {
       void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
         detalle: `Error cita: ${err instanceof Error ? err.message : String(err)}` });
+      void logDebugIA("CONVERSACION", `[CONV_ERROR] cita: ${err instanceof Error ? err.message : String(err)}`,
+        { error: String(err) }, "error", traceId);
     }
   }
 
@@ -149,6 +165,11 @@ export async function procesarConversacion(
       : Promise.resolve(null),
     obtenerRolDinamico(lead.id).catch(() => []),
   ]);
+
+  if (setterEstado) void logDebugIA("CONVERSACION", `[SETTER] fase ${setterFaseActual}→${setterEstado.faseNueva} avanza=${setterEstado.debeAvanzar}`,
+    { fase_actual: setterFaseActual, fase_nueva: setterEstado.faseNueva, avanza: setterEstado.debeAvanzar }, "debug", traceId);
+  if (filtroResult) void logDebugIA("CONVERSACION", `[OBJECION] tipo=${filtroResult.tipo}`,
+    { tipo: filtroResult.tipo }, "debug", traceId);
 
   // Si el setter avanzó de fase, persistir en BD (fire-and-forget)
   if (setterEstado?.debeAvanzar && setterEstado.faseNueva !== setterFaseActual) {
@@ -212,6 +233,8 @@ export async function procesarConversacion(
     }
   }
 
+  void logDebugIA("CONVERSACION", `[RESPUESTA_FINAL] score=${scoreConfianza.toFixed(2)}`, { respuesta: respuesta.slice(0, 200) }, "debug", traceId);
+
   const requiereHandoff = await necesitaHandoff(mensajes, respuesta);
   if (requiereHandoff) await crearTicketHandoff(lead.id, mensajes.join("\n"));
 
@@ -255,7 +278,7 @@ export async function procesarConversacion(
   dispararHooksPostConversacion({
     leadId: lead.id, telefono, mensajes, historial, intencion,
     mensajeSalienteId: msgSaliente?.id,
-    estadoCagc,
+    estadoCagc, traceId,
   });
 }
 

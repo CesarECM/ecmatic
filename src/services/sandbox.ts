@@ -1,5 +1,6 @@
 // S16.3 — Motor de simulación: reproduce el flujo completo de conversacion.ts
 // sin enviar mensajes reales por WhatsApp ni crear tickets de handoff.
+import { randomUUID } from "crypto";
 import { guardarMensaje, obtenerHistorial } from "./mensajes";
 import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { generarRespuesta, necesitaHandoff } from "@/lib/ai/motor-respuesta";
@@ -8,6 +9,7 @@ import { obtenerEtiquetasLead } from "./etiquetas";
 import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from "./citas";
 import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
+import { logDebugIA } from "./log-ia";
 import { createServiceClient } from "@/lib/supabase/service";
 import { capturarContactoPasivo } from "./captura-contacto";
 // S31 — Paridad con conversacion.ts
@@ -31,9 +33,12 @@ export async function procesarSandbox(
   sessionId: string,
   mensaje: string
 ): Promise<SandboxResult> {
+  const traceId = randomUUID();
   const supabase = createServiceClient();
   // Cada sesión tiene su propio número de prueba para aislar el historial
   const telefono = `sandbox_${sessionId.slice(0, 12)}`;
+  void logDebugIA("CONVERSACION_SANDBOX", `[CONV_INICIO] session=${sessionId.slice(0,8)} "${mensaje.slice(0,100)}"`,
+    { session_id: sessionId.slice(0, 12), texto_inicio: mensaje.slice(0, 100) }, "debug", traceId);
 
   // Upsert lead de prueba — privacidad pre-aceptada para no bloquear el flujo.
   // is_test viene de la migración 00016; cast a any hasta que se regeneren los tipos.
@@ -52,6 +57,8 @@ export async function procesarSandbox(
 
   // Clasificar intención del mensaje actual
   const intencion = await clasificarIntencion([mensaje], historial);
+  void logDebugIA("CONVERSACION_SANDBOX", `[CLASIFICACION] intencion=${intencion}`,
+    { intencion, lead_id: lead.id }, "debug", traceId);
 
   // Persistir mensaje entrante para que el siguiente turno tenga contexto
   await guardarMensaje({
@@ -69,6 +76,8 @@ export async function procesarSandbox(
     obtenerFaseLead(lead.id).catch(() => null),
     obtenerEtiquetasLead(lead.id).catch(() => [] as Array<{ categoria: string; nombre: string }>),
   ]);
+  void logDebugIA("CONVERSACION_SANDBOX", `[CAGC] fase=${estadoCagc?.fase_numero ?? "?"} etapa=${lead.pipeline_stage}`,
+    { fase_cagc: estadoCagc?.fase_numero, pipeline_stage: lead.pipeline_stage }, "debug", traceId);
 
   let slotsParaAI = undefined;
   let meetLinkParaAI: string | null = null;
@@ -81,6 +90,8 @@ export async function procesarSandbox(
         void logAgen({ paso: "slots_consultados", leadId: lead.id, vendedorId,
           detalle: `[sandbox] Intención quiere_agendar — ${slotsParaAI.length} slots disponibles`,
           metadata: { slots: slotsParaAI.length, vendedor_id: vendedorId, origen: "sandbox" } });
+        void logDebugIA("CONVERSACION_SANDBOX", `[CALENDARIO] ${slotsParaAI.length} slots disponibles`,
+          { slots_count: slotsParaAI.length, vendedor_id: vendedorId }, "debug", traceId);
       }
     } catch (err) {
       void logAgen({ paso: "error", nivel: "error", leadId: lead.id,
@@ -99,6 +110,8 @@ export async function procesarSandbox(
           meetLinkParaAI = meetLink;
           void logAgen({ paso: "cita_creada", citaId, leadId: lead.id, vendedorId,
             detalle: "[sandbox] Cita creada desde conversación", metadata: { meetLink, inicio: slot.inicio.toISOString(), origen: "sandbox" } });
+          void logDebugIA("CONVERSACION_SANDBOX", `[CALENDARIO] cita creada meet=${!!meetLink}`,
+            { cita_id: citaId, inicio: slot.inicio.toISOString() }, "debug", traceId);
         }
       }
     } catch (err) {
@@ -122,6 +135,11 @@ export async function procesarSandbox(
       : Promise.resolve(null),
     obtenerRolDinamico(lead.id).catch(() => []),
   ]);
+
+  if (setterEstado) void logDebugIA("CONVERSACION_SANDBOX", `[SETTER] fase ${setterFaseActual}→${setterEstado.faseNueva} avanza=${setterEstado.debeAvanzar}`,
+    { fase_actual: setterFaseActual, fase_nueva: setterEstado.faseNueva, avanza: setterEstado.debeAvanzar }, "debug", traceId);
+  if (filtroResult) void logDebugIA("CONVERSACION_SANDBOX", `[OBJECION] tipo=${filtroResult.tipo}`,
+    { tipo: filtroResult.tipo }, "debug", traceId);
 
   if (setterEstado?.debeAvanzar && setterEstado.faseNueva !== setterFaseActual) {
     void (async () => {
@@ -154,6 +172,9 @@ export async function procesarSandbox(
     protocoloObjecion,
     rolesDinamicos,
   });
+
+  void logDebugIA("CONVERSACION_SANDBOX", `[RESPUESTA_FINAL] score=${scoreConfianza.toFixed(2)} "${respuesta.slice(0,200)}"`,
+    { score_confianza: scoreConfianza, respuesta_inicio: respuesta.slice(0, 200) }, "debug", traceId);
 
   // Detectar si la respuesta activaría handoff
   const handoff = await necesitaHandoff([mensaje], respuesta);

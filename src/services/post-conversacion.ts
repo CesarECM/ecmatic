@@ -10,6 +10,7 @@ import { ofrecerBrochure } from "./selector-brochure";
 import { evaluarYAsignarTarea } from "./motor-tareas";
 import { actualizarContextoIA } from "./contexto";
 import { actualizarScoreSalud } from "./score-salud";
+import { logDebugIA } from "./log-ia";
 import type { IntencionClasificada } from "@/lib/supabase/types";
 
 interface ParamsHooks {
@@ -20,11 +21,15 @@ interface ParamsHooks {
   intencion: IntencionClasificada;
   mensajeSalienteId: string | undefined;
   estadoCagc: EstadoCAGC | null;
+  traceId?: string;
 }
 
 export function dispararHooksPostConversacion(params: ParamsHooks): void {
-  const { leadId, telefono, mensajes, historial, intencion, mensajeSalienteId, estadoCagc } = params;
+  const { leadId, telefono, mensajes, historial, intencion, mensajeSalienteId, estadoCagc, traceId } = params;
   const textoCompleto = mensajes.join(" ");
+
+  void logDebugIA("CONVERSACION", `[POST_HOOKS] disparando hooks para lead=${leadId}`,
+    { lead_id: leadId, intencion, fase_cagc: estadoCagc?.fase_numero }, "debug", traceId);
 
   void detectarCompetidores(textoCompleto, leadId).catch(console.error);
 
@@ -40,17 +45,25 @@ export function dispararHooksPostConversacion(params: ParamsHooks): void {
   }
 
   if (historial && estadoCagc !== null) {
+    void logDebugIA("CONVERSACION", `[LEADMAGNET] evaluando fase_cagc=${estadoCagc.fase_numero}`,
+      { lead_id: leadId, fase_cagc: estadoCagc.fase_numero }, "debug", traceId);
     void ofrecerLeadmagnet(leadId, telefono, estadoCagc.fase_numero).catch(console.error);
     void ofrecerBrochure(leadId, telefono, estadoCagc.fase_numero).catch(console.error);
   }
 
   if (historial) {
     import("@/lib/ai/etiquetas-ia").then(({ sugerirEtiquetasParaLead }) => {
+      void logDebugIA("CONVERSACION", "[ETIQUETAS] disparando sugerirEtiquetasParaLead",
+        { lead_id: leadId }, "debug", traceId);
       void sugerirEtiquetasParaLead(leadId, mensajes, historial).catch(console.error);
     }).catch(console.error);
   }
 
   void evaluarYAsignarTarea(leadId, "conversacion").catch(console.error);
+  void logDebugIA("CONVERSACION", "[CONTEXTO] actualizando contexto IA",
+    { lead_id: leadId, intencion }, "debug", traceId);
   void actualizarContextoIA(leadId, `Conversación WhatsApp — intención: ${intencion}`).catch(console.error);
+  void logDebugIA("CONVERSACION", "[SCORE_SALUD] calculando score",
+    { lead_id: leadId }, "debug", traceId);
   void actualizarScoreSalud(leadId).catch(console.error);
 }
