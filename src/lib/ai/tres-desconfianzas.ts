@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import type { TipoDesconfianza } from "@/lib/supabase/types";
 
@@ -16,8 +15,7 @@ export async function identificarDesconfianza(
   mensajes: string[],
   historial: string
 ): Promise<ResultadoDesconfianza> {
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("DESCONFIANZA"),
+  const response = await callClaudeIA("DESCONFIANZA", {
     max_tokens: 80,
     system: `Eres experto en psicología de ventas consultiva.
 Identifica cuál de las Tres Desconfianzas Raíz está presente en el mensaje del lead.

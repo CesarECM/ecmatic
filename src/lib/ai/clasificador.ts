@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import type { IntencionClasificada } from "@/lib/supabase/types";
 
@@ -37,8 +36,7 @@ export async function clasificarIntencion(
 ): Promise<IntencionClasificada> {
   const texto = mensajes.join("\n");
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("CLASIFICAR"),
+  const response = await callClaudeIA("CLASIFICAR", {
     max_tokens: 15,
     system: `Eres un clasificador de intención de leads para un centro de certificación CONOCER en México.
 Responde ÚNICAMENTE con una de estas palabras exactas (sin espacios adicionales):

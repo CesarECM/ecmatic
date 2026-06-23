@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import type { TipoResistencia } from "@/lib/supabase/types";
 
@@ -15,8 +14,7 @@ export async function filtrarResistencia(
   mensajes: string[],
   historial: string
 ): Promise<ResultadoFiltro> {
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("OBJECION"),
+  const response = await callClaudeIA("OBJECION", {
     max_tokens: 20,
     system: `Eres un experto en psicología de ventas.
 Clasifica la resistencia del lead como CONDICION u OBJECION.

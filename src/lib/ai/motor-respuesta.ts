@@ -1,10 +1,8 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
 import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
 import { registrarUsoIA } from "@/services/alertas-ia";
-import { registrarAccionIA } from "@/services/log-ia";
 import { inferirRespuestaMatriz } from "@/services/matriz-ia";
 import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
 import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
@@ -214,16 +212,13 @@ INSTRUCCIONES:
 ${instruccionCanal}
 ${instruccionReglaOroCierre()}`;
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("RESPUESTA"),
+  const response = await callClaudeIA("RESPUESTA", {
     max_tokens: 400,
     system: systemPrompt,
     messages: [{ role: "user", content: mensajes.join("\n") }],
   });
 
   void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
-  void registrarAccionIA({ tipoAccion: "generar_respuesta", resultado: "enviado",
-    metadata: { recursos_usados: todosRecursos.length } }).catch(() => {});
 
   const texto = (response.content[0] as { text: string }).text.trim();
   return { texto, scoreConfianza: calcularScore(todosRecursos, sugerenciaMatriz, texto), imagenUrl: imagenActivaUrl };

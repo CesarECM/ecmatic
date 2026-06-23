@@ -1,6 +1,29 @@
 import { createServiceClient } from "@/lib/supabase/service";
 
+// TareaIA actuales (model-router.ts) + valores legacy de Sprint 10
 export type TipoAccionIA =
+  // Tareas actuales — espejo de TareaIA en model-router.ts
+  | "CLASIFICAR"
+  | "RESPUESTA"
+  | "ANALISIS"
+  | "COACHING"
+  | "ENCUESTA"
+  | "SUGERIR_KB"
+  | "COMPETIDORES"
+  | "CHURN"
+  | "CAGC_INFERIR"
+  | "VISION"
+  | "SENALES"
+  | "LEADMAGNET"
+  | "CONTEXTO"
+  | "PAQUETE_SERVICIO"
+  | "SETTER"
+  | "CUALIFICACION"
+  | "OBJECION"
+  | "DESCONFIANZA"
+  | "BRIEF_DISENO"
+  | "CLUSTERING"
+  // Valores legacy Sprint 10
   | "clasificar_intencion"
   | "generar_respuesta"
   | "generar_encuesta"
@@ -38,13 +61,14 @@ export async function listarLogIA(filtros?: {
   tipoAccion?: string;
   desde?: string;
   leadId?: string;
+  limit?: number;
 }) {
   const supabase = createServiceClient();
   let q = supabase
     .from("log_ia")
     .select("id, tipo_accion, resultado, metadata, created_at, leads(nombre, telefono)")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(filtros?.limit ?? 100);
 
   if (filtros?.tipoAccion) q = q.eq("tipo_accion", filtros.tipoAccion);
   if (filtros?.desde) q = q.gte("created_at", filtros.desde);

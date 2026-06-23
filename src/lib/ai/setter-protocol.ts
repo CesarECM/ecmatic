@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUsoIA } from "@/services/alertas-ia";
 
@@ -51,8 +50,7 @@ export async function evaluarFaseSetter(
     return { faseActual, nombreFase: faseInfo.nombre, descripcionFase: faseInfo.descripcion, preguntaGuia: pregunta, debeAvanzar: false, faseNueva: 6 };
   }
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("SETTER"),
+  const response = await callClaudeIA("SETTER", {
     max_tokens: 5,
     system: "Eres un evaluador de protocolo de ventas. Responde ÚNICAMENTE con SI o NO.",
     messages: [{

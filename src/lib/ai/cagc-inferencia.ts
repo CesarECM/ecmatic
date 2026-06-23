@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import type { FaseCAGC } from "@/services/cagc";
 
@@ -66,8 +65,7 @@ ${textoActual}
 ¿En qué fase CAGC está este lead?`;
 
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("CAGC_INFERIR"),
+    const res = await callClaudeIA("CAGC_INFERIR", {
       max_tokens: 80,
       system,
       messages: [{ role: "user", content: userContent }],

@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import type { Pipeline } from "@/services/pipelines-admin";
 import type { EtapaAdmin } from "@/services/etapas-admin";
 
@@ -84,8 +83,7 @@ ETAPAS (${etapas.length} total):
 ${JSON.stringify(etapasSummary, null, 2)}`;
 
   try {
-    const resp = await anthropic.messages.create({
-      model: modeloPorTarea("SUGERIR_KB"),
+    const resp = await callClaudeIA("SUGERIR_KB", {
       max_tokens: 1400,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],

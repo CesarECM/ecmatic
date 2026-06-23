@@ -2,8 +2,7 @@
 // crear, editar, unir, separar o eliminar servicios.
 // Se dispara fire-and-forget en cada operación CRUD sobre un servicio.
 
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import type { Servicio } from "@/services/servicios";
 
 export type TipoCambioServicio = "crear" | "editar" | "eliminar";
@@ -67,8 +66,7 @@ CATÁLOGO ACTUAL (${otros.length} servicios):
 ${otros.map(s => `- [${s.id}] ${s.titulo}: ${s.contenido.slice(0, 120)}`).join("\n")}`;
 
   try {
-    const resp = await anthropic.messages.create({
-      model: modeloPorTarea("SUGERIR_KB"),
+    const resp = await callClaudeIA("SUGERIR_KB", {
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],

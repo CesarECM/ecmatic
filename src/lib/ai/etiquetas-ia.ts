@@ -1,5 +1,4 @@
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import { crearEtiqueta, asignarEtiqueta, listarCategorias } from "@/services/etiquetas";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -64,8 +63,7 @@ Solo propone etiquetas con señales claras en la conversación.
 
   let sugerencias: SugerenciaEtiqueta[] = [];
   try {
-    const res = await anthropic.messages.create({
-      model: modeloPorTarea("CLASIFICAR"),
+    const res = await callClaudeIA("CLASIFICAR", {
       max_tokens: 400,
       messages: [{ role: "user", content: prompt }],
     });

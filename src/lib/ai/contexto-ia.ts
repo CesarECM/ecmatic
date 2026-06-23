@@ -1,6 +1,5 @@
 // S23.1 — Motor de IA para el campo Contexto del lead
-import { anthropic } from "./client";
-import { modeloPorTarea } from "./model-router";
+import { callClaudeIA } from "./client";
 import type { EntradaContexto } from "@/lib/supabase/types";
 
 interface DatosParaContexto {
@@ -21,8 +20,7 @@ export async function generarActualizacionContexto(
     : "";
   const faseLinea = datos.fase_cagc !== undefined ? ` · CAGC: ${datos.fase_cagc}` : "";
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("CONTEXTO"),
+  const response = await callClaudeIA("CONTEXTO", {
     max_tokens: 250,
     system: `Eres el motor de contexto de ECMatic. Mantienes la capa interpretativa de un lead de certificación CONOCER.
 El Contexto es analítico y conciso: situación actual, intención inferida, objeción dominante y próxima oportunidad de cierre.
@@ -47,8 +45,7 @@ export async function generarSubresumenContexto(historial: EntradaContexto[]): P
     .map((e) => `[${e.timestamp.slice(0, 10)} · ${e.origen}${e.accion ? ` · ${e.accion}` : ""}] ${e.contenido}`)
     .join("\n\n");
 
-  const response = await anthropic.messages.create({
-    model: modeloPorTarea("CONTEXTO"),
+  const response = await callClaudeIA("CONTEXTO", {
     max_tokens: 200,
     system: `Genera un sub-resumen comprimido del historial de versiones del Contexto de un lead.
 Captura los hitos clave: cómo llegó, objeciones transitadas, avances y qué sigue siendo relevante hoy.
