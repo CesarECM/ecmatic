@@ -70,8 +70,9 @@ export async function obtenerResumenGastoIA(dias = 30) {
   };
 
   for (const r of data ?? []) {
-    resumen[r.proveedor].tokens += r.tokens_entrada + r.tokens_salida;
-    resumen[r.proveedor].costoUSD += Number(r.costo_estimado);
+    if (!resumen[r.proveedor]) resumen[r.proveedor] = { tokens: 0, costoUSD: 0 };
+    resumen[r.proveedor].tokens += (r.tokens_entrada ?? 0) + (r.tokens_salida ?? 0);
+    resumen[r.proveedor].costoUSD += Number(r.costo_estimado ?? 0);
   }
   return resumen;
 }

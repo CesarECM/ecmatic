@@ -5,12 +5,15 @@ import { obtenerConfig, actualizarModo, actualizarUmbral, type ModoOperacion } f
 import { PanelLED } from "./components/PanelLED";
 import { SelectorModo } from "./components/SelectorModo";
 
+export const revalidate = 0;
 export const metadata = { title: "Estado del Sistema · ECMatic" };
+
+const GASTO_FALLBACK = { anthropic: { tokens: 0, costoUSD: 0 }, openai: { tokens: 0, costoUSD: 0 } };
 
 export default async function SistemaPage() {
   const [indicadores, gastoIA, config] = await Promise.all([
-    verificarSalud(),
-    obtenerResumenGastoIA(30),
+    verificarSalud().catch(() => [] as Awaited<ReturnType<typeof verificarSalud>>),
+    obtenerResumenGastoIA(30).catch(() => GASTO_FALLBACK),
     obtenerConfig(),
   ]);
 
