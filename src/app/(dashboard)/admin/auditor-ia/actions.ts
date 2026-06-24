@@ -2,6 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { revalidatePath } from "next/cache";
+import { logSistema } from "@/services/log-sistema";
 
 export type TipoAuditoria = "servicio" | "pipeline" | "etapa" | "kb" | "lead";
 
@@ -152,23 +153,28 @@ export async function dispararAuditoriaAhoraAction(
   tipo: TipoAuditoria,
   id: string
 ): Promise<{ ok: boolean; mensaje?: string }> {
+  void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "inicio", metadata: { tipo, id } });
   try {
     if (tipo === "servicio") {
       const { dispararAuditoria } = await import("@/services/auditor-servicios");
       await dispararAuditoria(id, "editar");
+      void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "ok", metadata: { tipo, id } });
       return { ok: true };
     }
     if (tipo === "pipeline") {
       const { dispararAuditoriaPipeline } = await import("@/services/auditor-pipelines");
       await dispararAuditoriaPipeline(id, "scan_global");
+      void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "ok", metadata: { tipo, id } });
       return { ok: true };
     }
     if (tipo === "etapa") {
       const { generarSugerenciasProtocolo } = await import("@/services/protocolo-etapa");
       await generarSugerenciasProtocolo();
+      void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "ok", metadata: { tipo, id } });
       return { ok: true };
     }
     if (tipo === "kb") {
+      void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "warn", resultado: "KB requiere automatizaciones", metadata: { tipo, id } });
       return {
         ok: false,
         mensaje: "La auditoría de KB opera sobre el catálogo completo. Usa el disparo manual en /admin/automatizaciones.",
@@ -177,11 +183,13 @@ export async function dispararAuditoriaAhoraAction(
     if (tipo === "lead") {
       const { actualizarScoreSalud } = await import("@/services/score-salud");
       await actualizarScoreSalud(id);
+      void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "ok", metadata: { tipo, id } });
       return { ok: true };
     }
     return { ok: false, mensaje: "Tipo no reconocido" };
   } catch (err) {
     console.error("[dispararAuditoriaAhora]", err);
+    void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.disparar", fase: "error", resultado: String(err), metadata: { tipo, id } });
     return { ok: false, mensaje: String(err) };
   }
 }
@@ -195,6 +203,7 @@ export async function aprobarSugerenciaModalAction(id: string): Promise<void> {
     .eq("id", id)
     .single();
   await supabase.from("sugerencias_ia").update({ aprobado: true }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.aprobar-sugerencia", fase: "ok", metadata: { sugerencia_id: id, titulo: data?.titulo } });
   if (data?.titulo) {
     const { autoAprobarSimilares } = await import("@/lib/ai/similitud-sugerencias");
     void autoAprobarSimilares(id, data.titulo, data.descripcion ?? "").catch(console.error);
@@ -206,5 +215,6 @@ export async function rechazarSugerenciaModalAction(id: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServiceClient() as any;
   await supabase.from("sugerencias_ia").update({ aprobado: false }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "auditor-ia.rechazar-sugerencia", fase: "ok", metadata: { sugerencia_id: id } });
   revalidatePath("/admin/aprobaciones");
 }
