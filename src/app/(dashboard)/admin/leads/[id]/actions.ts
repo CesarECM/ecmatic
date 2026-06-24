@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { moverLead, asignarVendedor } from "@/services/pipeline";
+import { moverLeadEnPipeline } from "@/services/pipeline-multi";
 import { pausarNurturing, reanudarNurturing } from "@/services/nurturing";
 import { createServiceClient } from "@/lib/supabase/service";
 import { emitirFactura, construirItemServicio } from "@/lib/facturama/client";
@@ -127,6 +128,23 @@ export async function agregarEntradaManualAction(formData: FormData) {
   const autor = hdrs.get("x-user-email") ?? "admin";
   await agregarEntradaManualContexto(leadId, nota, autor);
   void logSistema({ categoria: "ui", tipoAccion: "leads.agregar-nota", fase: "ok", leadId, metadata: { autor } });
+  revalidatePath(`/admin/leads/${leadId}`);
+}
+
+// Mueve un lead dentro de un pipeline específico (multi-pipeline)
+export async function moverLeadEnPipelineAction(formData: FormData) {
+  const leadId = formData.get("leadId") as string;
+  const ruta = formData.get("ruta") as string;
+  const nuevaEtapa = formData.get("nuevaEtapa") as string;
+  if (!leadId || !ruta || !nuevaEtapa) return;
+  await moverLeadEnPipeline(leadId, ruta, nuevaEtapa, "admin");
+  void logSistema({
+    categoria: "ui",
+    tipoAccion: "leads.mover-pipeline-multi",
+    fase: "ok",
+    leadId,
+    resultado: `${ruta}:${nuevaEtapa}`,
+  });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
