@@ -21,8 +21,8 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "cron.calidad-kb","cron.log-limpieza",
   ],
   webhook: ["webhook.whatsapp","webhook.stripe","webhook.ghl"],
-  servicio: ["wa.send","brevo.send","calendar.event","stripe.api","sistema.health-check","sistema.alerta-wa","sistema.config"],
-  ui: ["ui.error","ui.accion","sistema.cambiar-modo","sistema.cambiar-umbral"],
+  servicio: ["wa.send","brevo.send","calendar.event","stripe.api","sistema.health-check","sistema.alerta-wa","sistema.config","depuracion.email-interceptado"],
+  ui: ["ui.error","ui.accion","sistema.cambiar-modo","sistema.cambiar-umbral","depuracion.crear-lead","depuracion.marcar-leido"],
   auth: ["auth.login","auth.logout"],
 };
 
@@ -45,6 +45,8 @@ const TIPO_LABEL: Record<string, string> = {
   "wa.send":"WA envío","brevo.send":"Brevo","calendar.event":"Calendar","stripe.api":"Stripe API",
   "sistema.health-check":"Health check","sistema.alerta-wa":"Alerta WA","sistema.config":"Config sistema",
   "ui.error":"Error UI","ui.accion":"Acción UI","sistema.cambiar-modo":"Cambiar modo","sistema.cambiar-umbral":"Cambiar umbral",
+  "depuracion.crear-lead":"Crear lead debug","depuracion.marcar-leido":"Marcar leído",
+  "depuracion.email-interceptado":"Email interceptado",
   "auth.login":"Login","auth.logout":"Logout",
 };
 

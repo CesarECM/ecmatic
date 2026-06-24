@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerModo } from "@/services/sistema";
 import { enviarEmail, type EmailPayload } from "@/lib/email/resend";
-import { logDebugIA } from "@/services/log-ia";
+import { logSistema } from "@/services/log-sistema";
 
 export type TipoEmailInterceptado = "bienvenida" | "nurturing" | "notif_cita" | "otro";
 
@@ -37,14 +37,11 @@ export async function interceptarOEnviarEmail(
 
     if (error) {
       console.error("[bandeja-email] Error guardando email interceptado:", error.message);
+      void logSistema({ categoria: "servicio", tipoAccion: "depuracion.email-interceptado", fase: "error", leadId: payload.leadId, resultado: error.message, metadata: { para, asunto: payload.subject, tipo: payload.tipo ?? "otro" } });
       return;
     }
 
-    void logDebugIA(
-      "DEPURACION_EMAIL_INTERCEPTADO",
-      `[DEPURACION] Email a ${para} interceptado — asunto: ${payload.subject}`,
-      { para, tipo: payload.tipo ?? "otro", lead_id: payload.leadId ?? null, asunto: payload.subject }
-    );
+    void logSistema({ categoria: "servicio", tipoAccion: "depuracion.email-interceptado", fase: "ok", leadId: payload.leadId, resultado: `Email interceptado — ${payload.subject}`, metadata: { para, tipo: payload.tipo ?? "otro", asunto: payload.subject } });
     return;
   }
 
