@@ -11,20 +11,54 @@ export const metadata = { title: "Estado del Sistema · ECMatic" };
 const GASTO_FALLBACK = { anthropic: { tokens: 0, costoUSD: 0 }, openai: { tokens: 0, costoUSD: 0 } };
 
 export default async function SistemaPage() {
-  const [indicadores, gastoIA, config] = await Promise.all([
-    verificarSalud().catch(() => [] as Awaited<ReturnType<typeof verificarSalud>>),
-    obtenerResumenGastoIA(30).catch(() => GASTO_FALLBACK),
-    obtenerConfig(),
-  ]);
+  console.log("[SISTEMA_PAGE] Iniciando render del server component");
+
+  let indicadores: Awaited<ReturnType<typeof verificarSalud>> = [];
+  let gastoIA: Record<string, { tokens: number; costoUSD: number }> = { ...GASTO_FALLBACK };
+  let config: Awaited<ReturnType<typeof obtenerConfig>>;
+
+  try {
+    console.log("[SISTEMA_PAGE] Llamando verificarSalud...");
+    indicadores = await verificarSalud();
+    console.log("[SISTEMA_PAGE] verificarSalud OK — indicadores:", indicadores.length);
+  } catch (e) {
+    console.error("[SISTEMA_PAGE] ERROR en verificarSalud:", e);
+  }
+
+  try {
+    console.log("[SISTEMA_PAGE] Llamando obtenerResumenGastoIA...");
+    gastoIA = await obtenerResumenGastoIA(30);
+    console.log("[SISTEMA_PAGE] obtenerResumenGastoIA OK — proveedores:", Object.keys(gastoIA));
+  } catch (e) {
+    console.error("[SISTEMA_PAGE] ERROR en obtenerResumenGastoIA:", e);
+  }
+
+  try {
+    console.log("[SISTEMA_PAGE] Llamando obtenerConfig...");
+    config = await obtenerConfig();
+    console.log("[SISTEMA_PAGE] obtenerConfig OK — modo:", config!.modo_operacion);
+  } catch (e) {
+    console.error("[SISTEMA_PAGE] ERROR en obtenerConfig:", e);
+    throw e; // config es crítico — si falla no hay página
+  }
 
   async function cambiarModo(modo: ModoOperacion) {
     "use server";
-    await actualizarModo(modo);
+    console.log("[SISTEMA_ACTION] cambiarModo llamado con modo:", modo);
+    try {
+      await actualizarModo(modo);
+      console.log("[SISTEMA_ACTION] actualizarModo OK — modo nuevo:", modo);
+    } catch (e) {
+      console.error("[SISTEMA_ACTION] ERROR en actualizarModo:", e);
+      throw e;
+    }
     revalidatePath("/admin/sistema");
+    console.log("[SISTEMA_ACTION] revalidatePath ejecutado");
   }
 
   async function cambiarUmbral(umbral: number) {
     "use server";
+    console.log("[SISTEMA_ACTION] cambiarUmbral llamado con umbral:", umbral);
     await actualizarUmbral(umbral);
     revalidatePath("/admin/sistema");
   }
