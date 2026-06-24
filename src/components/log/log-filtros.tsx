@@ -49,6 +49,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "tickets.responder","tickets.tomar",
     "vendedores.actualizar-peso","vendedores.agregar","vendedores.reenviar-invitacion",
     "auditor-ia.disparar","auditor-ia.aprobar-sugerencia","auditor-ia.rechazar-sugerencia",
+    "analitica.crear-experimento","analitica.declarar-ganador",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -98,6 +99,7 @@ const TIPO_LABEL: Record<string, string> = {
   "tickets.responder":"Responder ticket","tickets.tomar":"Tomar ticket",
   "vendedores.actualizar-peso":"Actualizar peso","vendedores.agregar":"Agregar vendedor","vendedores.reenviar-invitacion":"Reenviar invitación",
   "auditor-ia.disparar":"Disparar auditoría","auditor-ia.aprobar-sugerencia":"Aprobar sugerencia (modal)","auditor-ia.rechazar-sugerencia":"Rechazar sugerencia (modal)",
+  "analitica.crear-experimento":"Crear experimento A/B","analitica.declarar-ganador":"Declarar ganador A/B",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
