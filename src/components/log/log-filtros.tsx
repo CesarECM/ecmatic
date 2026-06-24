@@ -43,6 +43,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "servicios.crear-pago","servicios.eliminar-pago","servicios.toggle-pago",
     "servicios.crear-relacion","servicios.eliminar-relacion",
     "servicios.toggle-imagen","servicios.eliminar-imagen",
+    "leads.mover","leads.asignar-vendedor","leads.actualizar-b2b","leads.emitir-factura","leads.marcar-privacidad","leads.agregar-nota","leads.toggle-nurturing",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -86,6 +87,7 @@ const TIPO_LABEL: Record<string, string> = {
   "servicios.crear-pago":"Crear link pago","servicios.eliminar-pago":"Eliminar link pago","servicios.toggle-pago":"Toggle link pago",
   "servicios.crear-relacion":"Crear relación","servicios.eliminar-relacion":"Eliminar relación",
   "servicios.toggle-imagen":"Toggle imagen","servicios.eliminar-imagen":"Eliminar imagen",
+  "leads.mover":"Mover lead","leads.asignar-vendedor":"Asignar vendedor","leads.actualizar-b2b":"Actualizar B2B","leads.emitir-factura":"Emitir factura","leads.marcar-privacidad":"Marcar privacidad","leads.agregar-nota":"Agregar nota","leads.toggle-nurturing":"Toggle nurturing",
   "auth.login":"Login","auth.logout":"Logout",
 };
 

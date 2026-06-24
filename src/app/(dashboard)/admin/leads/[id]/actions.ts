@@ -8,12 +8,14 @@ import { emitirFactura, construirItemServicio } from "@/lib/facturama/client";
 import { marcarPrivacidadAceptada } from "@/services/privacidad";
 import { agregarEntradaManualContexto } from "@/services/contexto";
 import { headers } from "next/headers";
+import { logSistema } from "@/services/log-sistema";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
   const nuevaEtapa = formData.get("nuevaEtapa") as string;
   if (!leadId || !nuevaEtapa) return;
   await moverLead(leadId, nuevaEtapa, "admin");
+  void logSistema({ categoria: "ui", tipoAccion: "leads.mover", fase: "ok", leadId, resultado: nuevaEtapa });
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/leads");
 }
@@ -23,6 +25,7 @@ export async function asignarVendedorAction(formData: FormData) {
   const vendedorId = formData.get("vendedorId") as string;
   if (!leadId) return;
   await asignarVendedor(leadId, vendedorId || null);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.asignar-vendedor", fase: "ok", leadId, metadata: { vendedor_id: vendedorId || null } });
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/leads");
 }
@@ -44,6 +47,7 @@ export async function actualizarDatosB2BAction(formData: FormData) {
   }
 
   await db.from("leads").update({ metadata: meta }).eq("id", leadId);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.actualizar-b2b", fase: "ok", leadId });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
@@ -96,9 +100,11 @@ export async function emitirFacturaAction(
       .update({ metadata: { ...meta, cfdi_uuid: resultado.Uuid, cfdi_id: resultado.Id } })
       .eq("id", leadId);
 
+    void logSistema({ categoria: "ui", tipoAccion: "leads.emitir-factura", fase: "ok", leadId, resultado: resultado.Uuid, metadata: { cfdi_id: resultado.Id, monto } });
     revalidatePath(`/admin/leads/${leadId}`);
     return { ok: true, uuid: resultado.Uuid };
   } catch (err) {
+    void logSistema({ categoria: "ui", tipoAccion: "leads.emitir-factura", fase: "error", leadId, resultado: String(err), metadata: { monto } });
     return { ok: false, error: String(err) };
   }
 }
@@ -108,6 +114,7 @@ export async function marcarPrivacidadManualAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
   if (!leadId) return;
   await marcarPrivacidadAceptada(leadId);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.marcar-privacidad", fase: "ok", leadId });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
@@ -119,6 +126,7 @@ export async function agregarEntradaManualAction(formData: FormData) {
   const hdrs = await headers();
   const autor = hdrs.get("x-user-email") ?? "admin";
   await agregarEntradaManualContexto(leadId, nota, autor);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.agregar-nota", fase: "ok", leadId, metadata: { autor } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
@@ -129,6 +137,7 @@ export async function toggleNurturingAction(formData: FormData) {
   if (!leadId) return;
   if (pausado) await reanudarNurturing(leadId);
   else await pausarNurturing(leadId);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.toggle-nurturing", fase: "ok", leadId, metadata: { accion: pausado ? "reanudar" : "pausar" } });
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/nurturing");
 }
