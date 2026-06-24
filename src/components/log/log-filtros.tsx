@@ -22,7 +22,17 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
   ],
   webhook: ["webhook.whatsapp","webhook.stripe","webhook.ghl"],
   servicio: ["wa.send","brevo.send","calendar.event","stripe.api","sistema.health-check","sistema.alerta-wa","sistema.config","depuracion.email-interceptado"],
-  ui: ["ui.error","ui.accion","sistema.cambiar-modo","sistema.cambiar-umbral","depuracion.crear-lead","depuracion.marcar-leido"],
+  ui: [
+    "ui.error","ui.accion","sistema.cambiar-modo","sistema.cambiar-umbral",
+    "depuracion.crear-lead","depuracion.marcar-leido",
+    "aprobaciones.aprobar-kb","aprobaciones.actualizar-kb","aprobaciones.eliminar-kb",
+    "aprobaciones.aprobar-matriz","aprobaciones.actualizar-matriz","aprobaciones.eliminar-matriz",
+    "aprobaciones.aprobar-sugerencia","aprobaciones.rechazar-sugerencia",
+    "aprobaciones.aprobar-cluster","aprobaciones.rechazar-cluster",
+    "aprobaciones.aprobar-etiqueta","aprobaciones.archivar-etiqueta",
+    "aprobaciones.aprobar-mensaje","aprobaciones.rechazar-mensaje","aprobaciones.actualizar-mensaje",
+    "aprobaciones.aprobar-comprobante","aprobaciones.rechazar-comprobante",
+  ],
   auth: ["auth.login","auth.logout"],
 };
 
@@ -47,6 +57,13 @@ const TIPO_LABEL: Record<string, string> = {
   "ui.error":"Error UI","ui.accion":"Acción UI","sistema.cambiar-modo":"Cambiar modo","sistema.cambiar-umbral":"Cambiar umbral",
   "depuracion.crear-lead":"Crear lead debug","depuracion.marcar-leido":"Marcar leído",
   "depuracion.email-interceptado":"Email interceptado",
+  "aprobaciones.aprobar-kb":"Aprobar KB","aprobaciones.actualizar-kb":"Actualizar KB","aprobaciones.eliminar-kb":"Eliminar KB",
+  "aprobaciones.aprobar-matriz":"Aprobar matriz","aprobaciones.actualizar-matriz":"Actualizar matriz","aprobaciones.eliminar-matriz":"Eliminar matriz",
+  "aprobaciones.aprobar-sugerencia":"Aprobar sugerencia","aprobaciones.rechazar-sugerencia":"Rechazar sugerencia",
+  "aprobaciones.aprobar-cluster":"Aprobar cluster","aprobaciones.rechazar-cluster":"Rechazar cluster",
+  "aprobaciones.aprobar-etiqueta":"Aprobar etiqueta","aprobaciones.archivar-etiqueta":"Archivar etiqueta",
+  "aprobaciones.aprobar-mensaje":"Aprobar mensaje","aprobaciones.rechazar-mensaje":"Rechazar mensaje","aprobaciones.actualizar-mensaje":"Editar mensaje",
+  "aprobaciones.aprobar-comprobante":"Aprobar comprobante","aprobaciones.rechazar-comprobante":"Rechazar comprobante",
   "auth.login":"Login","auth.logout":"Logout",
 };
 

@@ -6,42 +6,49 @@ import { aprobarEtiqueta, archivarEtiqueta } from "@/services/etiquetas";
 import { marcarMensajeEnviado, rechazarMensaje } from "@/services/mensajes-aprobacion";
 import { aprobarComprobante, rechazarComprobante } from "@/services/comprobantes";
 import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
+import { logSistema } from "@/services/log-sistema";
 
 const PATH = "/admin/aprobaciones";
 
 export async function aprobarKBAction(id: string) {
   const supabase = createServiceClient();
   await supabase.from("recursos_conocimiento").update({ aprobado: true }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-kb", fase: "ok", metadata: { kb_id: id } });
   revalidatePath(PATH);
 }
 
 export async function actualizarKBAction(id: string, titulo: string, contenido: string) {
   const supabase = createServiceClient();
   await supabase.from("recursos_conocimiento").update({ titulo, contenido }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.actualizar-kb", fase: "ok", metadata: { kb_id: id } });
   revalidatePath(PATH);
 }
 
 export async function eliminarKBAction(id: string) {
   const supabase = createServiceClient();
   await supabase.from("recursos_conocimiento").delete().eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.eliminar-kb", fase: "ok", metadata: { kb_id: id } });
   revalidatePath(PATH);
 }
 
 export async function aprobarMatrizAction(id: string) {
   const supabase = createServiceClient();
   await supabase.from("matriz_nd").update({ aprobado: true }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-matriz", fase: "ok", metadata: { matriz_id: id } });
   revalidatePath(PATH);
 }
 
 export async function actualizarMatrizAction(id: string, respuesta: string) {
   const supabase = createServiceClient();
   await supabase.from("matriz_nd").update({ respuesta_sugerida: respuesta }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.actualizar-matriz", fase: "ok", metadata: { matriz_id: id } });
   revalidatePath(PATH);
 }
 
 export async function eliminarMatrizAction(id: string) {
   const supabase = createServiceClient();
   await supabase.from("matriz_nd").delete().eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.eliminar-matriz", fase: "ok", metadata: { matriz_id: id } });
   revalidatePath(PATH);
 }
 
@@ -53,6 +60,7 @@ export async function aprobarSugerenciaAction(id: string) {
     .eq("id", id)
     .single();
   await supabase.from("sugerencias_ia").update({ aprobado: true }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-sugerencia", fase: "ok", metadata: { sugerencia_id: id, titulo: data?.titulo } });
   // S33.6 — Auto-aprobación en cascada por similitud
   if (data?.titulo) {
     const { autoAprobarSimilares } = await import("@/lib/ai/similitud-sugerencias");
@@ -64,6 +72,7 @@ export async function aprobarSugerenciaAction(id: string) {
 export async function rechazarSugerenciaAction(id: string) {
   const supabase = createServiceClient();
   await supabase.from("sugerencias_ia").update({ aprobado: false }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-sugerencia", fase: "ok", metadata: { sugerencia_id: id } });
   revalidatePath(PATH);
 }
 
@@ -79,6 +88,7 @@ export async function aprobarClusterAction(clusterId: string) {
     const ids = (items as { id: string }[]).map((i) => i.id);
     await (supabase as any).from("sugerencias_ia").update({ aprobado: true }).in("id", ids);
   }
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-cluster", fase: "ok", metadata: { cluster_id: clusterId, cantidad: items?.length ?? 0 } });
   revalidatePath(PATH);
 }
 
@@ -93,27 +103,37 @@ export async function rechazarClusterAction(clusterId: string) {
     const ids = (items as { id: string }[]).map((i) => i.id);
     await (supabase as any).from("sugerencias_ia").update({ aprobado: false }).in("id", ids);
   }
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-cluster", fase: "ok", metadata: { cluster_id: clusterId, cantidad: items?.length ?? 0 } });
   revalidatePath(PATH);
 }
 
 export async function aprobarEtiquetaAction(id: string) {
   await aprobarEtiqueta(id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-etiqueta", fase: "ok", metadata: { etiqueta_id: id } });
   revalidatePath(PATH);
 }
 
 export async function archivarEtiquetaAction(id: string) {
   await archivarEtiqueta(id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.archivar-etiqueta", fase: "ok", metadata: { etiqueta_id: id } });
   revalidatePath(PATH);
 }
 
 export async function aprobarMensajeAction(id: string, telefono: string, bloques: string[]) {
-  await enviarRespuestaWhatsApp(telefono, bloques);
-  await marcarMensajeEnviado(id);
+  try {
+    await enviarRespuestaWhatsApp(telefono, bloques);
+    await marcarMensajeEnviado(id);
+    void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-mensaje", fase: "ok", metadata: { mensaje_id: id, telefono, bloques_count: bloques.length } });
+  } catch (err) {
+    void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-mensaje", fase: "error", resultado: err instanceof Error ? err.message : String(err), metadata: { mensaje_id: id, telefono } });
+    throw err;
+  }
   revalidatePath(PATH);
 }
 
 export async function rechazarMensajeAction(id: string) {
   await rechazarMensaje(id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-mensaje", fase: "ok", metadata: { mensaje_id: id } });
   revalidatePath(PATH);
 }
 
@@ -123,15 +143,18 @@ export async function actualizarMensajeAction(id: string, respuesta: string) {
     .from("mensajes_cola_aprobacion")
     .update({ respuesta, bloques: [respuesta] })
     .eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.actualizar-mensaje", fase: "ok", metadata: { mensaje_id: id } });
   revalidatePath(PATH);
 }
 
 export async function aprobarComprobanteAction(id: string) {
   await aprobarComprobante(id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-comprobante", fase: "ok", metadata: { comprobante_id: id } });
   revalidatePath(PATH);
 }
 
 export async function rechazarComprobanteAction(id: string) {
   await rechazarComprobante(id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-comprobante", fase: "ok", metadata: { comprobante_id: id } });
   revalidatePath(PATH);
 }
