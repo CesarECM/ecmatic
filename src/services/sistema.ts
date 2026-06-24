@@ -27,18 +27,26 @@ export async function actualizarModo(
   updatedBy?: string
 ): Promise<void> {
   const supabase = createServiceClient();
+  const { data: cfg, error: readErr } = await (supabase as any)
+    .from("configuracion_sistema").select("id").single();
+  if (readErr) throw new Error(`[sistema] Error leyendo config: ${readErr.message}`);
   const { error } = await (supabase as any)
     .from("configuracion_sistema")
-    .update({ modo_operacion: modo, updated_by: updatedBy ?? null });
+    .update({ modo_operacion: modo, updated_by: updatedBy ?? null })
+    .eq("id", cfg.id);
   if (error) throw new Error(`[sistema] Error actualizando modo: ${error.message}`);
 }
 
 // S17.1 — Actualiza umbral de confianza (0-1)
 export async function actualizarUmbral(umbral: number): Promise<void> {
   const supabase = createServiceClient();
+  const { data: cfg, error: readErr } = await (supabase as any)
+    .from("configuracion_sistema").select("id").single();
+  if (readErr) throw new Error(`[sistema] Error leyendo config: ${readErr.message}`);
   const { error } = await (supabase as any)
     .from("configuracion_sistema")
-    .update({ umbral_confianza: Math.max(0, Math.min(1, umbral)) });
+    .update({ umbral_confianza: Math.max(0, Math.min(1, umbral)) })
+    .eq("id", cfg.id);
   if (error) throw new Error(`[sistema] Error actualizando umbral: ${error.message}`);
 }
 
