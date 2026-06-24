@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { marcarComisionPagada } from "@/services/comisiones";
 import { registrarPago } from "@/services/pagos";
 import { createServiceClient } from "@/lib/supabase/service";
+import { logSistema } from "@/services/log-sistema";
 
 // S8.7 — Marca una comisión como pagada
 export async function marcarComisionPagadaAction(id: string, metodoPago: string): Promise<void> {
   await marcarComisionPagada(id, metodoPago);
+  void logSistema({ categoria: "ui", tipoAccion: "financiero.marcar-comision-pagada", fase: "ok", metadata: { comision_id: id, metodo_pago: metodoPago } });
   revalidatePath("/admin/financiero");
 }
 
@@ -31,5 +33,6 @@ export async function registrarPagoManualAction(formData: FormData): Promise<voi
     notas,
   });
 
+  void logSistema({ categoria: "ui", tipoAccion: "financiero.registrar-pago-manual", fase: "ok", leadId, resultado: `$${monto}`, metadata: { monto, tiene_comprobante: !!comprobanteUrl } });
   revalidatePath("/admin/financiero");
 }
