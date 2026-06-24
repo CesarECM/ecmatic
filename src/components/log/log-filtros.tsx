@@ -33,6 +33,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "aprobaciones.aprobar-mensaje","aprobaciones.rechazar-mensaje","aprobaciones.actualizar-mensaje",
     "aprobaciones.aprobar-comprobante","aprobaciones.rechazar-comprobante",
     "etiquetas.aprobar","etiquetas.archivar","etiquetas.crear","etiquetas.fusionar","etiquetas.crear-categoria",
+    "conocimiento.crear","conocimiento.aprobar","conocimiento.editar","conocimiento.eliminar","conocimiento.toggle-activo","conocimiento.restaurar-version","conocimiento.importar-fuente",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -66,6 +67,7 @@ const TIPO_LABEL: Record<string, string> = {
   "aprobaciones.aprobar-mensaje":"Aprobar mensaje","aprobaciones.rechazar-mensaje":"Rechazar mensaje","aprobaciones.actualizar-mensaje":"Editar mensaje",
   "aprobaciones.aprobar-comprobante":"Aprobar comprobante","aprobaciones.rechazar-comprobante":"Rechazar comprobante",
   "etiquetas.aprobar":"Aprobar etiqueta","etiquetas.archivar":"Archivar etiqueta","etiquetas.crear":"Crear etiqueta","etiquetas.fusionar":"Fusionar etiquetas","etiquetas.crear-categoria":"Crear categoría",
+  "conocimiento.crear":"Crear recurso KB","conocimiento.aprobar":"Aprobar recurso KB","conocimiento.editar":"Editar recurso KB","conocimiento.eliminar":"Eliminar recurso KB","conocimiento.toggle-activo":"Activar/desactivar KB","conocimiento.restaurar-version":"Restaurar versión KB","conocimiento.importar-fuente":"Importar fuente KB",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
