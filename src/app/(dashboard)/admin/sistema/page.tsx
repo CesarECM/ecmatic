@@ -1,7 +1,9 @@
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 import { verificarSalud } from "@/services/health";
 import { obtenerResumenGastoIA } from "@/services/alertas-ia";
 import { obtenerConfig, actualizarModo, actualizarUmbral, type ModoOperacion } from "@/services/sistema";
+import { logSistema } from "@/services/log-sistema";
 import { PanelLED } from "./components/PanelLED";
 import { SelectorModo } from "./components/SelectorModo";
 
@@ -11,54 +13,61 @@ export const metadata = { title: "Estado del Sistema · ECMatic" };
 const GASTO_FALLBACK = { anthropic: { tokens: 0, costoUSD: 0 }, openai: { tokens: 0, costoUSD: 0 } };
 
 export default async function SistemaPage() {
-  console.log("[SISTEMA_PAGE] Iniciando render del server component");
-
   let indicadores: Awaited<ReturnType<typeof verificarSalud>> = [];
   let gastoIA: Record<string, { tokens: number; costoUSD: number }> = { ...GASTO_FALLBACK };
   let config: Awaited<ReturnType<typeof obtenerConfig>>;
 
   try {
-    console.log("[SISTEMA_PAGE] Llamando verificarSalud...");
     indicadores = await verificarSalud();
-    console.log("[SISTEMA_PAGE] verificarSalud OK — indicadores:", indicadores.length);
+    const noOk = indicadores.filter(i => i.estado !== "ok");
+    void logSistema({
+      categoria:   "servicio",
+      tipoAccion:  "sistema.health-check",
+      fase:        noOk.length === 0 ? "ok" : noOk.some(i => i.estado === "error") ? "error" : "warn",
+      resultado:   `${indicadores.filter(i => i.estado === "ok").length}/${indicadores.length} OK`,
+      metadata:    {
+        origen:    "page_render",
+        total:     indicadores.length,
+        ok:        indicadores.filter(i => i.estado === "ok").length,
+        degraded:  indicadores.filter(i => i.estado === "degraded").length,
+        errores:   indicadores.filter(i => i.estado === "error").length,
+        no_ok:     noOk.map(i => ({ nombre: i.nombre, estado: i.estado, mensaje: i.mensaje })),
+      },
+    });
   } catch (e) {
-    console.error("[SISTEMA_PAGE] ERROR en verificarSalud:", e);
+    void logSistema({ categoria: "servicio", tipoAccion: "sistema.health-check", fase: "error", resultado: e instanceof Error ? e.message : String(e), metadata: { origen: "page_render", error_message: String(e) } });
   }
 
   try {
-    console.log("[SISTEMA_PAGE] Llamando obtenerResumenGastoIA...");
     gastoIA = await obtenerResumenGastoIA(30);
-    console.log("[SISTEMA_PAGE] obtenerResumenGastoIA OK — proveedores:", Object.keys(gastoIA));
   } catch (e) {
     console.error("[SISTEMA_PAGE] ERROR en obtenerResumenGastoIA:", e);
   }
 
   try {
-    console.log("[SISTEMA_PAGE] Llamando obtenerConfig...");
     config = await obtenerConfig();
-    console.log("[SISTEMA_PAGE] obtenerConfig OK — modo:", config!.modo_operacion);
   } catch (e) {
-    console.error("[SISTEMA_PAGE] ERROR en obtenerConfig:", e);
-    throw e; // config es crítico — si falla no hay página
+    void logSistema({ categoria: "servicio", tipoAccion: "sistema.config", fase: "error", resultado: e instanceof Error ? e.message : String(e) });
+    throw e;
   }
 
   async function cambiarModo(modo: ModoOperacion) {
     "use server";
-    console.log("[SISTEMA_ACTION] cambiarModo llamado con modo:", modo);
+    const traceId = randomUUID();
+    void logSistema({ categoria: "ui", tipoAccion: "sistema.cambiar-modo", fase: "inicio", traceId, resultado: `Cambiando a modo: ${modo}` });
     try {
       await actualizarModo(modo);
-      console.log("[SISTEMA_ACTION] actualizarModo OK — modo nuevo:", modo);
+      void logSistema({ categoria: "ui", tipoAccion: "sistema.cambiar-modo", fase: "ok", traceId, resultado: `Modo cambiado a: ${modo}`, metadata: { modo_nuevo: modo } });
     } catch (e) {
-      console.error("[SISTEMA_ACTION] ERROR en actualizarModo:", e);
+      void logSistema({ categoria: "ui", tipoAccion: "sistema.cambiar-modo", fase: "error", traceId, resultado: e instanceof Error ? e.message : String(e), metadata: { modo_intentado: modo, error_message: String(e) } });
       throw e;
     }
     revalidatePath("/admin/sistema");
-    console.log("[SISTEMA_ACTION] revalidatePath ejecutado");
   }
 
   async function cambiarUmbral(umbral: number) {
     "use server";
-    console.log("[SISTEMA_ACTION] cambiarUmbral llamado con umbral:", umbral);
+    void logSistema({ categoria: "ui", tipoAccion: "sistema.cambiar-umbral", fase: "ok", resultado: `Umbral actualizado a ${(umbral * 100).toFixed(0)}%`, metadata: { umbral_nuevo: umbral } });
     await actualizarUmbral(umbral);
     revalidatePath("/admin/sistema");
   }

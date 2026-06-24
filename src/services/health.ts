@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendTextMessage } from "@/lib/whatsapp/client";
+import { logSistema } from "@/services/log-sistema";
 
 export type EstadoSalud = "ok" | "degraded" | "error";
 
@@ -149,5 +150,24 @@ export async function alertarIntegracionesRojas(indicadores: IndicadorSalud[]): 
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecmatic.vercel.app";
   const msg = `🔴 Alerta ECMatic — Integraciones con error:\n${rojos.map((r) => `• ${r.nombre}: ${r.mensaje}`).join("\n")}\n\n🔗 ${appUrl}/admin/sistema`;
-  await sendTextMessage(adminWa, msg).catch(console.error);
+
+  try {
+    await sendTextMessage(adminWa, msg);
+    void logSistema({
+      categoria:  "servicio",
+      tipoAccion: "sistema.alerta-wa",
+      fase:       "ok",
+      resultado:  `Alerta enviada: ${rojos.length} integración(es) en error`,
+      metadata:   { integraciones_error: rojos.map(r => ({ nombre: r.nombre, mensaje: r.mensaje })), destino: adminWa },
+    });
+  } catch (err) {
+    console.error("[alertarIntegracionesRojas]", err);
+    void logSistema({
+      categoria:  "servicio",
+      tipoAccion: "sistema.alerta-wa",
+      fase:       "error",
+      resultado:  err instanceof Error ? err.message : String(err),
+      metadata:   { integraciones_error: rojos.map(r => r.nombre), error_message: String(err) },
+    });
+  }
 }

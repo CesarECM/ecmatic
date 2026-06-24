@@ -21,8 +21,8 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "cron.calidad-kb","cron.log-limpieza",
   ],
   webhook: ["webhook.whatsapp","webhook.stripe","webhook.ghl"],
-  servicio: ["wa.send","brevo.send","calendar.event","stripe.api"],
-  ui: ["ui.error","ui.accion"],
+  servicio: ["wa.send","brevo.send","calendar.event","stripe.api","sistema.health-check","sistema.alerta-wa","sistema.config"],
+  ui: ["ui.error","ui.accion","sistema.cambiar-modo","sistema.cambiar-umbral"],
   auth: ["auth.login","auth.logout"],
 };
 
@@ -43,7 +43,8 @@ const TIPO_LABEL: Record<string, string> = {
   "cron.log-limpieza":"Limpieza log",
   "webhook.whatsapp":"WhatsApp","webhook.stripe":"Stripe","webhook.ghl":"GHL",
   "wa.send":"WA envío","brevo.send":"Brevo","calendar.event":"Calendar","stripe.api":"Stripe API",
-  "ui.error":"Error UI","ui.accion":"Acción UI",
+  "sistema.health-check":"Health check","sistema.alerta-wa":"Alerta WA","sistema.config":"Config sistema",
+  "ui.error":"Error UI","ui.accion":"Acción UI","sistema.cambiar-modo":"Cambiar modo","sistema.cambiar-umbral":"Cambiar umbral",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
