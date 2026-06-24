@@ -46,7 +46,7 @@ Definiciones:
 - compra_inmediata: el lead quiere comprar ahora mismo ("¿cómo pago?", "quiero inscribirme")
 - compra_consideracion: interesado pero necesita más información antes de decidir
 - duda_tecnica: pregunta sobre el proceso, requisitos, o detalles de la certificación
-- objecion_precio: menciona que es caro, pide descuento, o compara precios
+- objecion_precio: menciona que es caro, pide descuento, compara precios, o dice no tener dinero (aunque no sepa el precio todavía)
 - objecion_confianza: duda de la credibilidad del centro, pide referencias
 - abandono_inminente: señales de que va a dejar la conversación o ya no está interesado
 - quiere_agendar: pide agendar, quiere hablar con alguien, solicita una cita o reunión ("¿puedo agendar?", "quiero hablar con un asesor", "¿cuándo podemos hablar?")

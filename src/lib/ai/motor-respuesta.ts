@@ -11,6 +11,7 @@ import { instruccionReglaOroCierre } from "./regla-oro-cierre";
 import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
 import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
 import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
+import { obtenerRelacionesParaPrompt } from "@/services/servicio-relaciones";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
 import type { EstadoSetter } from "./setter-protocol";
@@ -98,8 +99,8 @@ export async function generarRespuesta(
     return contexto.imagen_activa_url ?? null;
   })();
 
-  // S24.1/S24.2 — Pagos y cuentas bancarias
-  const [pagosServicios, cuentasActivas] = await Promise.all([
+  // S24.1/S24.2 — Pagos, cuentas bancarias y relaciones de servicios
+  const [pagosServicios, cuentasActivas, relacionesLinea] = await Promise.all([
     serviciosAncla.length > 0
       ? Promise.all(serviciosAncla.map(async (s) => {
           const supabase = createServiceClient();
@@ -113,6 +114,9 @@ export async function generarRespuesta(
         }))
       : Promise.resolve([]),
     listarCuentasActivas().catch(() => []),
+    serviciosAncla.length > 0
+      ? obtenerRelacionesParaPrompt(serviciosAncla[0].id).catch(() => "")
+      : Promise.resolve(""),
   ]);
   const pagosConLink = pagosServicios.filter((p) => p.pago !== null);
   const serviciosConPrecio = pagosServicios.filter((p) => p.precio !== null);
@@ -182,6 +186,21 @@ export async function generarRespuesta(
       ].filter(Boolean).join("\n") : "";
   const objecionLinea = contexto.protocoloObjecion?.instruccion ? `\n${contexto.protocoloObjecion.instruccion}` : "";
   const rolLinea = contexto.rolesDinamicos?.length ? formatearRolDinamicoParaPrompt(contexto.rolesDinamicos) : "";
+  // Instrucción de descubrimiento: solo en fases setter 1-2 (o primer mensaje sin historial)
+  const esPrimerMensaje = !contexto.historial || contexto.historial.trim() === "";
+  const setterFaseParaPrompt = contexto.setterEstado?.faseNueva ?? (esPrimerMensaje ? 1 : null);
+  const instruccionDescubrimiento = (setterFaseParaPrompt !== null && setterFaseParaPrompt <= 2)
+    ? [
+        "\nPROTOCOLO HIGH-TICKET — FASE DE DESCUBRIMIENTO (obligatorio ahora):",
+        "El lead aún no ha reconocido claramente su problema. NO menciones nombres de servicio, estándares (EC0301, EC0217, etc.) ni precios.",
+        "Tu único objetivo: profundizar en la situación del lead.",
+        "  1. Haz UNA pregunta abierta que amplíe lo que el lead acaba de decir.",
+        "  2. Cuando confirme un problema o deseo concreto, muéstrale el impacto de NO resolverlo (sin nombrar el servicio aún).",
+        "  3. Solo cuando el lead exprese que quiere resolver ESO, presenta el servicio por nombre.",
+        "Regla de oro: la gente compra soluciones a problemas, no productos. Primero el problema, luego el producto.",
+      ].join("\n")
+    : "";
+
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
     ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
@@ -190,7 +209,7 @@ export async function generarRespuesta(
     : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${relacionesLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}
@@ -218,6 +237,7 @@ INSTRUCCIONES:
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
 ${instruccionCanal}
+${instruccionDescubrimiento}
 ${instruccionReglaOroCierre()}`;
 
   const response = await callClaudeIA("RESPUESTA", {

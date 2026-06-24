@@ -21,6 +21,7 @@ Clasifica la resistencia del lead como CONDICION u OBJECION.
 
 CONDICION: razón real e inmovible para no comprar ahora (sin empleo actual, duelo familiar, enfermedad grave, restricción legal).
 OBJECION: resistencia disfrazada que esconde miedo o desconfianza (precio "muy caro", "lo voy a pensar", "no tengo tiempo").
+REGLA ESPECIAL: Si el lead dice no tener dinero y en el historial NO aparece ningún precio concreto (monto en pesos, dólares o referencia a costo específico), clasifica SIEMPRE como OBJECION — el lead está asumiendo un costo que no conoce.
 
 Responde SOLO con: CONDICION o OBJECION`,
     messages: [{

@@ -27,8 +27,26 @@ const REENCUADRES: Record<TipoDesconfianza, { darLaRazon: string; pregunta: stri
 // S31.6 — Construye el bloque de instrucción para el motor de respuesta
 export function construirProtocoloObjecion(
   tipoResistencia: TipoResistencia,
-  tipoDesconfianza: TipoDesconfianza | null
+  tipoDesconfianza: TipoDesconfianza | null,
+  precioPreviamenteRevelado = true
 ): ProtocoloObjecion {
+  // Objeción económica sin precio conocido: el lead asume un costo que no sabe
+  if (tipoResistencia === "objecion" && !precioPreviamenteRevelado) {
+    return {
+      tipoResistencia,
+      tipoDesconfianza: null,
+      instruccion: [
+        "OBJECIÓN ECONÓMICA — PRECIO NO REVELADO:",
+        "El lead menciona no tener dinero, pero no conoce el precio real. Es una objeción asumida, no una condición real.",
+        "Protocolo obligatorio (en orden):",
+        "1. DA LA RAZÓN sin rendirte: \"Entiendo, uno siempre quiere saber si cabe en el presupuesto antes de avanzar.\"",
+        "2. PREGUNTA DE REENCUADRE: \"¿Cuánto estás imaginando que podría costar algo así?\" — deja que el lead se autocalifique.",
+        "3. ESCUCHA — no reveles el precio todavía. Si el lead dice un monto alto, confirma que es mucho más accesible.",
+        "NUNCA propongas contactarlo 'más adelante' ni cierres la conversación sin aplicar este protocolo.",
+      ].join("\n"),
+    };
+  }
+
   if (tipoResistencia === "condicion") {
     return {
       tipoResistencia,

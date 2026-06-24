@@ -203,7 +203,7 @@ export async function procesarConversacion(
     const desconfianza = filtroResult.tipo === "objecion"
       ? await identificarDesconfianza(mensajes, historial).catch(() => null)
       : null;
-    protocoloObjecion = construirProtocoloObjecion(filtroResult.tipo, desconfianza?.tipo ?? null);
+    protocoloObjecion = construirProtocoloObjecion(filtroResult.tipo, desconfianza?.tipo ?? null, /\$[\d,.]+|[\d,.]+\s*(MXN|pesos)/i.test(historial));
   }
 
   const { texto: respuesta, scoreConfianza } = await generarRespuesta(mensajes, {

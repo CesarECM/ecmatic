@@ -78,6 +78,24 @@ export async function eliminarRelacion(relacionId: string): Promise<void> {
   if (error) throw new Error(`[servicio-relaciones] eliminar: ${error.message}`);
 }
 
+// Devuelve un bloque de texto para inyectar en el prompt del motor de respuesta.
+// Solo incluye relaciones relevantes para el cierre (complementa, versión avanzada, leadmagnet).
+export async function obtenerRelacionesParaPrompt(servicioId: string): Promise<string> {
+  const relaciones = await listarRelaciones(servicioId).catch(() => []);
+  const TIPOS_RELEVANTES: TipoRelacion[] = ["complementa", "version_avanzada_de", "es_leadmagnet_de"];
+  const relevantes = relaciones.filter((r) => r.activa && TIPOS_RELEVANTES.includes(r.tipo));
+  if (!relevantes.length) return "";
+  const lineas = relevantes.map((r) => {
+    const desc = r.descripcion ? ` — ${r.descripcion}` : "";
+    return `• ${r.destino_titulo} (${TIPO_RELACION_LABELS[r.tipo]})${desc}`;
+  });
+  return [
+    "\nSERVICIOS RELACIONADOS — preséntarlos proactivamente si el lead muestra apertura:",
+    ...lineas,
+    "No esperes a que el lead los pida. Si el servicio principal no convence del todo, menciona UNO de estos antes de concluir que no hay match.",
+  ].join("\n");
+}
+
 export async function listarTodosLosDestinosPosibles(
   servicioId: string
 ): Promise<{ id: string; titulo: string }[]> {
