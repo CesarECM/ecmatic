@@ -6,6 +6,7 @@ import { sendTextMessage } from "@/lib/whatsapp/client";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { callClaudeIA } from "@/lib/ai/client";
+import { logSistema } from "@/services/log-sistema";
 
 export async function responderTicketAction(formData: FormData) {
   const ticketId = formData.get("ticketId") as string;
@@ -15,15 +16,20 @@ export async function responderTicketAction(formData: FormData) {
 
   if (!respuesta.trim()) return;
 
-  // Enviar respuesta por WhatsApp
-  await sendTextMessage(telefono, respuesta);
+  try {
+    // Enviar respuesta por WhatsApp
+    await sendTextMessage(telefono, respuesta);
 
-  // S1.12 — Generar sugerencia de KB con IA
-  const sugerencia = await generarSugerenciaKb(respuesta);
+    // S1.12 — Generar sugerencia de KB con IA
+    const sugerencia = await generarSugerenciaKb(respuesta);
 
-  await cerrarTicket(ticketId, respuesta, sugerencia ?? undefined);
+    await cerrarTicket(ticketId, respuesta, sugerencia ?? undefined);
+    void logSistema({ categoria: "ui", tipoAccion: "tickets.responder", fase: "ok", leadId, metadata: { ticket_id: ticketId, genero_kb: !!sugerencia } });
+  } catch (err) {
+    void logSistema({ categoria: "ui", tipoAccion: "tickets.responder", fase: "error", leadId, resultado: err instanceof Error ? err.message : String(err), metadata: { ticket_id: ticketId } });
+    throw err;
+  }
 
-  // Marcar ticket en atención primero, luego cerrado
   revalidatePath("/admin/tickets");
 }
 
@@ -45,6 +51,7 @@ export async function tomarTicketAction(formData: FormData) {
     .update({ estado: "en_atencion", vendedor_id: vendedor?.id ?? null })
     .eq("id", ticketId);
 
+  void logSistema({ categoria: "ui", tipoAccion: "tickets.tomar", fase: "ok", metadata: { ticket_id: ticketId } });
   revalidatePath("/admin/tickets");
 }
 

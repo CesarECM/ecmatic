@@ -46,6 +46,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "leads.mover","leads.asignar-vendedor","leads.actualizar-b2b","leads.emitir-factura","leads.marcar-privacidad","leads.agregar-nota","leads.toggle-nurturing",
     "financiero.marcar-comision-pagada","financiero.registrar-pago-manual",
     "matriz.aprobar-celda","matriz.actualizar-celda","matriz.rechazar-celda","matriz.crear-celda","matriz.generar-sugerencias",
+    "tickets.responder","tickets.tomar",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -92,6 +93,7 @@ const TIPO_LABEL: Record<string, string> = {
   "leads.mover":"Mover lead","leads.asignar-vendedor":"Asignar vendedor","leads.actualizar-b2b":"Actualizar B2B","leads.emitir-factura":"Emitir factura","leads.marcar-privacidad":"Marcar privacidad","leads.agregar-nota":"Agregar nota","leads.toggle-nurturing":"Toggle nurturing",
   "financiero.marcar-comision-pagada":"Marcar comisión pagada","financiero.registrar-pago-manual":"Registrar pago manual",
   "matriz.aprobar-celda":"Aprobar celda","matriz.actualizar-celda":"Actualizar celda","matriz.rechazar-celda":"Rechazar celda","matriz.crear-celda":"Crear celda","matriz.generar-sugerencias":"Generar sugerencias matriz",
+  "tickets.responder":"Responder ticket","tickets.tomar":"Tomar ticket",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
