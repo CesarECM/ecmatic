@@ -96,10 +96,11 @@ export async function guardarMensaje(params: {
   direccion: "entrante" | "saliente";
   intencion?: IntencionClasificada | null;
   waMessageId?: string;
+  interceptado?: boolean;
 }) {
   const supabase = createServiceClient();
 
-  const { data } = await supabase.from("mensajes").insert({
+  const { data } = await (supabase.from("mensajes") as any).insert({
     lead_id: params.leadId,
     canal: "whatsapp",
     direccion: params.direccion,
@@ -107,6 +108,7 @@ export async function guardarMensaje(params: {
     intencion_clasificada: params.intencion ?? null,
     procesado_por_ia: true,
     wa_message_id: params.waMessageId ?? null,
+    interceptado: params.interceptado ?? false,
   }).select("id").single();
 
   return data ?? null;

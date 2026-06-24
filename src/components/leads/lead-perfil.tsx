@@ -28,7 +28,7 @@ type Lead = {
 type Vendedor = { id: string; nombre: string; email: string };
 type Etapa = { id: string; nombre: string; orden: number };
 type Movimiento = { id: string; etapa_anterior: string | null; etapa_nueva: string; motivo: string | null; movido_por: string; created_at: string };
-type Mensaje = { id: string; canal: string; direccion: string; contenido: string; intencion_clasificada: string | null; created_at: string };
+type Mensaje = { id: string; canal: string; direccion: string; contenido: string; intencion_clasificada: string | null; interceptado: boolean; created_at: string };
 type SenalSituacional = { id: string; tipo: string; descripcion: string; fragmento: string; confianza: number; created_at: string };
 
 interface LeadPerfilProps {

@@ -8,7 +8,9 @@ export type TipoAccionIA =
   | "clasificar_intencion" | "generar_respuesta" | "generar_encuesta"
   | "inferir_temperamento" | "sugerir_kb" | "detectar_competidor"
   | "detectar_promesa" | "detectar_momento_cierre" | "generar_slot_cita"
-  | "calcular_churn" | "upsell";
+  | "calcular_churn" | "upsell"
+  | "DEPURACION_WA_INTERCEPTADO" | "DEPURACION_EMAIL_INTERCEPTADO"
+  | "DEPURACION_LEAD_CREADO" | "DEPURACION_LLAMADA_PENDIENTE";
 
 export type FaseIA = "llamado" | "peticion" | "respuesta" | "timeout" | "error" | "debug" | "warn";
 

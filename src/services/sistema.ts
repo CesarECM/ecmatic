@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 
-export type ModoOperacion = "pruebas" | "seguro" | "seguro_automatico" | "automatico";
+export type ModoOperacion = "pruebas" | "depuracion" | "seguro" | "seguro_automatico" | "automatico";
 
 export interface ConfigSistema {
   id: string;

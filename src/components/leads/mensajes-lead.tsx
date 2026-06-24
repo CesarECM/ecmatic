@@ -16,6 +16,7 @@ type Mensaje = {
   direccion: string;
   contenido: string;
   intencion_clasificada: string | null;
+  interceptado: boolean;
   created_at: string;
 };
 
@@ -51,6 +52,11 @@ export function MensajesLead({ mensajes }: MensajesLeadProps) {
                 {m.intencion_clasificada && (
                   <Badge variant="outline" className="text-xs py-0">
                     {m.intencion_clasificada}
+                  </Badge>
+                )}
+                {m.interceptado && (
+                  <Badge className="text-xs py-0 bg-violet-100 text-violet-700 border border-violet-300">
+                    No enviado
                   </Badge>
                 )}
                 {/* S21.1 — Votos solo en respuestas salientes (IA) */}

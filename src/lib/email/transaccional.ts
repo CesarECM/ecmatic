@@ -1,4 +1,5 @@
 import { enviarEmail } from "./resend";
+import { interceptarOEnviarEmail } from "@/services/bandeja-email";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "cesar@ceecm.mx";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecmatic.vercel.app";
@@ -33,12 +34,15 @@ function boton(href: string, texto: string): string {
 export async function enviarBienvenida(lead: {
   nombre: string | null;
   email: string | null;
+  leadId?: string;
 }): Promise<void> {
   if (!lead.email) return;
   const nombre = lead.nombre ?? "Candidato";
-  await enviarEmail({
+  await interceptarOEnviarEmail({
     to: lead.email,
     subject: "¡Bienvenido a Centro ECM! — Tu certificación CONOCER",
+    leadId: lead.leadId,
+    tipo: "bienvenida",
     html: plantillaBase(
       `¡Hola, ${nombre}!`,
       `<p style="color:#444;line-height:1.6">Gracias por tu interés en certificarte con <strong>CONOCER</strong>. En Centro ECM te acompañamos en cada paso: diagnóstico, preparación y obtención de tu certificado oficial.</p>
@@ -76,15 +80,17 @@ export async function enviarNotificacionTicket(ticket: {
 
 // S4.2 — Email de nurturing (seguimiento o re-engagement)
 export async function enviarEmailNurturing(
-  lead: { nombre: string | null; email: string | null },
+  lead: { nombre: string | null; email: string | null; leadId?: string },
   mensajePlantilla: string
 ): Promise<void> {
   if (!lead.email) return;
   const nombre = lead.nombre ?? "Candidato";
   const cuerpo = mensajePlantilla.replace(/\{nombre\}/gi, nombre);
-  await enviarEmail({
+  await interceptarOEnviarEmail({
     to: lead.email,
     subject: "Centro ECM — Seguimiento a tu certificación CONOCER",
+    leadId: lead.leadId,
+    tipo: "nurturing",
     html: plantillaBase(
       `Hola, ${nombre}`,
       `<p style="color:#444;line-height:1.6">${cuerpo}</p>

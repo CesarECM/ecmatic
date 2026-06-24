@@ -11,6 +11,12 @@ const MODOS: { value: ModoOperacion; label: string; descripcion: string; color: 
     color: "border-gray-400 text-gray-700",
   },
   {
+    value: "depuracion",
+    label: "Depuración",
+    descripcion: "Leads reales entran al sistema. Respuestas WA interceptadas, emails a bandeja interna, Meet real, llamadas como notificación al vendedor.",
+    color: "border-violet-400 text-violet-700",
+  },
+  {
     value: "seguro",
     label: "Seguro",
     descripcion: "Toda respuesta IA queda en cola de aprobación manual antes de enviarse.",
