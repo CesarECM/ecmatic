@@ -26,6 +26,9 @@ export interface Servicio {
   // Precios
   precio_centavos: number | null;
   precio_descuento_centavos: number | null;
+  precio_apartado_centavos: number | null;
+  // Estrategia de venta
+  modo_venta: "directo" | "meet";
   // CONOCER
   estandar_conocer: string | null;
   nivel_estandar: number | null;

@@ -8,6 +8,8 @@ import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/ident
 import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
 import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
 import { instruccionReglaOroCierre } from "./regla-oro-cierre";
+import { generarBloqueEstrategiaPrecio, type DatosPrecioServicio, type LinkPago } from "./estrategia-precio";
+import type { ModoRevelacion } from "./detector-revelacion";
 import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
 import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
 import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
@@ -44,6 +46,8 @@ interface ContextoLead {
   setterEstado?: EstadoSetter | null;
   protocoloObjecion?: ProtocoloObjecion | null;
   rolesDinamicos?: RolPorServicio[];
+  // Revelación de producto
+  modoRevelacion?: ModoRevelacion;
 }
 
 export interface RespuestaIA {
@@ -99,18 +103,20 @@ export async function generarRespuesta(
     return contexto.imagen_activa_url ?? null;
   })();
 
-  // S24.1/S24.2 — Pagos, cuentas bancarias y relaciones de servicios
+  // Pagos, cuentas bancarias, relaciones y datos de precio/modo_venta
   const [pagosServicios, cuentasActivas, relacionesLinea] = await Promise.all([
     serviciosAncla.length > 0
       ? Promise.all(serviciosAncla.map(async (s) => {
           const supabase = createServiceClient();
-          const [pago, precioRow] = await Promise.all([
+          const [pago, svcRow] = await Promise.all([
             seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
-            supabase.from("recursos_conocimiento").select("precio_centavos")
+            supabase.from("servicios" as "recursos_conocimiento")
+              .select("precio_centavos, precio_descuento_centavos, precio_apartado_centavos, modo_venta")
               .eq("id", s.id).single()
-              .then((r) => (r.data?.precio_centavos as number | null) ?? null, () => null),
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .then((r: any) => r.data ?? null, () => null),
           ]);
-          return { titulo: s.titulo, pago, precio: precioRow };
+          return { titulo: s.titulo, id: s.id, pago, svc: svcRow };
         }))
       : Promise.resolve([]),
     listarCuentasActivas().catch(() => []),
@@ -119,23 +125,46 @@ export async function generarRespuesta(
       : Promise.resolve(""),
   ]);
   const pagosConLink = pagosServicios.filter((p) => p.pago !== null);
-  const serviciosConPrecio = pagosServicios.filter((p) => p.precio !== null);
+  const serviciosConPrecio = pagosServicios.filter((p) => p.svc?.precio_centavos != null);
 
   const cuentasBancariasLinea = (cuentasActivas.length > 0 && serviciosAncla.length > 0)
     ? ["\nTRANSFERENCIA BANCARIA (solo ofrécela si el lead no puede usar los links de pago):",
         ...cuentasActivas.map((c) => `• ${formatearCuentaParaPrompt(c)}`),
         serviciosConPrecio.length > 0
-          ? `Montos: ${serviciosConPrecio.map((s) => `${s.titulo}: $${((s.precio ?? 0) / 100).toLocaleString("es-MX")} MXN`).join(" | ")}` : "",
+          ? `Montos: ${serviciosConPrecio.map((s) => `${s.titulo}: $${((s.svc?.precio_centavos ?? 0) / 100).toLocaleString("es-MX")} MXN`).join(" | ")}` : "",
       ].filter(Boolean).join("\n")
     : "";
 
-  // Servicios — siempre con ficha completa, antes que cualquier otra información
-  const serviciosTexto = serviciosAncla.map(formatearRecursoKB).join("\n\n");
+  const modoRevelacion = contexto.modoRevelacion ?? "oculto";
+
+  // Cuando el producto está revelado → ficha completa con nombre, precio y links
+  // Cuando oculto/preguntando → solo beneficios internos, sin nombre ni código EC
+  const serviciosTextoCompleto = serviciosAncla.map(formatearRecursoKB).join("\n\n");
+  const serviciosTextoInterno = serviciosAncla.map((r) => {
+    const partes: string[] = [];
+    if (r.caracteristicas) partes.push(`Características: ${r.caracteristicas}`);
+    if (r.beneficios)      partes.push(`Beneficios: ${r.beneficios}`);
+    if (r.ventajas)        partes.push(`Ventajas competitivas: ${r.ventajas}`);
+    if (r.para_quien_es)   partes.push(`Perfil ideal: ${r.para_quien_es}`);
+    return partes.join("\n") || r.contenido;
+  }).join("\n\n");
+
+  // Estrategia de cierre (solo cuando producto revelado y hay servicio)
+  const svcPrincipal = pagosServicios[0]?.svc as DatosPrecioServicio | null ?? null;
+  const linksParaEstrategia: LinkPago[] = pagosConLink.map((p) => ({
+    tipo: p.pago!.tipo, url: p.pago!.url, descripcion: p.pago!.descripcion ?? null,
+  }));
+  const bloqueEstrategia = (modoRevelacion === "revelado" && svcPrincipal)
+    ? generarBloqueEstrategiaPrecio(svcPrincipal, linksParaEstrategia, contexto.historial)
+    : "";
+
   const anclaLinea = serviciosAncla.length > 0
-    ? [`\nSERVICIO(S) QUE ESTÁS VENDIENDO — revisa esta información antes de responder:\n${serviciosTexto}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
-        pagosConLink.length > 0
-          ? `\nLINKS DE PAGO (comparte el link cuando detectes intención de compra):\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}${p.pago!.descripcion ? ` (${p.pago!.descripcion})` : ""}`).join("\n")}` : "",
-        cuentasBancariasLinea].join("\n")
+    ? modoRevelacion === "revelado"
+      ? [`\nSERVICIO(S) QUE ESTÁS VENDIENDO — revisa esta información antes de responder:\n${serviciosTextoCompleto}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
+          pagosConLink.length > 0 && !bloqueEstrategia
+            ? `\nLINKS DE PAGO:\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}`).join("\n")}` : "",
+          cuentasBancariasLinea, bloqueEstrategia].filter(Boolean).join("\n")
+      : `\nCONTEXTO INTERNO DEL SERVICIO (CONFIDENCIAL — no revelar nombre, código EC ni precio):\n${serviciosTextoInterno}`
     : "";
 
   // Protocolo y plantillas de la etapa actual del pipeline
@@ -186,20 +215,27 @@ export async function generarRespuesta(
       ].filter(Boolean).join("\n") : "";
   const objecionLinea = contexto.protocoloObjecion?.instruccion ? `\n${contexto.protocoloObjecion.instruccion}` : "";
   const rolLinea = contexto.rolesDinamicos?.length ? formatearRolDinamicoParaPrompt(contexto.rolesDinamicos) : "";
-  // Instrucción de descubrimiento: solo en fases setter 1-2 (o primer mensaje sin historial)
-  const esPrimerMensaje = !contexto.historial || contexto.historial.trim() === "";
-  const setterFaseParaPrompt = contexto.setterEstado?.faseNueva ?? (esPrimerMensaje ? 1 : null);
-  const instruccionDescubrimiento = (setterFaseParaPrompt !== null && setterFaseParaPrompt <= 2)
+  // Instrucción de venta adaptada al estado de revelación del producto
+  const instruccionVenta = modoRevelacion === "oculto"
     ? [
-        "\nPROTOCOLO HIGH-TICKET — FASE DE DESCUBRIMIENTO (obligatorio ahora):",
-        "El lead aún no ha reconocido claramente su problema. NO menciones nombres de servicio, estándares (EC0301, EC0217, etc.) ni precios.",
-        "Tu único objetivo: profundizar en la situación del lead.",
-        "  1. Haz UNA pregunta abierta que amplíe lo que el lead acaba de decir.",
-        "  2. Cuando confirme un problema o deseo concreto, muéstrale el impacto de NO resolverlo (sin nombrar el servicio aún).",
-        "  3. Solo cuando el lead exprese que quiere resolver ESO, presenta el servicio por nombre.",
-        "Regla de oro: la gente compra soluciones a problemas, no productos. Primero el problema, luego el producto.",
+        "\nPROTOCOLO DE DESCUBRIMIENTO — REGLA ABSOLUTA (se revisa primero que cualquier otra instrucción):",
+        "NO menciones el nombre del servicio, código de estándar (EC...) ni precio en ningún mensaje.",
+        "Usa la sección CONTEXTO INTERNO para conocer los beneficios, pero habla de TRANSFORMACIÓN y SOLUCIÓN sin revelar el nombre del producto.",
+        "1. Haz UNA pregunta abierta que profundice en la situación del lead.",
+        "2. Cuando confirme un problema concreto, muéstrale el impacto de NO resolverlo.",
+        "3. Cuando el lead muestre apertura a resolver, haz EXACTAMENTE esta pregunta (UNA sola vez): \"¿Te gustaría saber qué puede ayudarte a lograrlo?\"",
+        "4. No avances más allá de esa pregunta en este turno. Espera la respuesta.",
       ].join("\n")
-    : "";
+    : modoRevelacion === "preguntando"
+    ? [
+        "\nPROTOCOLO ESPERANDO RESPUESTA — REGLA ABSOLUTA:",
+        "Ya le preguntaste al lead si quiere saber qué puede ayudarle. NO repitas la pregunta.",
+        "- Si responde con interés (\"sí\", \"claro\", \"dime\", \"¿cuál?\"): revela el nombre del servicio y presenta sus beneficios.",
+        "- Si evade, niega o cambia el tema: confronta de forma directa pero respetuosa.",
+        "  Ejemplo: \"Entiendo que algo te detiene. ¿Qué es lo que te genera duda sobre dar este paso?\"",
+        "  Trabaja la resistencia de fondo antes de revelar el producto.",
+      ].join("\n")
+    : ""; // revelado → el bloqueEstrategia ya contiene las instrucciones de cierre
 
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
@@ -237,7 +273,7 @@ INSTRUCCIONES:
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
 ${instruccionCanal}
-${instruccionDescubrimiento}
+${instruccionVenta}
 ${instruccionReglaOroCierre()}`;
 
   const response = await callClaudeIA("RESPUESTA", {

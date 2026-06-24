@@ -131,6 +131,23 @@ export async function obtenerHistorial(leadId: string, limite = 10): Promise<str
     .join("\n");
 }
 
+export function dividirRespuesta(texto: string): string[] {
+  if (texto.length <= 160) return [texto];
+  const oraciones = texto.match(/[^.!?]+[.!?]+/g) ?? [texto];
+  const bloques: string[] = [];
+  let bloque = "";
+  for (const oracion of oraciones) {
+    if ((bloque + oracion).length > 160) {
+      if (bloque) bloques.push(bloque.trim());
+      bloque = oracion;
+    } else {
+      bloque += oracion;
+    }
+  }
+  if (bloque.trim()) bloques.push(bloque.trim());
+  return bloques.length > 0 ? bloques : [texto];
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

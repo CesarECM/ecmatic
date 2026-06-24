@@ -41,6 +41,7 @@ export async function actualizarDatosGeneralesAction(formData: FormData) {
     ventajas:                    (formData.get("ventajas")        as string)?.trim() || null,
     para_quien_es:               (formData.get("para_quien_es")   as string)?.trim() || null,
     para_quien_no_es:            (formData.get("para_quien_no_es") as string)?.trim() || null,
+    modo_venta:                  (formData.get("modo_venta") as "directo" | "meet") || "meet",
     modalidad:                   (formData.get("modalidad") as ModalidadServicio) || null,
     duracion_horas:              num("duracion_horas") as number | null,
     requisitos_previos:          (formData.get("requisitos_previos") as string)?.trim() || null,
@@ -68,9 +69,11 @@ export async function actualizarPreciosAction(formData: FormData) {
   const desc  = formData.get("precio_descuento") as string;
   if (!id) throw new Error("ID requerido");
 
+  const apartado = formData.get("precio_apartado") as string;
   await actualizarServicio(id, {
-    precio_centavos:           lista ? Math.round(parseFloat(lista) * 100) : null,
-    precio_descuento_centavos: desc  ? Math.round(parseFloat(desc)  * 100) : null,
+    precio_centavos:           lista    ? Math.round(parseFloat(lista)    * 100) : null,
+    precio_descuento_centavos: desc     ? Math.round(parseFloat(desc)     * 100) : null,
+    precio_apartado_centavos:  apartado ? Math.round(parseFloat(apartado) * 100) : null,
   });
 
   revalidatePath(`/admin/servicios/${id}`);

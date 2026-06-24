@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { obtenerOCrearLead, inferirEtapaPipeline, inferirTemperamento } from "./leads";
-import { guardarMensaje, obtenerHistorial } from "./mensajes";
+import { guardarMensaje, obtenerHistorial, dividirRespuesta } from "./mensajes";
 import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { generarRespuesta, necesitaHandoff } from "@/lib/ai/motor-respuesta";
 import { enviarRespuestaWhatsApp } from "./whatsapp-sender";
@@ -21,6 +21,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { dispararHooksPostConversacion } from "./post-conversacion";
 // S31 — Arquitectura de Objeciones
 import { evaluarFaseSetter } from "@/lib/ai/setter-protocol";
+import { detectarRevelacion, calcularNuevoModo, type ModoRevelacion } from "@/lib/ai/detector-revelacion";
 import { evaluarCualificacion } from "@/lib/ai/cualificacion";
 import { filtrarResistencia } from "@/lib/ai/filtro-objecion";
 import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
@@ -98,7 +99,7 @@ export async function procesarConversacion(
   const [{ data: leadActualizado }, estadoCagc, etiquetasLead] = await Promise.all([
     supabase
       .from("leads")
-      .select("nombre, email, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, canal_origen, setter_fase_actual, setter_calificado")
+      .select("nombre, email, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, canal_origen, setter_fase_actual, setter_calificado, modo_revelacion")
       .eq("id", lead.id)
       .single(),
     obtenerFaseLead(lead.id).catch(() => null),
@@ -154,9 +155,10 @@ export async function procesarConversacion(
   const setterFaseActual: number = (leadActualizado?.setter_fase_actual as number | null) ?? 1;
   const setterCalificado: boolean | null = (leadActualizado?.setter_calificado as boolean | null) ?? null;
   const esObjecion = intencion === "objecion_precio" || intencion === "objecion_confianza";
-  const setterActivo = setterCalificado === null; // se desactiva al calificar o descalificar
+  const setterActivo = setterCalificado === null;
+  const modoRevelacionActual = (leadActualizado?.modo_revelacion ?? "oculto") as ModoRevelacion;
 
-  const [setterEstado, filtroResult, rolesDinamicos] = await Promise.all([
+  const [setterEstado, filtroResult, rolesDinamicos, señalRevelacion] = await Promise.all([
     setterActivo && historial
       ? evaluarFaseSetter(setterFaseActual, mensajes, historial, leadActualizado?.temperamento_inferido ?? null).catch(() => null)
       : Promise.resolve(null),
@@ -164,7 +166,16 @@ export async function procesarConversacion(
       ? filtrarResistencia(mensajes, historial).catch(() => null)
       : Promise.resolve(null),
     obtenerRolDinamico(lead.id).catch(() => []),
+    modoRevelacionActual !== "revelado"
+      ? detectarRevelacion(mensajes, historial, modoRevelacionActual, { leadId: lead.id, traceId }).catch(() => null)
+      : Promise.resolve(null),
   ]);
+
+  const nuevoModoRevelacion = calcularNuevoModo(modoRevelacionActual, señalRevelacion);
+  if (nuevoModoRevelacion !== modoRevelacionActual) {
+    void (async () => { await supabase.from("leads").update({ modo_revelacion: nuevoModoRevelacion }).eq("id", lead.id); })().catch(console.error);
+    void logDebugIA("CONVERSACION", `[REVELACION] ${modoRevelacionActual}→${nuevoModoRevelacion}`, { señal: señalRevelacion }, "debug", traceId);
+  }
 
   if (setterEstado) void logDebugIA("CONVERSACION", `[SETTER] fase ${setterFaseActual}→${setterEstado.faseNueva} avanza=${setterEstado.debeAvanzar}`,
     { fase_actual: setterFaseActual, fase_nueva: setterEstado.faseNueva, avanza: setterEstado.debeAvanzar }, "debug", traceId);
@@ -221,6 +232,7 @@ export async function procesarConversacion(
     setterEstado,
     protocoloObjecion,
     rolesDinamicos,
+    modoRevelacion: nuevoModoRevelacion,
   });
 
   // Compra inmediata: adjuntar link Stripe
@@ -282,19 +294,3 @@ export async function procesarConversacion(
   });
 }
 
-function dividirRespuesta(texto: string): string[] {
-  if (texto.length <= 160) return [texto];
-  const oraciones = texto.match(/[^.!?]+[.!?]+/g) ?? [texto];
-  const bloques: string[] = [];
-  let bloque = "";
-  for (const oracion of oraciones) {
-    if ((bloque + oracion).length > 160) {
-      if (bloque) bloques.push(bloque.trim());
-      bloque = oracion;
-    } else {
-      bloque += oracion;
-    }
-  }
-  if (bloque.trim()) bloques.push(bloque.trim());
-  return bloques.length > 0 ? bloques : [texto];
-}

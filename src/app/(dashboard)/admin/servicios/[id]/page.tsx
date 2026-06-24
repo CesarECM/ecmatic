@@ -103,6 +103,7 @@ export default async function ServicioDetallePage({ params }: { params: Promise<
         servicioId={id}
         precioCentavos={servicio.precio_centavos}
         precioDescuentoCentavos={servicio.precio_descuento_centavos}
+        precioApartadoCentavos={servicio.precio_apartado_centavos}
       />
       <PagosCard servicioId={id} pagos={pagos} />
       <RelacionesCard servicioId={id} relaciones={relaciones} otrosServicios={otrosServicios} />

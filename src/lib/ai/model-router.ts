@@ -20,8 +20,9 @@ export type TareaIA =
   | "CUALIFICACION"     // S31.3 — cualifica lead en 3 ejes
   | "OBJECION"          // S31.4 — filtro Condición vs. Objeción
   | "DESCONFIANZA"      // S31.5 — mapeo a Tres Desconfianzas Raíz
-  | "BRIEF_DISENO"      // S33.3 — genera brief de diseño para assets faltantes
-  | "CLUSTERING";       // S33.8 — genera título para cluster de sugerencias
+  | "BRIEF_DISENO"         // S33.3 — genera brief de diseño para assets faltantes
+  | "CLUSTERING"           // S33.8 — genera título para cluster de sugerencias
+  | "DETECTOR_REVELACION"; // detecta señal para revelar producto (oculto→preguntando→revelado)
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -50,8 +51,9 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   CUALIFICACION:    "haiku",
   OBJECION:         "haiku",
   DESCONFIANZA:     "haiku",
-  BRIEF_DISENO:     "haiku",
-  CLUSTERING:       "haiku",
+  BRIEF_DISENO:          "haiku",
+  CLUSTERING:            "haiku",
+  DETECTOR_REVELACION:   "haiku",
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.

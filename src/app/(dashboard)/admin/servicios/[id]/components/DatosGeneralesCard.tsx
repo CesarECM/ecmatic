@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import type { Servicio } from "@/services/servicios";
 
 export function DatosGeneralesCard({ servicio }: { servicio: Servicio }) {
   const [pending, startTransition] = useTransition();
+  const [modoDirecto, setModoDirecto] = useState(servicio.modo_venta === "directo");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -18,6 +19,7 @@ export function DatosGeneralesCard({ servicio }: { servicio: Servicio }) {
     fd.set("id", servicio.id);
     fd.set("activo", String((e.currentTarget.querySelector("[name=activo]") as HTMLInputElement)?.checked ?? servicio.activo));
     fd.set("conocer_habilitado", String((e.currentTarget.querySelector("[name=conocer_habilitado]") as HTMLInputElement)?.checked ?? servicio.conocer_habilitado));
+    fd.set("modo_venta", modoDirecto ? "directo" : "meet");
     const tid = toast.loading("Guardando…");
     startTransition(async () => {
       try {
@@ -67,11 +69,25 @@ export function DatosGeneralesCard({ servicio }: { servicio: Servicio }) {
                 <Input name="orden_catalogo" type="number" min={0} defaultValue={servicio.orden_catalogo ?? ""} placeholder="0" />
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" name="activo" defaultChecked={servicio.activo} className="rounded" />
                 Activo (visible en catálogo)
               </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={modoDirecto}
+                  onChange={(e) => setModoDirecto(e.target.checked)}
+                  className="rounded"
+                />
+                La IA puede cerrar esta venta directamente por mensaje (sin videollamada)
+              </label>
+              {!modoDirecto && (
+                <p className="text-xs text-muted-foreground pl-6">
+                  Modo Meet: la IA siempre invita a una videollamada de diagnóstico con un asesor.
+                </p>
+              )}
             </div>
           </div>
 

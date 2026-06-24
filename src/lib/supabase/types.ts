@@ -188,6 +188,7 @@ export interface Database {
           setter_fase_actual: number | null;
           setter_calificado: boolean | null;
           setter_razon_descalificacion: string | null;
+          modo_revelacion: "oculto" | "preguntando" | "revelado";
           created_at: string;
           updated_at: string;
         };
@@ -218,6 +219,7 @@ export interface Database {
           setter_fase_actual?: number | null;
           setter_calificado?: boolean | null;
           setter_razon_descalificacion?: string | null;
+          modo_revelacion?: "oculto" | "preguntando" | "revelado";
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: Relationship[];

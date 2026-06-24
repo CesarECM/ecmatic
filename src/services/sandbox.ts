@@ -14,6 +14,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { capturarContactoPasivo } from "./captura-contacto";
 // S31 — Paridad con conversacion.ts
 import { evaluarFaseSetter } from "@/lib/ai/setter-protocol";
+import { detectarRevelacion, calcularNuevoModo, type ModoRevelacion } from "@/lib/ai/detector-revelacion";
 import { filtrarResistencia } from "@/lib/ai/filtro-objecion";
 import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
 import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
@@ -47,7 +48,7 @@ export async function procesarSandbox(
   const { data: lead, error } = await supabase
     .from("leads")
     .upsert(row, { onConflict: "telefono" })
-    .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado")
+    .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado, modo_revelacion")
     .single();
 
   if (error || !lead) throw new Error(`No se pudo crear lead de prueba: ${error?.message}`);
@@ -120,13 +121,14 @@ export async function procesarSandbox(
     }
   }
 
-  // S31 — Setter, Objeción, Rol Dinámico (paridad con conversacion.ts)
+  // S31 — Setter, Objeción, Rol Dinámico + Detector Revelación (paridad con conversacion.ts)
   const setterFaseActual: number = (lead.setter_fase_actual as number | null) ?? 1;
   const setterCalificado: boolean | null = (lead.setter_calificado as boolean | null) ?? null;
   const esObjecion = intencion === "objecion_precio" || intencion === "objecion_confianza";
   const setterActivo = setterCalificado === null;
+  const modoRevelacionActual = ((lead as unknown as { modo_revelacion?: string })?.modo_revelacion ?? "oculto") as ModoRevelacion; // cast por upsert que no usa los tipos generados
 
-  const [setterEstado, filtroResult, rolesDinamicos] = await Promise.all([
+  const [setterEstado, filtroResult, rolesDinamicos, señalRevelacion] = await Promise.all([
     setterActivo && historial
       ? evaluarFaseSetter(setterFaseActual, [mensaje], historial, lead.temperamento_inferido ?? null).catch(() => null)
       : Promise.resolve(null),
@@ -134,7 +136,16 @@ export async function procesarSandbox(
       ? filtrarResistencia([mensaje], historial).catch(() => null)
       : Promise.resolve(null),
     obtenerRolDinamico(lead.id).catch(() => []),
+    modoRevelacionActual !== "revelado"
+      ? detectarRevelacion([mensaje], historial, modoRevelacionActual, { leadId: lead.id }).catch(() => null)
+      : Promise.resolve(null),
   ]);
+
+  const nuevoModoRevelacion = calcularNuevoModo(modoRevelacionActual, señalRevelacion);
+  if (nuevoModoRevelacion !== modoRevelacionActual) {
+    void (async () => { await supabase.from("leads").update({ modo_revelacion: nuevoModoRevelacion }).eq("id", lead.id); })().catch(console.error);
+    void logDebugIA("CONVERSACION_SANDBOX", `[REVELACION] ${modoRevelacionActual}→${nuevoModoRevelacion}`, { señal: señalRevelacion }, "debug", traceId);
+  }
 
   if (setterEstado) void logDebugIA("CONVERSACION_SANDBOX", `[SETTER] fase ${setterFaseActual}→${setterEstado.faseNueva} avanza=${setterEstado.debeAvanzar}`,
     { fase_actual: setterFaseActual, fase_nueva: setterEstado.faseNueva, avanza: setterEstado.debeAvanzar }, "debug", traceId);
@@ -171,6 +182,7 @@ export async function procesarSandbox(
     setterEstado,
     protocoloObjecion,
     rolesDinamicos,
+    modoRevelacion: nuevoModoRevelacion,
   });
 
   void logDebugIA("CONVERSACION_SANDBOX", `[RESPUESTA_FINAL] score=${scoreConfianza.toFixed(2)} "${respuesta.slice(0,200)}"`,
