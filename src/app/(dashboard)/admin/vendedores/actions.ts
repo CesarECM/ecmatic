@@ -2,12 +2,14 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { revalidatePath } from "next/cache";
+import { logSistema } from "@/services/log-sistema";
 
 export async function actualizarPesoAction(vendedorId: string, peso: number): Promise<void> {
   if (!Number.isInteger(peso) || peso < 0 || peso > 100) throw new Error("Peso fuera de rango (0–100)");
   const supabase = createServiceClient();
   const { error } = await supabase.from("vendedores").update({ peso }).eq("id", vendedorId);
   if (error) throw new Error(`[vendedores] ${error.message}`);
+  void logSistema({ categoria: "ui", tipoAccion: "vendedores.actualizar-peso", fase: "ok", metadata: { vendedor_id: vendedorId, peso } });
   revalidatePath("/admin/vendedores");
 }
 
@@ -26,7 +28,10 @@ export async function agregarVendedorAction(nombre: string, email: string): Prom
   if (inviteError) {
     const { data: profile } = await supabase
       .from("profiles").select("id").eq("email", trimEmail).maybeSingle();
-    if (!profile) throw new Error(`No se pudo crear el usuario: ${inviteError.message}`);
+    if (!profile) {
+      void logSistema({ categoria: "ui", tipoAccion: "vendedores.agregar", fase: "error", resultado: inviteError.message, metadata: { email: trimEmail } });
+      throw new Error(`No se pudo crear el usuario: ${inviteError.message}`);
+    }
     profileId = profile.id;
   } else {
     profileId = inviteData.user.id;
@@ -37,9 +42,11 @@ export async function agregarVendedorAction(nombre: string, email: string): Prom
     const msg = error.message.toLowerCase().includes("unique")
       ? "Este usuario ya está registrado como vendedor"
       : `[vendedores] ${error.message}`;
+    void logSistema({ categoria: "ui", tipoAccion: "vendedores.agregar", fase: "error", resultado: msg, metadata: { email: trimEmail } });
     throw new Error(msg);
   }
 
+  void logSistema({ categoria: "ui", tipoAccion: "vendedores.agregar", fase: "ok", resultado: trimNombre, metadata: { email: trimEmail } });
   revalidatePath("/admin/vendedores");
 }
 
@@ -47,5 +54,9 @@ export async function agregarVendedorAction(nombre: string, email: string): Prom
 export async function reenviarInvitacionAction(email: string): Promise<void> {
   const supabase = createServiceClient();
   const { error } = await supabase.auth.admin.inviteUserByEmail(email.trim().toLowerCase());
-  if (error) throw new Error(`[invitación] ${error.message}`);
+  if (error) {
+    void logSistema({ categoria: "ui", tipoAccion: "vendedores.reenviar-invitacion", fase: "error", resultado: error.message, metadata: { email } });
+    throw new Error(`[invitación] ${error.message}`);
+  }
+  void logSistema({ categoria: "ui", tipoAccion: "vendedores.reenviar-invitacion", fase: "ok", metadata: { email } });
 }

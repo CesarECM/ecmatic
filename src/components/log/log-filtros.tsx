@@ -47,6 +47,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "financiero.marcar-comision-pagada","financiero.registrar-pago-manual",
     "matriz.aprobar-celda","matriz.actualizar-celda","matriz.rechazar-celda","matriz.crear-celda","matriz.generar-sugerencias",
     "tickets.responder","tickets.tomar",
+    "vendedores.actualizar-peso","vendedores.agregar","vendedores.reenviar-invitacion",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -94,6 +95,7 @@ const TIPO_LABEL: Record<string, string> = {
   "financiero.marcar-comision-pagada":"Marcar comisión pagada","financiero.registrar-pago-manual":"Registrar pago manual",
   "matriz.aprobar-celda":"Aprobar celda","matriz.actualizar-celda":"Actualizar celda","matriz.rechazar-celda":"Rechazar celda","matriz.crear-celda":"Crear celda","matriz.generar-sugerencias":"Generar sugerencias matriz",
   "tickets.responder":"Responder ticket","tickets.tomar":"Tomar ticket",
+  "vendedores.actualizar-peso":"Actualizar peso","vendedores.agregar":"Agregar vendedor","vendedores.reenviar-invitacion":"Reenviar invitación",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
