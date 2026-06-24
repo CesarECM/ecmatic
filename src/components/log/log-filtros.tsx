@@ -35,6 +35,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "etiquetas.aprobar","etiquetas.archivar","etiquetas.crear","etiquetas.fusionar","etiquetas.crear-categoria",
     "conocimiento.crear","conocimiento.aprobar","conocimiento.editar","conocimiento.eliminar","conocimiento.toggle-activo","conocimiento.restaurar-version","conocimiento.importar-fuente",
     "automatizaciones.disparar-cron",
+    "gatillos.toggle","gatillos.actualizar","gatillos.crear","gatillos.sugerir",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -70,6 +71,7 @@ const TIPO_LABEL: Record<string, string> = {
   "etiquetas.aprobar":"Aprobar etiqueta","etiquetas.archivar":"Archivar etiqueta","etiquetas.crear":"Crear etiqueta","etiquetas.fusionar":"Fusionar etiquetas","etiquetas.crear-categoria":"Crear categoría",
   "conocimiento.crear":"Crear recurso KB","conocimiento.aprobar":"Aprobar recurso KB","conocimiento.editar":"Editar recurso KB","conocimiento.eliminar":"Eliminar recurso KB","conocimiento.toggle-activo":"Activar/desactivar KB","conocimiento.restaurar-version":"Restaurar versión KB","conocimiento.importar-fuente":"Importar fuente KB",
   "automatizaciones.disparar-cron":"Disparar CRON",
+  "gatillos.toggle":"Toggle gatillo","gatillos.actualizar":"Actualizar gatillo","gatillos.crear":"Crear gatillo","gatillos.sugerir":"Sugerir gatillos",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
