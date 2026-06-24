@@ -20,19 +20,27 @@ export async function generarEmbedding(texto: string): Promise<number[]> {
   return res.data[0].embedding;
 }
 
-// Inserta un registro en log_ia sin bloquear la ejecución principal.
-async function insertLogIA(row: {
+// Inserta un registro en log_sistema sin bloquear la ejecución principal.
+async function insertLogSistema(row: {
   tipo_accion: string;
   lead_id: string | null;
   fase: string;
-  request_id: string;
+  trace_id: string;
   resultado: string | null;
   metadata: Record<string, unknown>;
 }): Promise<void> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/service");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (createServiceClient() as any).from("log_ia").insert(row);
+    await (createServiceClient() as any).from("log_sistema").insert({
+      categoria:   "ia",
+      tipo_accion: row.tipo_accion,
+      lead_id:     row.lead_id,
+      fase:        row.fase,
+      trace_id:    row.trace_id,
+      resultado:   row.resultado,
+      metadata:    row.metadata,
+    });
   } catch { /* el log nunca interrumpe la ejecución */ }
 }
 
@@ -58,31 +66,33 @@ export async function callClaudeIA(
     (s: number, m: any) => s + (typeof m.content === "string" ? m.content.length : 0), 0
   );
 
+  const traceEffective = traceId ?? requestId;
+
   // LOG 1 — llamado: contexto recibido antes de enviar a Claude
-  void insertLogIA({
+  void insertLogSistema({
     tipo_accion: tarea, lead_id: leadId,
-    fase: "llamado", request_id: requestId,
+    fase: "llamado", trace_id: traceEffective,
     resultado: `Llamado recibido: ${tarea}`,
     metadata: {
       model_seleccionado:    model,
       messages_count:        msgs.length,
       system_prompt_extract: systemRaw.slice(0, 500),
       tarea,
-      ...(traceId ? { trace_id: traceId } : {}),
+      request_id: requestId,
     },
   });
 
   // LOG 2 — peticion: lo que se envía a la API de Claude
-  void insertLogIA({
+  void insertLogSistema({
     tipo_accion: tarea, lead_id: leadId,
-    fase: "peticion", request_id: requestId,
+    fase: "peticion", trace_id: traceEffective,
     resultado: `Enviado a Claude`,
     metadata: {
       model,
       max_tokens:      params.max_tokens ?? null,
       chars_total_est: charsEst,
       messages_count:  msgs.length,
-      ...(traceId ? { trace_id: traceId } : {}),
+      request_id:      requestId,
     },
   });
 
@@ -99,26 +109,26 @@ export async function callClaudeIA(
     const durMs     = Date.now() - inicio;
     const isTimeout = err instanceof Error && err.message.startsWith("TIMEOUT_");
     // LOG 3 — timeout o error (awaited: garantiza escritura antes de que la función serverless retorne)
-    await insertLogIA({
+    await insertLogSistema({
       tipo_accion: tarea, lead_id: leadId,
       fase: isTimeout ? "timeout" : "error",
-      request_id: requestId,
+      trace_id: traceEffective,
       resultado: isTimeout
         ? `Sin respuesta en ${durMs} ms`
         : (err instanceof Error ? err.message.slice(0, 200) : "Error desconocido"),
       metadata: {
         model, duracion_ms: durMs,
         error_message: err instanceof Error ? err.message : String(err),
-        ...(traceId ? { trace_id: traceId } : {}),
+        request_id: requestId,
       },
     });
     throw err;
   }
 
   // LOG 3 — respuesta exitosa (awaited: garantiza escritura antes de que la función serverless retorne)
-  await insertLogIA({
+  await insertLogSistema({
     tipo_accion: tarea, lead_id: leadId,
-    fase: "respuesta", request_id: requestId,
+    fase: "respuesta", trace_id: traceEffective,
     resultado: response.content[0]?.type === "text"
       ? (response.content[0] as { type: "text"; text: string }).text.slice(0, 300)
       : null,
@@ -128,7 +138,7 @@ export async function callClaudeIA(
       tokens_output: response.usage.output_tokens,
       duracion_ms:   Date.now() - inicio,
       stop_reason:   response.stop_reason,
-      ...(traceId ? { trace_id: traceId } : {}),
+      request_id:    requestId,
     },
   });
 

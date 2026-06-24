@@ -1,11 +1,12 @@
-import { listarLogIA, agruparEventos } from "@/services/log-ia";
-import { LogIAPanel } from "@/components/log-ia/log-ia-panel";
+import { listarLogSistema, agruparEventos } from "@/services/log-sistema";
+import { LogPanel } from "@/components/log/log-panel";
 
-export const metadata = { title: "Log de IA · ECMatic" };
+export const metadata = { title: "Log de sistema · ECMatic" };
 export const revalidate = 0;
 
 interface Props {
   searchParams: Promise<{
+    categoria?: string;
     tipo?: string;
     fase?: string;
     desde?: string;
@@ -13,10 +14,10 @@ interface Props {
   }>;
 }
 
-export default async function LogIAPage({ searchParams }: Props) {
-  const { tipo, fase, desde, hasta } = await searchParams;
+export default async function LogPage({ searchParams }: Props) {
+  const { categoria, tipo, fase, desde, hasta } = await searchParams;
 
-  const registros = await listarLogIA({ tipoAccion: tipo, fase, desde, hasta });
+  const registros = await listarLogSistema({ categoria, tipoAccion: tipo, fase, desde, hasta });
 
   const tokensTotal = registros.reduce((sum, r) => {
     const m = r.metadata as Record<string, unknown> | null;
@@ -26,12 +27,12 @@ export default async function LogIAPage({ searchParams }: Props) {
   const { eventos, legacy } = agruparEventos(registros);
 
   return (
-    <LogIAPanel
+    <LogPanel
       eventos={eventos}
       legacy={legacy}
       totalRegistros={registros.length}
       tokensTotal={tokensTotal}
-      filtros={{ tipo, fase, desde, hasta }}
+      filtros={{ categoria, tipo, fase, desde, hasta }}
     />
   );
 }

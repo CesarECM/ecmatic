@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { procesarContactoGHL, type GHLWebhookPayload } from "@/services/ghl";
+import { logSistema } from "@/services/log-sistema";
 
 const GHL_SECRET = process.env.GHL_WEBHOOK_SECRET;
 
@@ -36,11 +37,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: "ignored", type: tipo });
   }
 
+  void logSistema({
+    categoria:  "webhook",
+    tipoAccion: "webhook.ghl",
+    fase:       "inicio",
+    resultado:  tipo,
+    metadata:   { event_type: tipo, contact_id: payload.contact_id ?? null },
+  });
+
   after(async () => {
     try {
       await procesarContactoGHL(payload);
+      void logSistema({ categoria: "webhook", tipoAccion: "webhook.ghl", fase: "ok", resultado: tipo, metadata: { event_type: tipo } });
     } catch (err) {
       console.error("[ghl/webhook] error procesando contacto:", err);
+      void logSistema({ categoria: "webhook", tipoAccion: "webhook.ghl", fase: "error", resultado: err instanceof Error ? err.message.slice(0, 200) : "Error", metadata: { event_type: tipo, error_message: String(err) } });
     }
   });
 

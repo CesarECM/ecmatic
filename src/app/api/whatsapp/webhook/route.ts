@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { parseWebhookPayload, markAsRead } from "@/lib/whatsapp/client";
 import { procesarMensajeEntrante } from "@/services/mensajes";
+import { logSistema } from "@/services/log-sistema";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 
@@ -33,6 +34,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: "ok" }, { status: 200 });
   }
 
+  void logSistema({
+    categoria:   "webhook",
+    tipoAccion:  "webhook.whatsapp",
+    fase:        "inicio",
+    resultado:   `${messages.length} mensaje(s) recibido(s)`,
+    metadata:    { count: messages.length, from: messages[0]?.from, types: messages.map(m => m.mediaType ?? "text") },
+  });
+
   // after() garantiza que el código corre después del 200
   // incluso en Vercel serverless — sin perder el contexto de ejecución
   after(async () => {
@@ -42,6 +51,13 @@ export async function POST(request: NextRequest) {
         await procesarMensajeEntrante(msg);
       } catch (err) {
         console.error("[webhook] error procesando mensaje:", err);
+        void logSistema({
+          categoria:  "webhook",
+          tipoAccion: "webhook.whatsapp",
+          fase:       "error",
+          resultado:  err instanceof Error ? err.message.slice(0, 300) : "Error desconocido",
+          metadata:   { from: msg.from, messageId: msg.messageId, error_message: String(err) },
+        });
       }
     }
   });

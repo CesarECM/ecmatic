@@ -3,6 +3,7 @@ import { verificarWebhook, obtenerSession } from "@/lib/stripe/client";
 import { registrarPago } from "@/services/pagos";
 import { createServiceClient } from "@/lib/supabase/service";
 import Stripe from "stripe";
+import { logSistema } from "@/services/log-sistema";
 
 export const runtime = "nodejs";
 
@@ -16,8 +17,17 @@ export async function POST(req: NextRequest) {
     event = verificarWebhook(body, sig);
   } catch (err) {
     console.error("[stripe-webhook] Firma inválida:", err);
+    void logSistema({ categoria: "webhook", tipoAccion: "webhook.stripe", fase: "error", resultado: "Firma inválida", metadata: { error_message: String(err) } });
     return NextResponse.json({ error: "Firma inválida" }, { status: 400 });
   }
+
+  void logSistema({
+    categoria:  "webhook",
+    tipoAccion: "webhook.stripe",
+    fase:       "inicio",
+    resultado:  event.type,
+    metadata:   { event_type: event.type, event_id: event.id },
+  });
 
   try {
     if (event.type === "checkout.session.completed") {
@@ -44,8 +54,10 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error("[stripe-webhook] Error procesando evento:", err);
+    void logSistema({ categoria: "webhook", tipoAccion: "webhook.stripe", fase: "error", resultado: err instanceof Error ? err.message.slice(0, 200) : "Error interno", metadata: { event_type: event.type, error_message: String(err) } });
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 
+  void logSistema({ categoria: "webhook", tipoAccion: "webhook.stripe", fase: "ok", resultado: event.type, metadata: { event_type: event.type, event_id: event.id } });
   return NextResponse.json({ ok: true });
 }

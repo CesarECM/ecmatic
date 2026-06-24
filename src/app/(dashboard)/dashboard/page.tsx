@@ -147,9 +147,9 @@ const MODULOS: Modulo[] = [
     sprint: "S10",
   },
   {
-    href: "/admin/log-ia",
-    titulo: "Log de IA",
-    descripcion: "Registro consultable de todas las acciones tomadas por la IA.",
+    href: "/admin/log",
+    titulo: "Log de sistema",
+    descripcion: "Registro consultable de todas las acciones del sistema: IA, crons, webhooks y servicios.",
     emoji: "📋",
     roles: ["admin"],
     sprint: "S10",

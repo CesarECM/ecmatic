@@ -118,7 +118,7 @@ export const MODULOS: ModuloGuia[] = [
     emoji: "🔌",
     features: [
       { id: "sist-modo", titulo: "Modo de operación", descripcion: "Pruebas → Seguro → Seguro automático → Automático. Controla si la IA actúa o solo sugiere.", estado: "activo", href: "/admin/sistema" },
-      { id: "sist-gasto-ia", titulo: "Gasto IA", descripcion: "Registro de tokens y costo estimado por proveedor (Anthropic/OpenAI). Accesible en log-ia.", estado: "activo", href: "/admin/log-ia" },
+      { id: "sist-gasto-ia", titulo: "Log de sistema", descripcion: "Registro unificado de IA, crons, webhooks y servicios externos. Filtrable por categoría.", estado: "activo", href: "/admin/log" },
       { id: "sist-automatizaciones", titulo: "Panel de automatizaciones", descripcion: "Todos los CRONs en un lugar: descripción, schedule, última ejecución y botón 'Ejecutar ahora'.", estado: "activo", href: "/admin/automatizaciones", badge: "S35" },
       { id: "sist-marca", titulo: "Identidad de marca", descripcion: "Nombre, colores, voz y tono de la empresa. La IA inyecta este contexto en cada conversación.", estado: "activo", href: "/admin/marca" },
       { id: "sist-lanzamiento", titulo: "Checklist de lanzamiento WA", descripcion: "Guía paso a paso para conectar el número WhatsApp definitivo a Meta Business.", estado: "activo", href: "/admin/lanzamiento" },

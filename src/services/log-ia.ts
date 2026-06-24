@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { logSistema } from "@/services/log-sistema";
 
 export type TipoAccionIA =
   | "CLASIFICAR" | "RESPUESTA" | "ANALISIS" | "COACHING" | "ENCUESTA"
@@ -50,15 +51,12 @@ export async function registrarAccionIA(params: {
   resultado?: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  const supabase = createServiceClient();
-  await supabase.from("log_ia").insert({
-    tipo_accion: params.tipoAccion,
-    lead_id:     params.leadId ?? null,
-    recurso_kb_id: params.recursoKbId ?? null,
-    resultado:   params.resultado ?? null,
-    metadata:    params.metadata ?? {},
-  }).then(({ error }) => {
-    if (error) console.error("[log-ia] Error registrando:", error.message);
+  await logSistema({
+    categoria:   "ia",
+    tipoAccion:  params.tipoAccion,
+    leadId:      params.leadId,
+    resultado:   params.resultado,
+    metadata:    { ...params.metadata, recurso_kb_id: params.recursoKbId },
   });
 }
 
@@ -163,8 +161,8 @@ export function agruparEventos(registros: LogIARow[]): {
   return { eventos, legacy };
 }
 
-// Escribe un log de depuración en log_ia para trazar pasos post-Claude
-// (parse, cooldown, inserts). Usar void para no-críticos, await en catch blocks.
+// Escribe un log de depuración en log_sistema (categoria: ia).
+// Firma idéntica a la versión anterior — los 12 callers no requieren cambios.
 export async function logDebugIA(
   tipoAccion: string,
   paso: string,
@@ -172,19 +170,14 @@ export async function logDebugIA(
   fase: "debug" | "warn" | "error" = "debug",
   traceId?: string
 ): Promise<void> {
-  try {
-    const supabase = createServiceClient();
-    const { error } = await supabase.from("log_ia").insert({
-      tipo_accion: tipoAccion,
-      lead_id:     null,
-      fase,
-      resultado:   paso.slice(0, 400),
-      metadata:    traceId ? { ...metadata, trace_id: traceId } : metadata,
-    });
-    if (error) console.error("[logDebugIA]", error.message);
-  } catch (err) {
-    console.error("[logDebugIA catch]", err);
-  }
+  await logSistema({
+    categoria:  "ia",
+    tipoAccion,
+    fase,
+    traceId,
+    resultado:  paso.slice(0, 400),
+    metadata,
+  });
 }
 
 // S10.3 — Cola de aprobaciones

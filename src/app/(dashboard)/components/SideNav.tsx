@@ -57,7 +57,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/admin/analitica",     label: "Analítica",           emoji: "📊", roles: ["admin"] },
       { href: "/admin/financiero",    label: "Financiero",          emoji: "💰", roles: ["admin", "admin_financiero"] },
-      { href: "/admin/log-ia",                label: "Log IA",              emoji: "📋", roles: ["admin"] },
+      { href: "/admin/log",                    label: "Log de sistema",      emoji: "📋", roles: ["admin"] },
       { href: "/admin/debug-agendamiento",    label: "Debug Agendamiento",  emoji: "🗓️", roles: ["admin"] },
       { href: "/admin/auditoria-integridad", label: "Integridad",          emoji: "🔍", roles: ["admin"] },
       { href: "/admin/sistema",             label: "Estado sistema",      emoji: "🔌", roles: ["admin"] },
