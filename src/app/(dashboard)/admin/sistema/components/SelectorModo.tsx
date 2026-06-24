@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ModoOperacion } from "@/services/sistema";
 
 const MODOS: { value: ModoOperacion; label: string; descripcion: string; color: string }[] = [
@@ -44,9 +45,11 @@ interface Props {
 }
 
 export function SelectorModo({ modoActual, umbralActual, onCambiarModo, onCambiarUmbral }: Props) {
+  const router = useRouter();
   const [confirmando, setConfirmando] = useState<ModoOperacion | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [umbral, setUmbral] = useState(umbralActual);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSeleccionar(modo: ModoOperacion) {
     if (modo === modoActual) return;
@@ -59,8 +62,12 @@ export function SelectorModo({ modoActual, umbralActual, onCambiarModo, onCambia
 
   async function ejecutarCambio(modo: ModoOperacion) {
     setGuardando(true);
+    setError(null);
     try {
       await onCambiarModo(modo);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cambiar el modo");
     } finally {
       setGuardando(false);
       setConfirmando(null);
@@ -69,8 +76,12 @@ export function SelectorModo({ modoActual, umbralActual, onCambiarModo, onCambia
 
   async function handleGuardarUmbral() {
     setGuardando(true);
+    setError(null);
     try {
       await onCambiarUmbral(umbral);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar umbral");
     } finally {
       setGuardando(false);
     }
@@ -120,6 +131,13 @@ export function SelectorModo({ modoActual, umbralActual, onCambiarModo, onCambia
               Cancelar
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
         </div>
       )}
 
