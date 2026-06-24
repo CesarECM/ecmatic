@@ -12,6 +12,7 @@ import {
   eliminarEtapa,
 } from "@/services/etapas-admin";
 import { dispararAuditoriaPipeline } from "@/services/auditor-pipelines";
+import { logSistema } from "@/services/log-sistema";
 
 export async function crearPipelineAction(fd: FormData) {
   const nombre = (fd.get("nombre") as string)?.trim();
@@ -26,6 +27,7 @@ export async function crearPipelineAction(fd: FormData) {
     fase_cagc_fin:    fd.get("fase_cagc_fin")    ? Number(fd.get("fase_cagc_fin"))    : undefined,
   });
 
+  void logSistema({ categoria: "ui", tipoAccion: "pipelines.crear", fase: "ok", resultado: nombre, metadata: { pipeline_id: pipeline.id, ruta: pipeline.ruta } });
   void dispararAuditoriaPipeline(pipeline.ruta, "crear_pipeline").catch(console.error);
   revalidatePath("/admin/pipelines");
   return pipeline;
@@ -42,6 +44,7 @@ export async function actualizarPipelineAction(id: string, fd: FormData) {
     activo:           fd.get("activo") === "true",
   });
 
+  void logSistema({ categoria: "ui", tipoAccion: "pipelines.actualizar", fase: "ok", metadata: { pipeline_id: id, ruta: pipeline.ruta } });
   void dispararAuditoriaPipeline(pipeline.ruta, "editar_pipeline").catch(console.error);
   revalidatePath("/admin/pipelines");
   revalidatePath(`/admin/pipelines/${id}`);
@@ -50,6 +53,7 @@ export async function actualizarPipelineAction(id: string, fd: FormData) {
 
 export async function eliminarPipelineAction(id: string) {
   await eliminarPipeline(id);
+  void logSistema({ categoria: "ui", tipoAccion: "pipelines.eliminar", fase: "ok", metadata: { pipeline_id: id } });
   revalidatePath("/admin/pipelines");
 }
 
@@ -71,6 +75,7 @@ export async function crearEtapaAction(pipelineId: string, ruta: string, fd: For
     etapas_siguientes: fd.get("etapas_siguientes") ? JSON.parse(fd.get("etapas_siguientes") as string) : [],
   });
 
+  void logSistema({ categoria: "ui", tipoAccion: "pipelines.crear-etapa", fase: "ok", resultado: nombre, metadata: { pipeline_id: pipelineId, etapa_id: etapa.id, ruta } });
   void dispararAuditoriaPipeline(ruta, "crear_etapa").catch(console.error);
   revalidatePath(`/admin/pipelines/${pipelineId}`);
   return etapa;
@@ -83,12 +88,14 @@ export async function actualizarEtapaAction(
   data: Parameters<typeof actualizarEtapa>[1]
 ) {
   await actualizarEtapa(etapaId, data);
+  void logSistema({ categoria: "ui", tipoAccion: "pipelines.actualizar-etapa", fase: "ok", metadata: { pipeline_id: pipelineId, etapa_id: etapaId, ruta } });
   void dispararAuditoriaPipeline(ruta, "editar_etapa").catch(console.error);
   revalidatePath(`/admin/pipelines/${pipelineId}`);
 }
 
 export async function eliminarEtapaAction(pipelineId: string, ruta: string, etapaId: string) {
   await eliminarEtapa(etapaId);
+  void logSistema({ categoria: "ui", tipoAccion: "pipelines.eliminar-etapa", fase: "ok", metadata: { pipeline_id: pipelineId, etapa_id: etapaId, ruta } });
   void dispararAuditoriaPipeline(ruta, "eliminar_etapa").catch(console.error);
   revalidatePath(`/admin/pipelines/${pipelineId}`);
 }

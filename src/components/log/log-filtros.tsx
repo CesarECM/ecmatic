@@ -37,6 +37,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "automatizaciones.disparar-cron",
     "gatillos.toggle","gatillos.actualizar","gatillos.crear","gatillos.sugerir",
     "nurturing.toggle-secuencia","nurturing.disparar-ciclo",
+    "pipelines.crear","pipelines.actualizar","pipelines.eliminar","pipelines.crear-etapa","pipelines.actualizar-etapa","pipelines.eliminar-etapa",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -74,6 +75,7 @@ const TIPO_LABEL: Record<string, string> = {
   "automatizaciones.disparar-cron":"Disparar CRON",
   "gatillos.toggle":"Toggle gatillo","gatillos.actualizar":"Actualizar gatillo","gatillos.crear":"Crear gatillo","gatillos.sugerir":"Sugerir gatillos",
   "nurturing.toggle-secuencia":"Toggle secuencia","nurturing.disparar-ciclo":"Disparar ciclo",
+  "pipelines.crear":"Crear pipeline","pipelines.actualizar":"Actualizar pipeline","pipelines.eliminar":"Eliminar pipeline","pipelines.crear-etapa":"Crear etapa","pipelines.actualizar-etapa":"Actualizar etapa","pipelines.eliminar-etapa":"Eliminar etapa",
   "auth.login":"Login","auth.logout":"Logout",
 };
 
