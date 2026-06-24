@@ -38,6 +38,11 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
     "gatillos.toggle","gatillos.actualizar","gatillos.crear","gatillos.sugerir",
     "nurturing.toggle-secuencia","nurturing.disparar-ciclo",
     "pipelines.crear","pipelines.actualizar","pipelines.eliminar","pipelines.crear-etapa","pipelines.actualizar-etapa","pipelines.eliminar-etapa",
+    "servicios.crear","servicios.actualizar-general","servicios.actualizar-precios","servicios.eliminar",
+    "servicios.regenerar-embeddings","servicios.regenerar-embedding",
+    "servicios.crear-pago","servicios.eliminar-pago","servicios.toggle-pago",
+    "servicios.crear-relacion","servicios.eliminar-relacion",
+    "servicios.toggle-imagen","servicios.eliminar-imagen",
   ],
   auth: ["auth.login","auth.logout"],
 };
@@ -76,6 +81,11 @@ const TIPO_LABEL: Record<string, string> = {
   "gatillos.toggle":"Toggle gatillo","gatillos.actualizar":"Actualizar gatillo","gatillos.crear":"Crear gatillo","gatillos.sugerir":"Sugerir gatillos",
   "nurturing.toggle-secuencia":"Toggle secuencia","nurturing.disparar-ciclo":"Disparar ciclo",
   "pipelines.crear":"Crear pipeline","pipelines.actualizar":"Actualizar pipeline","pipelines.eliminar":"Eliminar pipeline","pipelines.crear-etapa":"Crear etapa","pipelines.actualizar-etapa":"Actualizar etapa","pipelines.eliminar-etapa":"Eliminar etapa",
+  "servicios.crear":"Crear servicio","servicios.actualizar-general":"Actualizar servicio","servicios.actualizar-precios":"Actualizar precios","servicios.eliminar":"Eliminar servicio",
+  "servicios.regenerar-embeddings":"Regenerar embeddings","servicios.regenerar-embedding":"Regenerar embedding",
+  "servicios.crear-pago":"Crear link pago","servicios.eliminar-pago":"Eliminar link pago","servicios.toggle-pago":"Toggle link pago",
+  "servicios.crear-relacion":"Crear relación","servicios.eliminar-relacion":"Eliminar relación",
+  "servicios.toggle-imagen":"Toggle imagen","servicios.eliminar-imagen":"Eliminar imagen",
   "auth.login":"Login","auth.logout":"Logout",
 };
 

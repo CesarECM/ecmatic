@@ -7,6 +7,7 @@ import { crearRelacion, eliminarRelacion } from "@/services/servicio-relaciones"
 import { toggleImagenActiva, eliminarImagenServicio } from "@/services/imagen-servicio";
 import type { TipoRelacion } from "@/services/servicio-relaciones";
 import type { ModalidadServicio } from "@/services/servicios";
+import { logSistema } from "@/services/log-sistema";
 
 // ── Servicio CRUD ────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ export async function crearServicioAction(formData: FormData) {
   const contenido = (formData.get("contenido") as string)?.trim();
   if (!titulo || !contenido) throw new Error("Título y descripción son requeridos");
   await crearServicio(titulo, contenido);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.crear", fase: "ok", resultado: titulo });
   revalidatePath("/admin/servicios");
 }
 
@@ -59,6 +61,7 @@ export async function actualizarDatosGeneralesAction(formData: FormData) {
     meta_descripcion:            (formData.get("meta_descripcion") as string)?.trim() || null,
   });
 
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.actualizar-general", fase: "ok", metadata: { servicio_id: id } });
   revalidatePath(`/admin/servicios/${id}`);
   revalidatePath("/admin/servicios");
 }
@@ -76,16 +79,19 @@ export async function actualizarPreciosAction(formData: FormData) {
     precio_apartado_centavos:  apartado ? Math.round(parseFloat(apartado) * 100) : null,
   });
 
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.actualizar-precios", fase: "ok", metadata: { servicio_id: id } });
   revalidatePath(`/admin/servicios/${id}`);
   revalidatePath("/admin/servicios");
 }
 
 export async function eliminarServicioAction(id: string) {
   await eliminarServicio(id);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.eliminar", fase: "ok", metadata: { servicio_id: id } });
   revalidatePath("/admin/servicios");
 }
 
 export async function regenerarTodosEmbeddingsAction(): Promise<number> {
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.regenerar-embeddings", fase: "inicio" });
   const { generarEmbedding } = await import("@/lib/ai/client");
   const { createServiceClient } = await import("@/lib/supabase/service");
 
@@ -105,6 +111,7 @@ export async function regenerarTodosEmbeddingsAction(): Promise<number> {
     actualizados++;
   }
 
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.regenerar-embeddings", fase: "ok", resultado: `${actualizados} servicios actualizados`, metadata: { actualizados } });
   revalidatePath("/admin/servicios");
   return actualizados;
 }
@@ -121,6 +128,7 @@ export async function regenerarEmbeddingAction(id: string) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (createServiceClient() as any).from("servicios").update({ embedding }).eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.regenerar-embedding", fase: "ok", metadata: { servicio_id: id } });
   revalidatePath(`/admin/servicios/${id}`);
 }
 
@@ -133,16 +141,19 @@ export async function crearPagoAction(formData: FormData) {
   const descripcion = (formData.get("descripcion") as string)?.trim() || null;
   if (!servicioId || !tipo || !url) throw new Error("Faltan campos");
   await crearServicioPago({ servicio_id: servicioId, tipo, url, descripcion });
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.crear-pago", fase: "ok", metadata: { servicio_id: servicioId, tipo } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
 
 export async function eliminarPagoAction(pagoId: string, servicioId: string) {
   await eliminarServicioPago(pagoId);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.eliminar-pago", fase: "ok", metadata: { pago_id: pagoId, servicio_id: servicioId } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
 
 export async function togglePagoActivoAction(pagoId: string, activo: boolean, servicioId: string) {
   await actualizarServicioPago(pagoId, { activo });
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.toggle-pago", fase: "ok", metadata: { pago_id: pagoId, servicio_id: servicioId, activo } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
 
@@ -155,11 +166,13 @@ export async function crearRelacionAction(formData: FormData) {
   const descripcion = (formData.get("descripcion") as string)?.trim() || undefined;
   if (!origenId || !destinoId || !tipo) throw new Error("Faltan campos");
   await crearRelacion({ origenId, destinoId, tipo, descripcion });
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.crear-relacion", fase: "ok", metadata: { origen_id: origenId, destino_id: destinoId, tipo } });
   revalidatePath(`/admin/servicios/${origenId}`);
 }
 
 export async function eliminarRelacionAction(relacionId: string, servicioId: string) {
   await eliminarRelacion(relacionId);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.eliminar-relacion", fase: "ok", metadata: { relacion_id: relacionId, servicio_id: servicioId } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
 
@@ -167,10 +180,12 @@ export async function eliminarRelacionAction(relacionId: string, servicioId: str
 
 export async function toggleImagenActivaAction(imagenId: string, activa: boolean, servicioId: string) {
   await toggleImagenActiva(imagenId, activa);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.toggle-imagen", fase: "ok", metadata: { imagen_id: imagenId, servicio_id: servicioId, activa } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
 
 export async function eliminarImagenAction(imagenId: string, storagePath: string, servicioId: string) {
   await eliminarImagenServicio(imagenId, storagePath);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.eliminar-imagen", fase: "ok", metadata: { imagen_id: imagenId, servicio_id: servicioId } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
