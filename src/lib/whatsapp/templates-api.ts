@@ -83,17 +83,27 @@ export async function enviarTemplateMensaje(params: {
   to: string;
   templateNombre: string;
   idioma: string;
+  variables?: string[];
   phoneId?: string;
 }): Promise<void> {
   const phoneId = params.phoneId ?? process.env.WHATSAPP_PHONE_NUMBER_ID!;
+  const templatePayload: Record<string, unknown> = {
+    name: params.templateNombre.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+    language: { code: params.idioma },
+  };
+  if (params.variables?.length) {
+    templatePayload.components = [
+      {
+        type: "body",
+        parameters: params.variables.map((v) => ({ type: "text", text: v })),
+      },
+    ];
+  }
   await metaRequest("POST", `/${phoneId}/messages`, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to: params.to,
     type: "template",
-    template: {
-      name: params.templateNombre.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
-      language: { code: params.idioma },
-    },
+    template: templatePayload,
   });
 }

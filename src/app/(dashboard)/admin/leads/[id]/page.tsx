@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerEtapas, obtenerHistorialPipeline } from "@/services/pipeline";
 import { obtenerPipelinesActivos } from "@/services/pipeline-multi";
 import { listarEmailsInterceptados } from "@/services/bandeja-email";
+import { obtenerModo } from "@/services/sistema";
+import { listarTemplates } from "@/services/wa-templates";
 import { ChatWhatsAppLead } from "@/components/leads/chat-whatsapp-lead";
 import { LeadInfoPanel } from "@/components/leads/lead-info-panel";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
@@ -22,6 +24,7 @@ export default async function LeadPerfilPage({
 }) {
   const { id } = await params;
   const supabase = createServiceClient();
+  const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const [
     { data: lead },
@@ -32,6 +35,9 @@ export default async function LeadPerfilPage({
     { data: vendedores },
     { data: senales },
     emailsInterceptados,
+    modoSistema,
+    todosTemplates,
+    { data: msgReciente24h },
   ] = await Promise.all([
     supabase.from("leads").select("*").eq("id", id).single(),
     obtenerHistorialPipeline(id),
@@ -46,14 +52,24 @@ export default async function LeadPerfilPage({
       .eq("activa", true)
       .order("confianza", { ascending: false }),
     listarEmailsInterceptados({ leadId: id, limite: 50 }).catch(() => []),
+    obtenerModo().catch(() => "automatico" as const),
+    listarTemplates().catch(() => []),
+    (supabase as any)
+      .from("mensajes")
+      .select("id")
+      .eq("lead_id", id)
+      .eq("direccion", "entrante")
+      .gte("created_at", hace24h)
+      .limit(1),
   ]);
 
   if (!lead) notFound();
 
-  // Etapas para el selector de etapa primaria (legacy tripwire/premium)
+  const dentro24h = (msgReciente24h ?? []).length > 0;
+  const templatesAprobados = todosTemplates.filter((t: { estado_meta: string }) => t.estado_meta === "APPROVED");
+
   const etapasPrimarias = lead.pipeline_ruta === "premium" ? etapasPremium : etapasTripwire;
 
-  // Cargar etapas de cada ruta de pipeline activo
   const rutasUnicas = [...new Set(pipelinesActivos.map((p) => p.ruta))];
   const etapasResultados = await Promise.all(
     rutasUnicas.map((ruta) =>
@@ -70,13 +86,12 @@ export default async function LeadPerfilPage({
     etapasPorRuta[ruta] = etapasResultados[i].data ?? [];
   });
 
-  // Últimos 20 mensajes para carga inicial del chat (SSR)
   const { data: mensajesDesc } = await (supabase as any)
     .from("mensajes")
     .select("id, canal, direccion, contenido, intencion_clasificada, interceptado, created_at")
     .eq("lead_id", id)
     .order("created_at", { ascending: false })
-    .limit(21); // 21 para detectar si hay más sin una query extra
+    .limit(21);
 
   const hayMasIniciales = (mensajesDesc ?? []).length === 21;
   const mensajesIniciales = ((mensajesDesc ?? []) as unknown[])
@@ -128,6 +143,10 @@ export default async function LeadPerfilPage({
             tieneTelefono={!!lead.telefono}
             mensajesIniciales={mensajesIniciales}
             hayMasIniciales={hayMasIniciales}
+            dentro24h={dentro24h}
+            modoSistema={modoSistema}
+            leadNombre={lead.nombre ?? null}
+            templatesAprobados={templatesAprobados}
           />
         </div>
 
