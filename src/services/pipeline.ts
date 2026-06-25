@@ -243,12 +243,14 @@ export async function listarLeads(filtros: FiltrosLeads = {}) {
 export async function asignarVendedor(leadId: string, vendedorId: string | null) {
   const supabase = createServiceClient();
 
-  const { error } = await supabase
+  const { error, data } = await supabase
     .from("leads")
     .update({ vendedor_id: vendedorId })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .select("id");
 
-  if (error) throw new Error(`[pipeline] Error asignando vendedor: ${error.message}`);
+  if (error) throw new Error(`[pipeline] Error asignando vendedor: ${error.message} (code: ${error.code})`);
+  if (!data?.length) throw new Error(`[pipeline] Lead ${leadId} no encontrado o sin filas actualizadas`);
 }
 
 // S3.1 — Obtiene el historial de movimientos de un lead

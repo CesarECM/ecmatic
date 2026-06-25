@@ -10,6 +10,7 @@ import { ChatWhatsAppLead } from "@/components/leads/chat-whatsapp-lead";
 import { LeadInfoPanel } from "@/components/leads/lead-info-panel";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 import { Badge } from "@/components/ui/badge";
+import { agendarLlamadaAdminAction } from "./actions";
 
 export const revalidate = 0;
 
@@ -132,6 +133,26 @@ export default async function LeadPerfilPage({
             )}
           </div>
         </div>
+        {/* Agendar llamada manual para el vendedor asignado */}
+        <form action={agendarLlamadaAdminAction} className="flex items-center gap-1 shrink-0">
+          <input type="hidden" name="leadId" value={id} />
+          <select
+            name="objetivo"
+            className="text-xs border rounded px-1.5 py-1 bg-background h-8"
+          >
+            <option value="avance">Avance</option>
+            <option value="cierre">Cierre</option>
+          </select>
+          <button
+            type="submit"
+            disabled={!lead.vendedor_id}
+            title={lead.vendedor_id ? "Crear llamada pendiente para el vendedor" : "Asigna un vendedor primero"}
+            className="text-xs bg-orange-500 text-white px-2.5 py-1 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed h-8 whitespace-nowrap"
+          >
+            📞 Agendar llamada
+          </button>
+        </form>
+
         <AuditorIABtn
           tipo="lead"
           id={lead.id}

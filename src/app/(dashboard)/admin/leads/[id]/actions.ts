@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { agendarLlamadaAdmin, type ObjetivoLlamada } from "@/services/llamadas";
 import { moverLead, asignarVendedor } from "@/services/pipeline";
 import { moverLeadEnPipeline } from "@/services/pipeline-multi";
 import { pausarNurturing, reanudarNurturing } from "@/services/nurturing";
@@ -22,11 +23,34 @@ export async function moverLeadDesdePerfilAction(formData: FormData) {
 }
 
 export async function asignarVendedorAction(formData: FormData) {
-  const leadId = formData.get("leadId") as string;
+  const leadId    = formData.get("leadId")    as string;
   const vendedorId = formData.get("vendedorId") as string;
-  if (!leadId) return;
-  await asignarVendedor(leadId, vendedorId || null);
-  void logSistema({ categoria: "ui", tipoAccion: "leads.asignar-vendedor", fase: "ok", leadId, metadata: { vendedor_id: vendedorId || null } });
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "leads.asignar-vendedor", fase: "inicio",
+    leadId: leadId ?? undefined,
+    resultado: `leadId="${leadId ?? "vacío"}", vendedorId="${vendedorId ?? "vacío"}"`,
+  });
+
+  if (!leadId) {
+    void logSistema({ categoria: "ui", tipoAccion: "leads.asignar-vendedor", fase: "warn", resultado: "leadId vacío — acción abortada" });
+    return;
+  }
+
+  try {
+    await asignarVendedor(leadId, vendedorId || null);
+    void logSistema({
+      categoria: "ui", tipoAccion: "leads.asignar-vendedor", fase: "ok",
+      leadId, metadata: { vendedor_id: vendedorId || null },
+    });
+  } catch (err) {
+    void logSistema({
+      categoria: "ui", tipoAccion: "leads.asignar-vendedor", fase: "error",
+      leadId, resultado: String(err),
+    });
+    throw err;
+  }
+
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/leads");
 }
@@ -145,6 +169,16 @@ export async function moverLeadEnPipelineAction(formData: FormData) {
     leadId,
     resultado: `${ruta}:${nuevaEtapa}`,
   });
+  revalidatePath(`/admin/leads/${leadId}`);
+}
+
+// Admin — Agenda una llamada pendiente para el vendedor asignado al lead
+export async function agendarLlamadaAdminAction(formData: FormData) {
+  const leadId = formData.get("leadId") as string;
+  const objetivo = (formData.get("objetivo") as ObjetivoLlamada) ?? "avance";
+  if (!leadId) return;
+  await agendarLlamadaAdmin({ leadId, objetivo });
+  void logSistema({ categoria: "ui", tipoAccion: "leads.agendar-llamada", fase: "ok", leadId, metadata: { objetivo } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 

@@ -1,15 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { listarLlamadasVendedor, metricasLlamadasVendedor } from "@/services/llamadas";
-import { registrarLlamadaAction } from "./actions";
+import {
+  listarLlamadasPendientesVendedor,
+  listarLlamadasVendedor,
+  metricasLlamadasVendedor,
+} from "@/services/llamadas";
+import { registrarLlamadaAction, completarLlamadaProtocoloAction } from "./actions";
 
 export const revalidate = 0;
 
 const BADGE_RESULTADO: Record<string, string> = {
-  exitoso:      "bg-green-100 text-green-800",
-  "no-contesta":"bg-yellow-100 text-yellow-800",
-  seguimiento:  "bg-blue-100 text-blue-800",
-  perdido:      "bg-red-100 text-red-800",
+  exitoso:       "bg-green-100 text-green-800",
+  "no-contesta": "bg-yellow-100 text-yellow-800",
+  seguimiento:   "bg-blue-100 text-blue-800",
+  perdido:       "bg-red-100 text-red-800",
 };
 
 export default async function LlamadasPage() {
@@ -31,16 +35,145 @@ export default async function LlamadasPage() {
     .eq("activo", true)
     .order("nombre");
 
-  const [llamadas, metricas] = await Promise.all([
+  const [pendientes, llamadas, metricas] = await Promise.all([
+    listarLlamadasPendientesVendedor(vendedor.id),
     listarLlamadasVendedor(vendedor.id),
     metricasLlamadasVendedor(vendedor.id),
   ]);
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
+    <div className="p-6 space-y-8 max-w-3xl">
       <h1 className="text-xl font-semibold">Registro de Llamadas</h1>
 
-      {/* Métricas */}
+      {/* ── Llamadas pendientes de protocolo ── */}
+      {pendientes.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="font-medium text-sm">Llamadas pendientes de protocolo</h2>
+            <span className="bg-orange-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+              {pendientes.length}
+            </span>
+          </div>
+
+          {pendientes.map((ll) => {
+            const lead = ll.leads as { nombre: string | null; telefono: string | null } | undefined;
+            const toque = ll.protocolo_toques;
+            const proto = ll.protocolos_seguimiento;
+
+            return (
+              <div key={ll.id} className="border border-orange-300 bg-orange-50 rounded-lg p-4 space-y-3">
+                {/* Cabecera: lead + protocolo */}
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="font-semibold text-sm">
+                      {lead?.nombre ?? lead?.telefono ?? "Lead sin nombre"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {proto?.nombre ?? "Protocolo"} · {toque?.nombre ?? `Toque #${ll.toque_orden}`}
+                    </p>
+                  </div>
+                  {lead?.telefono && (
+                    <a
+                      href={`tel:${lead.telefono}`}
+                      className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded font-medium hover:bg-orange-600 whitespace-nowrap"
+                    >
+                      Llamar: {lead.telefono}
+                    </a>
+                  )}
+                </div>
+
+                {/* Objetivo del toque */}
+                {toque?.objetivo && (
+                  <p className="text-sm">
+                    <span className="font-medium text-muted-foreground">Objetivo: </span>
+                    {toque.objetivo}
+                  </p>
+                )}
+
+                {/* Guión si contesta */}
+                {toque?.guion_principal && (
+                  <div className="bg-white border rounded p-3 space-y-1">
+                    <p className="text-xs font-medium text-green-700">Si contesta:</p>
+                    <p className="text-sm whitespace-pre-line">{toque.guion_principal}</p>
+                  </div>
+                )}
+
+                {/* Guión si no contesta */}
+                {toque?.guion_alternativo && (
+                  <div className="bg-white border rounded p-3 space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Si no contesta:</p>
+                    <p className="text-sm whitespace-pre-line">{toque.guion_alternativo}</p>
+                  </div>
+                )}
+
+                {/* Nota interna */}
+                {toque?.nota_interna && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                    <span className="font-medium">Nota interna: </span>
+                    {toque.nota_interna}
+                  </p>
+                )}
+
+                {/* Formulario para registrar resultado */}
+                <form
+                  action={completarLlamadaProtocoloAction}
+                  className="border-t border-orange-200 pt-3 space-y-2"
+                >
+                  <input type="hidden" name="llamada_id" value={ll.id} />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Resultado *</label>
+                      <select
+                        name="resultado"
+                        required
+                        className="w-full border rounded p-2 text-sm bg-white"
+                      >
+                        <option value="">Selecciona…</option>
+                        <option value="exitoso">Exitoso — avanzó el lead</option>
+                        <option value="seguimiento">Requiere seguimiento</option>
+                        <option value="no-contesta">No contestó</option>
+                        <option value="perdido">Lead perdido</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Duración (min)</label>
+                      <input
+                        name="duracion_min"
+                        type="number"
+                        min={1}
+                        max={180}
+                        placeholder="ej. 10"
+                        className="w-full border rounded p-2 text-sm bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Notas</label>
+                    <textarea
+                      name="notas"
+                      rows={2}
+                      placeholder="Compromisos adquiridos, objeciones, próximos pasos…"
+                      className="w-full border rounded p-2 text-sm bg-white resize-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full sm:w-auto px-4 py-2 bg-orange-500 text-white rounded text-sm font-medium hover:bg-orange-600"
+                  >
+                    Guardar y continuar protocolo
+                  </button>
+                </form>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* ── Métricas ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricaCard label="Total" valor={metricas.total} />
         <MetricaCard label="Exitosas" valor={metricas.exitosas} />
@@ -48,9 +181,9 @@ export default async function LlamadasPage() {
         <MetricaCard label="Duración prom." valor={`${metricas.duracionPromedioMin} min`} />
       </div>
 
-      {/* Formulario de registro */}
+      {/* ── Registrar llamada manual ── */}
       <form action={registrarLlamadaAction} className="border rounded-lg p-4 space-y-4 bg-card">
-        <h2 className="font-medium text-sm">Registrar nueva llamada</h2>
+        <h2 className="font-medium text-sm">Registrar llamada manual</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
@@ -114,39 +247,41 @@ export default async function LlamadasPage() {
         </button>
       </form>
 
-      {/* Historial */}
+      {/* ── Historial ── */}
       <div className="space-y-2">
         <h2 className="font-medium text-sm">Historial reciente</h2>
         {llamadas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin llamadas registradas aún.</p>
+          <p className="text-sm text-muted-foreground">Sin llamadas completadas aún.</p>
         ) : (
           <ul className="space-y-2">
-            {llamadas.map((ll) => (
-              <li key={ll.id} className="border rounded p-3 text-sm space-y-1 bg-card">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="font-medium">
-                    {(ll.leads as { nombre: string | null; telefono: string | null } | undefined)?.nombre
-                      ?? (ll.leads as { nombre: string | null; telefono: string | null } | undefined)?.telefono
-                      ?? "—"}
-                  </span>
-                  <div className="flex gap-2">
-                    <span className="text-xs px-2 py-0.5 rounded bg-muted">
-                      {ll.objetivo === "cierre" ? "Cierre" : "Avance"}
+            {llamadas.map((ll) => {
+              const lead = ll.leads as { nombre: string | null; telefono: string | null } | undefined;
+              return (
+                <li key={ll.id} className="border rounded p-3 text-sm space-y-1 bg-card">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-medium">
+                      {lead?.nombre ?? lead?.telefono ?? "—"}
                     </span>
-                    {ll.resultado && (
-                      <span className={`text-xs px-2 py-0.5 rounded ${BADGE_RESULTADO[ll.resultado] ?? "bg-gray-100"}`}>
-                        {ll.resultado}
+                    <div className="flex gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded bg-muted">
+                        {ll.objetivo === "cierre" ? "Cierre" : "Avance"}
                       </span>
-                    )}
+                      {ll.resultado && (
+                        <span className={`text-xs px-2 py-0.5 rounded ${BADGE_RESULTADO[ll.resultado] ?? "bg-gray-100"}`}>
+                          {ll.resultado}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {ll.notas && <p className="text-muted-foreground">{ll.notas}</p>}
-                <p className="text-xs text-muted-foreground">
-                  {new Date(ll.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
-                  {ll.duracion_min ? ` · ${ll.duracion_min} min` : ""}
-                </p>
-              </li>
-            ))}
+                  {ll.notas && <p className="text-muted-foreground">{ll.notas}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(ll.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
+                    {ll.duracion_min ? ` · ${ll.duracion_min} min` : ""}
+                    {ll.toque_orden !== null ? ` · Protocolo toque #${ll.toque_orden}` : ""}
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

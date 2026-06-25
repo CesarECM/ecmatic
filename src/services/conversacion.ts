@@ -255,7 +255,6 @@ export async function procesarConversacion(
 
   if (config.modo_operacion === "depuracion") {
     const msgSaliente = await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente", interceptado: true });
-    void crearNotificacionLlamadaPendiente(lead.id).catch(console.error);
     void logDebugIA("CONVERSACION", "[DEPURACION] Respuesta interceptada — lead real en modo depuración", { lead_id: lead.id, bloques_count: bloques.length }, "debug", traceId);
     dispararHooksPostConversacion({ leadId: lead.id, telefono, mensajes, historial, intencion, mensajeSalienteId: msgSaliente?.id, estadoCagc, traceId });
     return;
@@ -302,30 +301,4 @@ export async function procesarConversacion(
   });
 }
 
-// Crea una entrada pendiente en llamadas_vendedor para que el vendedor contacte al lead manualmente.
-// Solo se usa en modo depuración como aviso de "hay una respuesta IA lista".
-async function crearNotificacionLlamadaPendiente(leadId: string): Promise<void> {
-  const supabase = createServiceClient();
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("vendedor_id")
-    .eq("id", leadId)
-    .single();
-
-  if (!lead?.vendedor_id) return;
-
-  await supabase.from("llamadas_vendedor").insert({
-    lead_id: leadId,
-    vendedor_id: lead.vendedor_id,
-    objetivo: "avance",
-    resultado: null,
-    notas: "[Depuración] Respuesta IA lista — considera llamar al lead para transmitirla",
-  }).throwOnError();
-
-  void logDebugIA(
-    "DEPURACION_LLAMADA_PENDIENTE",
-    "[DEPURACION] Notificación de llamada pendiente creada",
-    { lead_id: leadId, vendedor_id: lead.vendedor_id }
-  );
-}
 

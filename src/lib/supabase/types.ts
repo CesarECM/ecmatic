@@ -1234,18 +1234,29 @@ export interface Database {
           id: string; lead_id: string; vendedor_id: string;
           objetivo: "cierre" | "avance";
           resultado: "exitoso" | "no-contesta" | "seguimiento" | "perdido" | null;
-          notas: string | null; duracion_min: number | null; created_at: string;
+          estado: "pendiente" | "completada";
+          notas: string | null; duracion_min: number | null;
+          toque_id: string | null; lead_protocolo_id: string | null;
+          toque_registro_id: string | null; protocolo_id: string | null;
+          toque_orden: number | null; created_at: string;
         };
         Insert: {
           id?: string; lead_id: string; vendedor_id: string;
           objetivo: "cierre" | "avance";
           resultado?: "exitoso" | "no-contesta" | "seguimiento" | "perdido" | null;
+          estado?: "pendiente" | "completada";
           notas?: string | null; duracion_min?: number | null;
+          toque_id?: string | null; lead_protocolo_id?: string | null;
+          toque_registro_id?: string | null; protocolo_id?: string | null;
+          toque_orden?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["llamadas_vendedor"]["Insert"]>;
         Relationships: [
           { foreignKeyName: "llamadas_vendedor_lead_id_fkey"; columns: ["lead_id"]; referencedRelation: "leads"; referencedColumns: ["id"] },
           { foreignKeyName: "llamadas_vendedor_vendedor_id_fkey"; columns: ["vendedor_id"]; referencedRelation: "vendedores"; referencedColumns: ["id"] },
+          { foreignKeyName: "llamadas_vendedor_toque_id_fkey"; columns: ["toque_id"]; referencedRelation: "protocolo_toques"; referencedColumns: ["id"] },
+          { foreignKeyName: "llamadas_vendedor_lead_protocolo_id_fkey"; columns: ["lead_protocolo_id"]; referencedRelation: "lead_protocolo"; referencedColumns: ["id"] },
+          { foreignKeyName: "llamadas_vendedor_protocolo_id_fkey"; columns: ["protocolo_id"]; referencedRelation: "protocolos_seguimiento"; referencedColumns: ["id"] },
         ];
       };
     };  // end Tables
