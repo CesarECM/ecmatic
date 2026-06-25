@@ -38,7 +38,8 @@ export async function ejecutarProtocolosPendientes(
 
   void logSistema({
     categoria: "cron", tipoAccion: "cron.protocolos-ejecutar", fase: "inicio", traceId,
-    resultado: `${pendientes.length} toques pendientes | modo: ${modo}`,
+    resultado: `${pendientes.length} toques pendientes | modo: ${modo}${enviarDirecto ? " | forzarEnvio:true" : ""}`,
+    metadata: { soloLeadId: opts?.soloLeadId ?? null, enviarDirecto },
   });
 
   for (const item of pendientes) {
@@ -46,6 +47,12 @@ export async function ejecutarProtocolosPendientes(
     const ahora = new Date().toISOString();
 
     try {
+      void logSistema({
+        categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "inicio", traceId, leadId: lead.id,
+        resultado: `Toque ${toque.orden} [${toque.canal}] — ${protocolo.nombre}`,
+        metadata: { toque_id: toque.id, toque_orden: toque.orden, canal: toque.canal, protocolo_id: protocolo.id },
+      });
+
       const { data: reg } = await db()
         .from("lead_toque_registro")
         .insert({
@@ -82,7 +89,10 @@ export async function ejecutarProtocolosPendientes(
         resultado.tareas++;
 
       } else if (toque.canal === "whatsapp") {
-        if (!lead.telefono) { resultado.omitidos++; continue; }
+        if (!lead.telefono) {
+          void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "warn", traceId, leadId: lead.id, resultado: "Lead sin teléfono — omitido" });
+          resultado.omitidos++; continue;
+        }
 
         const mensaje = sustituirVariables(toque.guion_principal ?? "", {
           nombre: lead.nombre,
@@ -106,6 +116,7 @@ export async function ejecutarProtocolosPendientes(
               .update({ resultado: "en_aprobacion", ejecutado_at: ahora, mensaje_cola_id: cola?.id ?? null })
               .eq("id", registroId);
           }
+          void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "debug", traceId, leadId: lead.id, resultado: `WA → cola_aprobacion (modo: ${modo})`, metadata: { cola_id: cola?.id ?? null } });
           resultado.enAprobacion++;
         } else {
           await enviarRespuestaWhatsApp(lead.telefono, [mensaje]);
@@ -114,6 +125,7 @@ export async function ejecutarProtocolosPendientes(
               .update({ resultado: "enviado", ejecutado_at: ahora })
               .eq("id", registroId);
           }
+          void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "ok", traceId, leadId: lead.id, resultado: `WA enviado directo | forzarEnvio:${enviarDirecto}` });
           resultado.ejecutados++;
         }
       } else {
@@ -127,7 +139,8 @@ export async function ejecutarProtocolosPendientes(
 
       await avanzarToque(lp.id, lp.protocolo_id, lp.toque_actual);
     } catch (err) {
-      console.error(`[ejecutor-protocolos] error lead ${lead.id}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "error", traceId, leadId: lead.id, resultado: msg });
       resultado.errores++;
     }
   }

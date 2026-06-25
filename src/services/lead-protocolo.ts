@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerProtocolosPorEtapa, obtenerProtocoloCompleto } from "./protocolos-seguimiento";
+import { logSistema } from "./log-sistema";
 import type { Toque } from "./protocolos-seguimiento";
 
 export type LeadProtocolo = {
@@ -163,14 +164,24 @@ export async function registrarResultadoToque(
 export async function enrollarLeadEnProtocolosActivos(leadId: string): Promise<number> {
   const { data, error } = await db()
     .from("protocolos_seguimiento")
-    .select("id")
+    .select("id, nombre")
     .eq("activo", true);
 
-  if (error) throw new Error(`[lead-protocolo] ${error.message}`);
+  if (error) {
+    void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.enroll-activos", fase: "error", leadId, resultado: error.message });
+    throw new Error(`[lead-protocolo] ${error.message}`);
+  }
+
+  void logSistema({
+    categoria: "servicio", tipoAccion: "lead-protocolo.enroll-activos", fase: "inicio", leadId,
+    resultado: `${data?.length ?? 0} protocolo(s) activo(s) encontrado(s)`,
+    metadata: { protocolos: (data ?? []).map((p: { id: string; nombre: string }) => ({ id: p.id, nombre: p.nombre })) },
+  });
+
   if (!data?.length) return 0;
 
   let enrollados = 0;
-  for (const proto of data) {
+  for (const proto of data as { id: string; nombre: string }[]) {
     const { error: upsertError } = await db().from("lead_protocolo").upsert(
       {
         lead_id: leadId,
@@ -181,8 +192,12 @@ export async function enrollarLeadEnProtocolosActivos(leadId: string): Promise<n
       },
       { onConflict: "lead_id,protocolo_id", ignoreDuplicates: false }
     );
-    if (!upsertError) enrollados++;
-    else console.error(`[lead-protocolo] enroll no-show error: ${upsertError.message}`);
+    if (!upsertError) {
+      enrollados++;
+      void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.enroll-activos", fase: "ok", leadId, resultado: `Enrollado en "${proto.nombre}"`, metadata: { protocolo_id: proto.id } });
+    } else {
+      void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.enroll-activos", fase: "error", leadId, resultado: upsertError.message, metadata: { protocolo_id: proto.id } });
+    }
   }
   return enrollados;
 }
