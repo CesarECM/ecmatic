@@ -83,9 +83,15 @@ function textoEvento(evento: EventoLog): string {
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-interface Props { evento: EventoLog; abierto: boolean; onToggle: () => void }
+interface Props {
+  evento: EventoLog;
+  abierto: boolean;
+  onToggle: () => void;
+  checked?: boolean;
+  onCheck?: (checked: boolean) => void;
+}
 
-export function LogGrupo({ evento, abierto, onToggle }: Props) {
+export function LogGrupo({ evento, abierto, onToggle, checked, onCheck }: Props) {
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
 
   const copiar = useCallback((id: string, texto: string) => {
@@ -122,6 +128,16 @@ export function LogGrupo({ evento, abierto, onToggle }: Props) {
         onClick={onToggle}
         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
       >
+        {/* Checkbox de selección */}
+        {onCheck !== undefined && (
+          <input
+            type="checkbox"
+            checked={checked ?? false}
+            onChange={e => { e.stopPropagation(); onCheck(e.target.checked); }}
+            onClick={e => e.stopPropagation()}
+            className="shrink-0 h-3.5 w-3.5 cursor-pointer accent-violet-600"
+          />
+        )}
         {/* Categoría */}
         <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${CAT_COLOR[evento.categoria] ?? "bg-gray-100 text-gray-700"}`}>
           {CAT_LABEL[evento.categoria] ?? evento.categoria}
