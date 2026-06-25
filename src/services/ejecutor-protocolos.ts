@@ -121,7 +121,7 @@ export async function ejecutarProtocolosPendientes(
           resultado.enAprobacion++;
         } else {
           await enviarRespuestaWhatsApp(lead.telefono, [mensaje], { forzarEnvio: enviarDirecto });
-          void guardarMensaje({ leadId: lead.id, contenido: mensaje, direccion: "saliente" });
+          await guardarMensaje({ leadId: lead.id, contenido: mensaje, direccion: "saliente" });
           if (registroId) {
             await db().from("lead_toque_registro")
               .update({ resultado: "enviado", ejecutado_at: ahora })
