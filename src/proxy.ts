@@ -15,12 +15,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Si Supabase no está configurado, redirige a login en lugar de 500
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
+  // updateSession refresca el token y escribe las nuevas cookies en `response`.
+  // Cualquier redirect que creemos después debe heredar esas cookies —
+  // de lo contrario el token rotado se pierde y la sesión queda rota.
   const response = await updateSession(request);
+
+  const withRefreshedCookies = <T extends NextResponse>(redirect: T): T => {
+    response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+    return redirect;
+  };
 
   const supabase = createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
@@ -29,18 +36,16 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user && pathname !== "/login") {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
+    return withRefreshedCookies(NextResponse.redirect(loginUrl));
   }
 
   if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return withRefreshedCookies(NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 
   return response;

@@ -1,5 +1,3 @@
-"use server";
-
 // Resultado tipado estándar para server actions.
 // Uso: const result = await miAction(args)
 //      if (result.error) toast.error(result.error)

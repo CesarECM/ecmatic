@@ -30,7 +30,7 @@ export function FacturacionCard({ leadId, rfc, cfdiUuid, cpFiscal }: Facturacion
             const fd = new FormData(e.currentTarget);
             startTransition(async () => {
               const res = await emitirFacturaAction(fd);
-              setMsg(res.error ? `Error: ${res.error}` : `Factura emitida: ${res.data.uuid}`);
+              setMsg(res.error ? `Error: ${res.error}` : `Factura emitida: ${res.data?.uuid}`);
             });
           }}
           className="grid grid-cols-1 sm:grid-cols-2 gap-3"
