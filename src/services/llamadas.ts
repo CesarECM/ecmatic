@@ -292,6 +292,58 @@ export async function listarTodasLlamadas(limite = 100): Promise<Llamada[]> {
   return (data ?? []) as Llamada[];
 }
 
+// Admin — Lista todas las llamadas (pendientes y completadas) de un lead
+export async function listarLlamadasLead(leadId: string): Promise<LlamadaPendienteProtocolo[]> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("llamadas_vendedor")
+    .select(`
+      *,
+      leads(nombre, telefono),
+      protocolo_toques!toque_id(nombre, objetivo, guion_principal, guion_alternativo, nota_interna),
+      protocolos_seguimiento!protocolo_id(nombre)
+    `)
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "llamadas.listar-lead", fase: "error",
+      leadId, resultado: error.message,
+    });
+    throw new Error(`[llamadas] listarLlamadasLead: ${error.message}`);
+  }
+
+  void logSistema({
+    categoria: "servicio", tipoAccion: "llamadas.listar-lead", fase: "ok",
+    leadId, resultado: `${(data ?? []).length} llamada(s)`,
+  });
+
+  return (data ?? []) as LlamadaPendienteProtocolo[];
+}
+
+// Admin — Elimina una llamada (pendiente o completada). Solo accesible desde el panel admin.
+export async function eliminarLlamada(llamadaId: string, leadId: string): Promise<void> {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("llamadas_vendedor")
+    .delete()
+    .eq("id", llamadaId);
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "llamadas.eliminar", fase: "error",
+      leadId, resultado: error.message, metadata: { llamada_id: llamadaId },
+    });
+    throw new Error(`[llamadas] eliminarLlamada: ${error.message}`);
+  }
+
+  void logSistema({
+    categoria: "servicio", tipoAccion: "llamadas.eliminar", fase: "ok",
+    leadId, resultado: `Llamada ${llamadaId} eliminada por admin`,
+  });
+}
+
 // Admin — Crea una llamada pendiente manual para el vendedor asignado al lead.
 // No está vinculada a ningún protocolo; el protocolo no avanza al completarla.
 export async function agendarLlamadaAdmin(params: {

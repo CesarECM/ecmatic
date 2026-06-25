@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { agendarLlamadaAdmin, type ObjetivoLlamada } from "@/services/llamadas";
+import { agendarLlamadaAdmin, eliminarLlamada, type ObjetivoLlamada } from "@/services/llamadas";
 import { moverLead, asignarVendedor } from "@/services/pipeline";
 import { moverLeadEnPipeline } from "@/services/pipeline-multi";
 import { pausarNurturing, reanudarNurturing } from "@/services/nurturing";
@@ -169,6 +169,16 @@ export async function moverLeadEnPipelineAction(formData: FormData) {
     leadId,
     resultado: `${ruta}:${nuevaEtapa}`,
   });
+  revalidatePath(`/admin/leads/${leadId}`);
+}
+
+// Admin — Elimina una llamada (pendiente o completada) de un lead
+export async function eliminarLlamadaAdminAction(formData: FormData) {
+  const llamadaId = formData.get("llamada_id") as string;
+  const leadId    = formData.get("leadId")    as string;
+  if (!llamadaId || !leadId) return;
+  await eliminarLlamada(llamadaId, leadId);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.eliminar-llamada", fase: "ok", leadId, metadata: { llamada_id: llamadaId } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 

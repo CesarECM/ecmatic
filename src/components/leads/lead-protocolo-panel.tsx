@@ -10,6 +10,7 @@ import {
   registrarResultadoToqueAction,
 } from "@/app/(dashboard)/admin/protocolos/actions";
 import type { LeadProtocolo, ToqueRegistro } from "@/services/lead-protocolo";
+import type { LlamadaPendienteProtocolo } from "@/services/llamadas";
 
 const RESULTADO_COLOR: Record<string, string> = {
   pendiente:         "bg-yellow-100 text-yellow-700 border-yellow-300",
@@ -26,13 +27,27 @@ const CANAL_ICON: Record<string, string> = {
   whatsapp: "💬", llamada: "📞", email: "✉️",
 };
 
+const ESTADO_LLAMADA: Record<string, string> = {
+  pendiente:  "bg-orange-100 text-orange-700 border-orange-300",
+  completada: "bg-green-100 text-green-700 border-green-300",
+};
+
+const RESULTADO_LLAMADA: Record<string, string> = {
+  exitoso:       "Exitoso",
+  "no-contesta": "No contestó",
+  seguimiento:   "Seguimiento",
+  perdido:       "Perdido",
+};
+
 interface Props {
   leadId: string;
   leadProtocolo: (LeadProtocolo & { protocolo_nombre: string }) | null;
   historial: ToqueRegistro[];
+  llamadas?: LlamadaPendienteProtocolo[];
+  eliminarLlamadaAction?: (formData: FormData) => Promise<void>;
 }
 
-export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial }: Props) {
+export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial, llamadas = [], eliminarLlamadaAction }: Props) {
   const [registrandoId, setRegistrandoId] = useState<string | null>(null);
   const [notas, setNotas] = useState("");
   const [resultado, setResultado] = useState("contesto");
@@ -115,6 +130,74 @@ export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial }: Pro
                 </Button>
               )}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Llamadas — solo visible si el admin pasó la action de eliminar */}
+      {eliminarLlamadaAction && llamadas.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              Llamadas
+              <span className="text-xs font-normal text-muted-foreground">({llamadas.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {llamadas.map((ll) => {
+              const lead = ll.leads as { nombre: string | null; telefono: string | null } | undefined;
+              const toque = ll.protocolo_toques;
+              const proto = ll.protocolos_seguimiento;
+
+              return (
+                <div key={ll.id} className="rounded-md border p-2.5 text-sm space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">📞 {lead?.nombre ?? lead?.telefono ?? "Lead"}</span>
+                        <Badge className={`text-xs py-0 border ${ESTADO_LLAMADA[ll.estado] ?? "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                          {ll.estado}
+                        </Badge>
+                        {ll.resultado && (
+                          <Badge className="text-xs py-0 border bg-muted text-muted-foreground border-muted">
+                            {RESULTADO_LLAMADA[ll.resultado] ?? ll.resultado}
+                          </Badge>
+                        )}
+                      </div>
+                      {proto && toque && (
+                        <p className="text-xs text-muted-foreground">
+                          {proto.nombre} · {toque.nombre}
+                        </p>
+                      )}
+                      {ll.notas && (
+                        <p className="text-xs italic text-muted-foreground truncate">{ll.notas}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(ll.created_at).toLocaleString("es-MX", {
+                          timeZone: "America/Mexico_City",
+                          day: "numeric", month: "short",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                        {ll.duracion_min ? ` · ${ll.duracion_min} min` : ""}
+                      </p>
+                    </div>
+
+                    {/* Botón eliminar — solo para admin (cuando viene la action) */}
+                    <form action={eliminarLlamadaAction}>
+                      <input type="hidden" name="llamada_id" value={ll.id} />
+                      <input type="hidden" name="leadId" value={leadId} />
+                      <button
+                        type="submit"
+                        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded px-1.5 py-1 transition-colors"
+                        title="Eliminar llamada"
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

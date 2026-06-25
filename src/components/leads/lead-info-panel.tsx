@@ -20,6 +20,7 @@ import {
 import type { EntradaContexto } from "@/lib/supabase/types";
 import type { EmailInterceptado } from "@/services/bandeja-email";
 import type { LeadProtocolo, ToqueRegistro } from "@/services/lead-protocolo";
+import type { LlamadaPendienteProtocolo } from "@/services/llamadas";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
@@ -70,12 +71,15 @@ interface Props {
   emailsInterceptados: EmailInterceptado[];
   leadProtocolo?: (LeadProtocolo & { protocolo_nombre: string }) | null;
   historialToques?: ToqueRegistro[];
+  llamadasLead?: LlamadaPendienteProtocolo[];
+  eliminarLlamadaAction?: (formData: FormData) => Promise<void>;
 }
 
 export function LeadInfoPanel({
   lead, etapas, historial, vendedores, senales,
   pipelines, etapasPorRuta, emailsInterceptados,
   leadProtocolo = null, historialToques = [],
+  llamadasLead = [], eliminarLlamadaAction,
 }: Props) {
   const [tab, setTab] = useState<Tab>("info");
   const rfc = lead.metadata?.rfc as string | undefined;
@@ -334,6 +338,8 @@ export function LeadInfoPanel({
             leadId={lead.id}
             leadProtocolo={leadProtocolo}
             historial={historialToques}
+            llamadas={llamadasLead}
+            eliminarLlamadaAction={eliminarLlamadaAction}
           />
         )}
       </div>

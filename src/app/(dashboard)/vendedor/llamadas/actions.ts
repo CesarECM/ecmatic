@@ -9,6 +9,7 @@ import {
   type ResultadoLlamada,
 } from "@/services/llamadas";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 // Registra una llamada manual (sin protocolo)
 export async function registrarLlamadaAction(formData: FormData) {
@@ -53,5 +54,6 @@ export async function completarLlamadaProtocoloAction(formData: FormData) {
       : undefined,
   });
 
-  revalidatePath("/vendedor/llamadas");
+  // redirect fuerza navegación fresca — la llamada pendiente desaparece inmediatamente
+  redirect("/vendedor/llamadas");
 }
