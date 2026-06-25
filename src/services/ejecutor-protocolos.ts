@@ -25,11 +25,15 @@ function sustituirVariables(
     .replace(/\[LINK\]/gi, vars.link ?? "[link de agendado pendiente]");
 }
 
-export async function ejecutarProtocolosPendientes(): Promise<ResultadoEjecucion> {
+export async function ejecutarProtocolosPendientes(
+  opts?: { soloLeadId?: string; forzarEnvio?: boolean }
+): Promise<ResultadoEjecucion> {
   const traceId = crypto.randomUUID();
   const resultado: ResultadoEjecucion = { ejecutados: 0, enAprobacion: 0, tareas: 0, errores: 0, omitidos: 0 };
 
-  const [pendientes, modo] = await Promise.all([obtenerToquesPendientes(), obtenerModo()]);
+  let [pendientes, modo] = await Promise.all([obtenerToquesPendientes(), obtenerModo()]);
+  if (opts?.soloLeadId) pendientes = pendientes.filter(p => p.lead.id === opts.soloLeadId);
+  const enviarDirecto = opts?.forzarEnvio === true;
   if (!pendientes.length) return resultado;
 
   void logSistema({
@@ -85,7 +89,7 @@ export async function ejecutarProtocolosPendientes(): Promise<ResultadoEjecucion
           link: protocolo.link_agendado,
         });
 
-        if (modo === "depuracion") {
+        if (modo === "depuracion" && !enviarDirecto) {
           const { data: cola } = await db()
             .from("mensajes_cola_aprobacion")
             .insert({

@@ -71,8 +71,8 @@ export async function crearLeadRealAction(formData: FormData): Promise<void> {
       leadId,
       resultado: `${enrollados} protocolo(s) activado(s) por canal no-show`,
     });
-    // Ejecutar toques pendientes de inmediato sin esperar al CRON horario
-    const ejecucion = await ejecutarProtocolosPendientes();
+    // Ejecutar solo los toques de este lead, enviando directo (no-show es operación real)
+    const ejecucion = await ejecutarProtocolosPendientes({ soloLeadId: leadId, forzarEnvio: true });
     void logSistema({
       categoria: "ui",
       tipoAccion: "depuracion.ejecutar-protocolo-noshow",
