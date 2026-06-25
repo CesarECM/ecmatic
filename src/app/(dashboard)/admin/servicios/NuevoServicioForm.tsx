@@ -22,12 +22,12 @@ export function NuevoServicioForm() {
         const fd = new FormData(e.currentTarget);
         const tid = toast.loading("Creando servicio…");
         startTransition(async () => {
-          try {
-            await crearServicioAction(fd);
+          const res = await crearServicioAction(fd);
+          if (res.error) {
+            toast.error(res.error, { id: tid });
+          } else {
             toast.success("Servicio creado — el auditor IA analizará el catálogo", { id: tid });
             setOpen(false);
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Error al crear", { id: tid });
           }
         });
       }}

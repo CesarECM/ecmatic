@@ -8,17 +8,18 @@ import { toggleImagenActiva, eliminarImagenServicio } from "@/services/imagen-se
 import type { TipoRelacion } from "@/services/servicio-relaciones";
 import type { ModalidadServicio } from "@/services/servicios";
 import { logSistema } from "@/services/log-sistema";
+import { safeAction } from "@/lib/safe-action";
 
 // ── Servicio CRUD ────────────────────────────────────────────
 
-export async function crearServicioAction(formData: FormData) {
-  const titulo   = (formData.get("titulo")   as string)?.trim();
+export const crearServicioAction = safeAction(async (formData: FormData) => {
+  const titulo    = (formData.get("titulo")    as string)?.trim();
   const contenido = (formData.get("contenido") as string)?.trim();
   if (!titulo || !contenido) throw new Error("Título y descripción son requeridos");
   await crearServicio(titulo, contenido);
   void logSistema({ categoria: "ui", tipoAccion: "servicios.crear", fase: "ok", resultado: titulo });
   revalidatePath("/admin/servicios");
-}
+});
 
 export async function actualizarDatosGeneralesAction(formData: FormData) {
   const id = formData.get("id") as string;

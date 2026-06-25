@@ -11,6 +11,8 @@ import { marcarPrivacidadAceptada } from "@/services/privacidad";
 import { agregarEntradaManualContexto } from "@/services/contexto";
 import { headers } from "next/headers";
 import { logSistema } from "@/services/log-sistema";
+import { diffObjects } from "@/lib/diff";
+import { safeAction, type ActionResult } from "@/lib/safe-action";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -64,6 +66,7 @@ export async function actualizarDatosB2BAction(formData: FormData) {
   const { data: lead } = await db.from("leads").select("metadata").eq("id", leadId).single();
   const meta = (lead?.metadata as Record<string, unknown>) ?? {};
 
+  const metaAnterior = { ...meta };
   const campos = ["empresa", "cargo", "tamano_empresa", "rfc"] as const;
   for (const campo of campos) {
     const val = (formData.get(campo) as string)?.trim();
@@ -72,20 +75,21 @@ export async function actualizarDatosB2BAction(formData: FormData) {
   }
 
   await db.from("leads").update({ metadata: meta }).eq("id", leadId);
-  void logSistema({ categoria: "ui", tipoAccion: "leads.actualizar-b2b", fase: "ok", leadId });
+  const cambios = diffObjects(metaAnterior, meta);
+  void logSistema({ categoria: "ui", tipoAccion: "leads.actualizar-b2b", fase: "ok", leadId, metadata: { cambios } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
 // S12.6 — Emite factura CFDI 4.0 vía Facturama sandbox
-export async function emitirFacturaAction(
+export const emitirFacturaAction = safeAction(async (
   formData: FormData
-): Promise<{ ok: boolean; uuid?: string; error?: string }> {
+): Promise<{ uuid: string }> => {
   const leadId   = formData.get("leadId") as string;
   const monto    = Number(formData.get("monto"));
   const desc     = (formData.get("descripcion") as string)?.trim();
   const cpFiscal = (formData.get("cp_fiscal") as string)?.trim();
 
-  if (!leadId || !monto || monto <= 0) return { ok: false, error: "Monto inválido" };
+  if (!leadId || !monto || monto <= 0) throw new Error("Monto inválido");
 
   const db = createServiceClient();
   const { data: lead } = await db
@@ -94,11 +98,11 @@ export async function emitirFacturaAction(
     .eq("id", leadId)
     .single();
 
-  const meta = (lead?.metadata as Record<string, unknown>) ?? {};
-  const rfc   = meta.rfc as string | undefined;
+  const meta   = (lead?.metadata as Record<string, unknown>) ?? {};
+  const rfc    = meta.rfc as string | undefined;
   const nombre = (lead?.nombre ?? "PUBLICO EN GENERAL") as string;
 
-  if (!rfc) return { ok: false, error: "El lead no tiene RFC registrado" };
+  if (!rfc) throw new Error("El lead no tiene RFC registrado");
 
   const cfdiUse     = (meta.cfdi_uso as string)      ?? "G03";
   const regimen     = (meta.regimen_fiscal as string) ?? "616";
@@ -106,33 +110,27 @@ export async function emitirFacturaAction(
   const cpEmisor    = process.env.FACTURAMA_CP_EMISOR ?? "00000";
   const descripcion = desc || "Servicio de certificación CONOCER";
 
-  try {
-    const resultado = await emitirFactura({
-      Currency: "MXN",
-      ExpeditionPlace: cpEmisor,
-      PaymentForm: "03",
-      PaymentMethod: "PUE",
-      CfdiType: "I",
-      Receiver: { Rfc: rfc, Name: nombre, CfdiUse: cfdiUse, FiscalRegime: regimen, TaxZipCode: cp },
-      Items: [construirItemServicio(descripcion, monto)],
-    });
+  const resultado = await emitirFactura({
+    Currency: "MXN",
+    ExpeditionPlace: cpEmisor,
+    PaymentForm: "03",
+    PaymentMethod: "PUE",
+    CfdiType: "I",
+    Receiver: { Rfc: rfc, Name: nombre, CfdiUse: cfdiUse, FiscalRegime: regimen, TaxZipCode: cp },
+    Items: [construirItemServicio(descripcion, monto)],
+  });
 
-    if (!resultado) return { ok: false, error: "Facturama no configurado (faltan credenciales)" };
+  if (!resultado) throw new Error("Facturama no configurado (faltan credenciales)");
 
-    // Guarda el UUID en metadata para referencia
-    await db
-      .from("leads")
-      .update({ metadata: { ...meta, cfdi_uuid: resultado.Uuid, cfdi_id: resultado.Id } })
-      .eq("id", leadId);
+  await db
+    .from("leads")
+    .update({ metadata: { ...meta, cfdi_uuid: resultado.Uuid, cfdi_id: resultado.Id } })
+    .eq("id", leadId);
 
-    void logSistema({ categoria: "ui", tipoAccion: "leads.emitir-factura", fase: "ok", leadId, resultado: resultado.Uuid, metadata: { cfdi_id: resultado.Id, monto } });
-    revalidatePath(`/admin/leads/${leadId}`);
-    return { ok: true, uuid: resultado.Uuid };
-  } catch (err) {
-    void logSistema({ categoria: "ui", tipoAccion: "leads.emitir-factura", fase: "error", leadId, resultado: String(err), metadata: { monto } });
-    return { ok: false, error: String(err) };
-  }
-}
+  void logSistema({ categoria: "ui", tipoAccion: "leads.emitir-factura", fase: "ok", leadId, resultado: resultado.Uuid, metadata: { cfdi_id: resultado.Id, monto } });
+  revalidatePath(`/admin/leads/${leadId}`);
+  return { uuid: resultado.Uuid };
+});
 
 // S12.9 — Registra aceptación manual de privacidad (consentimiento por teléfono/presencial)
 export async function marcarPrivacidadManualAction(formData: FormData) {
