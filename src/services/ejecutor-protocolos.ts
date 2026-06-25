@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerModo } from "@/services/sistema";
 import { obtenerToquesPendientes, avanzarToque } from "@/services/lead-protocolo";
 import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
+import { guardarMensaje } from "@/services/mensajes";
 import { logSistema } from "@/services/log-sistema";
 
 export type ResultadoEjecucion = {
@@ -120,6 +121,7 @@ export async function ejecutarProtocolosPendientes(
           resultado.enAprobacion++;
         } else {
           await enviarRespuestaWhatsApp(lead.telefono, [mensaje], { forzarEnvio: enviarDirecto });
+          void guardarMensaje({ leadId: lead.id, contenido: mensaje, direccion: "saliente" });
           if (registroId) {
             await db().from("lead_toque_registro")
               .update({ resultado: "enviado", ejecutado_at: ahora })
