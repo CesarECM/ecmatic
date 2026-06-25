@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerModo } from "@/services/sistema";
 import { logSistema } from "@/services/log-sistema";
 import { marcarEmailLeido } from "@/services/bandeja-email";
+import { enrollarLeadEnProtocolosActivos } from "@/services/lead-protocolo";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -57,6 +58,18 @@ export async function crearLeadRealAction(formData: FormData): Promise<void> {
       throw new Error(`[depuracion] ${error.message}`);
     }
     leadId = nuevo.id;
+  }
+
+  if (canal === "no_show") {
+    const enrollados = await enrollarLeadEnProtocolosActivos(leadId);
+    void logSistema({
+      categoria: "ui",
+      tipoAccion: "depuracion.enroll-protocolo-noshow",
+      fase: "ok",
+      traceId,
+      leadId,
+      resultado: `${enrollados} protocolo(s) activado(s) por canal no-show`,
+    });
   }
 
   void logSistema({

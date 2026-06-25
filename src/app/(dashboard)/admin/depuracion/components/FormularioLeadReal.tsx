@@ -73,6 +73,7 @@ export function FormularioLeadReal() {
               >
                 <option value="whatsapp">WhatsApp</option>
                 <option value="email">Email</option>
+                <option value="no_show">No-Show (activa protocolo)</option>
               </select>
             </div>
           </div>

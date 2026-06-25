@@ -159,6 +159,34 @@ export async function registrarResultadoToque(
     .eq("id", toqueRegistroId);
 }
 
+// Enrola un lead en todos los protocolos activos (sin filtrar por etapa)
+export async function enrollarLeadEnProtocolosActivos(leadId: string): Promise<number> {
+  const { data, error } = await db()
+    .from("protocolos_seguimiento")
+    .select("id")
+    .eq("activo", true);
+
+  if (error) throw new Error(`[lead-protocolo] ${error.message}`);
+  if (!data?.length) return 0;
+
+  let enrollados = 0;
+  for (const proto of data) {
+    const { error: upsertError } = await db().from("lead_protocolo").upsert(
+      {
+        lead_id: leadId,
+        protocolo_id: proto.id,
+        toque_actual: 1,
+        proximo_toque_at: new Date().toISOString(),
+        estado: "activo",
+      },
+      { onConflict: "lead_id,protocolo_id", ignoreDuplicates: false }
+    );
+    if (!upsertError) enrollados++;
+    else console.error(`[lead-protocolo] enroll no-show error: ${upsertError.message}`);
+  }
+  return enrollados;
+}
+
 export async function obtenerHistorialToques(leadId: string): Promise<ToqueRegistro[]> {
   const { data } = await db()
     .from("lead_toque_registro")
