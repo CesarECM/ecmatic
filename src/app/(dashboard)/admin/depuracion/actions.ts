@@ -5,6 +5,7 @@ import { obtenerModo } from "@/services/sistema";
 import { logSistema } from "@/services/log-sistema";
 import { marcarEmailLeido } from "@/services/bandeja-email";
 import { enrollarLeadEnProtocolosActivos } from "@/services/lead-protocolo";
+import { ejecutarProtocolosPendientes } from "@/services/ejecutor-protocolos";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -69,6 +70,17 @@ export async function crearLeadRealAction(formData: FormData): Promise<void> {
       traceId,
       leadId,
       resultado: `${enrollados} protocolo(s) activado(s) por canal no-show`,
+    });
+    // Ejecutar toques pendientes de inmediato sin esperar al CRON horario
+    const ejecucion = await ejecutarProtocolosPendientes();
+    void logSistema({
+      categoria: "ui",
+      tipoAccion: "depuracion.ejecutar-protocolo-noshow",
+      fase: "ok",
+      traceId,
+      leadId,
+      resultado: JSON.stringify(ejecucion),
+      metadata: ejecucion,
     });
   }
 
