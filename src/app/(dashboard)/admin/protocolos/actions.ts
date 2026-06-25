@@ -9,6 +9,8 @@ import {
   upsertEtiqueta, eliminarEtiqueta,
 } from "@/services/protocolos-seguimiento";
 import { descartarLeadProtocolo, cambiarEstadoProtocolo, registrarResultadoToque } from "@/services/lead-protocolo";
+import { ejecutarProtocolosPendientes, type ResultadoEjecucion } from "@/services/ejecutor-protocolos";
+import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 
 const PATH = "/admin/protocolos";
@@ -159,4 +161,32 @@ export async function registrarResultadoToqueAction(
 ): Promise<void> {
   await registrarResultadoToque(toqueRegistroId, resultado, notas || undefined);
   revalidatePath(`/admin/leads/${leadId}`);
+}
+
+// TEST — Adelanta proximo_toque_at a NOW() y ejecuta el protocolo del lead inmediatamente.
+// Permite probar flujos de 24h sin esperar. Solo para admin.
+export async function ejecutarProtocoloAhoraAction(leadId: string): Promise<ResultadoEjecucion> {
+  const supabase = createServiceClient();
+
+  // Colapsa el tiempo: marca el siguiente toque como vencido ahora mismo
+  await (supabase as any)
+    .from("lead_protocolo")
+    .update({ proximo_toque_at: new Date().toISOString() })
+    .eq("lead_id", leadId)
+    .eq("estado", "activo");
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "protocolos.ejecutar-ahora", fase: "inicio",
+    leadId, resultado: "proximo_toque_at adelantado a NOW() — ejecutando...",
+  });
+
+  const resultado = await ejecutarProtocolosPendientes({ soloLeadId: leadId });
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "protocolos.ejecutar-ahora", fase: "ok",
+    leadId, resultado: JSON.stringify(resultado), metadata: resultado,
+  });
+
+  revalidatePath(`/admin/leads/${leadId}`);
+  return resultado;
 }

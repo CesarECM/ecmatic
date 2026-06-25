@@ -8,7 +8,9 @@ import {
   descartarLeadProtocoloAction,
   pausarReanudarProtocoloAction,
   registrarResultadoToqueAction,
+  ejecutarProtocoloAhoraAction,
 } from "@/app/(dashboard)/admin/protocolos/actions";
+import type { ResultadoEjecucion } from "@/services/ejecutor-protocolos";
 import type { LeadProtocolo, ToqueRegistro } from "@/services/lead-protocolo";
 import type { LlamadaPendienteProtocolo } from "@/services/llamadas";
 
@@ -52,6 +54,8 @@ export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial, llama
   const [notas, setNotas] = useState("");
   const [resultado, setResultado] = useState("contesto");
   const [guardando, setGuardando] = useState(false);
+  const [ejecutando, setEjecutando] = useState(false);
+  const [resultadoEjecucion, setResultadoEjecucion] = useState<ResultadoEjecucion | null>(null);
 
   if (!lp && historial.length === 0) {
     return (
@@ -77,6 +81,17 @@ export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial, llama
     const etiqueta = prompt("Etiqueta de descarte (ej. Sin respuesta, No le interesa):");
     if (!etiqueta) return;
     await descartarLeadProtocoloAction(lp.id, etiqueta, leadId);
+  }
+
+  async function handleEjecutarAhora() {
+    setEjecutando(true);
+    setResultadoEjecucion(null);
+    try {
+      const res = await ejecutarProtocoloAhoraAction(leadId);
+      setResultadoEjecucion(res);
+    } finally {
+      setEjecutando(false);
+    }
   }
 
   async function handleRegistrarResultado(toqueRegistroId: string) {
@@ -120,7 +135,7 @@ export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial, llama
                 Etiqueta: <span className="font-medium text-muted-foreground">{lp.etiqueta_aplicada}</span>
               </p>
             )}
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-1 flex-wrap">
               <Button size="sm" variant="outline" onClick={handlePausarReanudar}>
                 {lp.estado === "activo" ? "Pausar" : "Reanudar"}
               </Button>
@@ -129,7 +144,38 @@ export function LeadProtocoloPanel({ leadId, leadProtocolo: lp, historial, llama
                   Descartar
                 </Button>
               )}
+              {lp.estado === "activo" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-violet-700 border-violet-300 hover:bg-violet-50"
+                  disabled={ejecutando}
+                  onClick={handleEjecutarAhora}
+                  title="Adelanta el tiempo y ejecuta el siguiente toque ahora mismo"
+                >
+                  {ejecutando ? "Ejecutando…" : "▶ Ejecutar ahora"}
+                </Button>
+              )}
             </div>
+
+            {/* Resultado de la ejecución de prueba */}
+            {resultadoEjecucion && (
+              <div className="mt-2 rounded border border-violet-200 bg-violet-50 p-2 text-xs space-y-1">
+                <p className="font-medium text-violet-800">Resultado de ejecución:</p>
+                <div className="grid grid-cols-3 gap-x-4 gap-y-0.5 text-violet-700">
+                  <span>Enviados: <strong>{resultadoEjecucion.ejecutados}</strong></span>
+                  <span>Llamadas: <strong>{resultadoEjecucion.tareas}</strong></span>
+                  <span>En cola: <strong>{resultadoEjecucion.enAprobacion}</strong></span>
+                  <span>Omitidos: <strong>{resultadoEjecucion.omitidos}</strong></span>
+                  <span className={resultadoEjecucion.errores > 0 ? "text-red-600 font-medium" : ""}>
+                    Errores: <strong>{resultadoEjecucion.errores}</strong>
+                  </span>
+                </div>
+                {resultadoEjecucion.errores > 0 && (
+                  <p className="text-red-600">Revisa /admin/log-ia para ver el detalle del error.</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
