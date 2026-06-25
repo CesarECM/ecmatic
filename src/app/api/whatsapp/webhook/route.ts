@@ -3,6 +3,8 @@ import { after } from "next/server";
 import { parseWebhookPayload, markAsRead } from "@/lib/whatsapp/client";
 import { procesarMensajeEntrante } from "@/services/mensajes";
 import { logSistema } from "@/services/log-sistema";
+import { verifyMetaWebhookSignature } from "@/lib/whatsapp/webhook-signature";
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN!;
 
@@ -22,9 +24,20 @@ export async function GET(request: NextRequest) {
 
 // POST — mensajes entrantes de WhatsApp
 export async function POST(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  const rl = checkRateLimit(`webhook:${ip}`, RATE_LIMITS.webhook);
+  if (!rl.success) return rateLimitResponse(rl);
+
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-hub-signature-256");
+
+  if (!verifyMetaWebhookSignature(rawBody, signature)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listarTemplates, crearTemplate } from "@/services/wa-templates";
+import { validateTemplate } from "@/lib/whatsapp/template-validators";
 
 export async function GET() {
   try {
@@ -18,6 +19,15 @@ export async function POST(req: NextRequest) {
 
     if (!nombre?.trim() || !categoria || !Array.isArray(componentes)) {
       return NextResponse.json({ error: "nombre, categoria y componentes requeridos" }, { status: 400 });
+    }
+
+    try {
+      validateTemplate({ nombre, categoria, idioma, componentes });
+    } catch (validationErr) {
+      return NextResponse.json(
+        { error: validationErr instanceof Error ? validationErr.message : "Payload inválido" },
+        { status: 422 }
+      );
     }
 
     const template = await crearTemplate({ nombre, categoria, idioma, componentes, imagen_servicio_id });

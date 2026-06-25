@@ -48,6 +48,8 @@ export async function enrollarLeadEnProtocolosPorEtapa(
   const protocolos = await obtenerProtocolosPorEtapa(etapaId);
   if (!protocolos.length) return 0;
 
+  void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.enroll-etapa", fase: "inicio", leadId, resultado: `${protocolos.length} protocolo(s) para etapa ${etapaId}` });
+
   let enrollados = 0;
   for (const proto of protocolos) {
     const { error } = await db().from("lead_protocolo").upsert(
@@ -60,8 +62,12 @@ export async function enrollarLeadEnProtocolosPorEtapa(
       },
       { onConflict: "lead_id,protocolo_id", ignoreDuplicates: false }
     );
-    if (!error) enrollados++;
-    else console.error(`[lead-protocolo] enroll error: ${error.message}`);
+    if (!error) {
+      enrollados++;
+      void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.enroll-etapa", fase: "ok", leadId, resultado: `Enrollado en "${proto.nombre}"`, metadata: { protocolo_id: proto.id } });
+    } else {
+      void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.enroll-etapa", fase: "error", leadId, resultado: error.message, metadata: { protocolo_id: proto.id } });
+    }
   }
   return enrollados;
 }
@@ -88,6 +94,7 @@ export async function obtenerToquesPendientes(): Promise<ToquePendiente[]> {
     const toque = proto.toques.find((t: Toque) => t.orden === lp.toque_actual);
     if (!toque) {
       await db().from("lead_protocolo").update({ estado: "completado" }).eq("id", lp.id);
+      void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.auto-completar", fase: "ok", leadId: lp.leads?.id, resultado: `Protocolo ${lp.protocolo_id} completado — toque ${lp.toque_actual} sin sucesor`, metadata: { lead_protocolo_id: lp.id } });
       continue;
     }
     result.push({
@@ -107,7 +114,10 @@ export async function avanzarToque(
   toqueActualOrden: number
 ): Promise<void> {
   const proto = await obtenerProtocoloCompleto(protocoloId);
-  if (!proto) return;
+  if (!proto) {
+    void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.avanzar-toque", fase: "warn", resultado: `Protocolo ${protocoloId} no encontrado — toque no avanzado`, metadata: { lead_protocolo_id: leadProtocoloId } });
+    return;
+  }
 
   const siguiente = proto.toques.find((t: Toque) => t.orden === toqueActualOrden + 1);
 
@@ -116,6 +126,7 @@ export async function avanzarToque(
       .from("lead_protocolo")
       .update({ estado: "completado", toque_actual: toqueActualOrden + 1 })
       .eq("id", leadProtocoloId);
+    void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.avanzar-toque", fase: "ok", resultado: `Protocolo completado — último toque era #${toqueActualOrden}`, metadata: { lead_protocolo_id: leadProtocoloId } });
     return;
   }
 
@@ -124,7 +135,10 @@ export async function avanzarToque(
     .select("created_at")
     .eq("id", leadProtocoloId)
     .single();
-  if (!lp) return;
+  if (!lp) {
+    void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.avanzar-toque", fase: "warn", resultado: `LeadProtocolo ${leadProtocoloId} no encontrado tras buscar created_at`, metadata: { lead_protocolo_id: leadProtocoloId } });
+    return;
+  }
 
   const inicio = new Date(lp.created_at);
   const proximo = new Date(inicio.getTime() + siguiente.dia_offset * 24 * 60 * 60 * 1000);
@@ -133,6 +147,7 @@ export async function avanzarToque(
     toque_actual: siguiente.orden,
     proximo_toque_at: proximo.toISOString(),
   }).eq("id", leadProtocoloId);
+  void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.avanzar-toque", fase: "ok", resultado: `Toque #${toqueActualOrden} → #${siguiente.orden} | próximo: ${proximo.toISOString()}`, metadata: { lead_protocolo_id: leadProtocoloId, proximo_toque_at: proximo.toISOString() } });
 }
 
 export async function descartarLeadProtocolo(leadProtocoloId: string, etiqueta: string): Promise<void> {
@@ -140,6 +155,7 @@ export async function descartarLeadProtocolo(leadProtocoloId: string, etiqueta: 
     .from("lead_protocolo")
     .update({ estado: "descartado", etiqueta_aplicada: etiqueta })
     .eq("id", leadProtocoloId);
+  void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.descartar", fase: "ok", resultado: `LeadProtocolo ${leadProtocoloId} descartado con etiqueta: "${etiqueta}"`, metadata: { lead_protocolo_id: leadProtocoloId, etiqueta } });
 }
 
 export async function cambiarEstadoProtocolo(
@@ -147,6 +163,7 @@ export async function cambiarEstadoProtocolo(
   estado: "activo" | "pausado"
 ): Promise<void> {
   await db().from("lead_protocolo").update({ estado }).eq("id", leadProtocoloId);
+  void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.cambiar-estado", fase: "ok", resultado: `LeadProtocolo ${leadProtocoloId} → ${estado}`, metadata: { lead_protocolo_id: leadProtocoloId, estado } });
 }
 
 export async function registrarResultadoToque(
@@ -158,6 +175,7 @@ export async function registrarResultadoToque(
     .from("lead_toque_registro")
     .update({ resultado, notas: notas ?? null, ejecutado_at: new Date().toISOString() })
     .eq("id", toqueRegistroId);
+  void logSistema({ categoria: "servicio", tipoAccion: "lead-protocolo.registrar-resultado-toque", fase: "ok", resultado: `Toque ${toqueRegistroId} → ${resultado}${notas ? ` | notas: "${notas}"` : ""}`, metadata: { toque_registro_id: toqueRegistroId } });
 }
 
 // Enrola un lead en todos los protocolos activos (sin filtrar por etapa)

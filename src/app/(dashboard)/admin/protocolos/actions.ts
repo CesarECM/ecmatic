@@ -146,6 +146,7 @@ export async function descartarLeadProtocoloAction(
   leadProtocoloId: string, etiqueta: string, leadId: string
 ): Promise<void> {
   await descartarLeadProtocolo(leadProtocoloId, etiqueta);
+  void logSistema({ categoria: "ui", tipoAccion: "protocolos.descartar-lead", fase: "ok", leadId, resultado: `Etiqueta: "${etiqueta}"`, metadata: { lead_protocolo_id: leadProtocoloId } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
@@ -153,6 +154,7 @@ export async function pausarReanudarProtocoloAction(
   leadProtocoloId: string, estado: "activo" | "pausado", leadId: string
 ): Promise<void> {
   await cambiarEstadoProtocolo(leadProtocoloId, estado);
+  void logSistema({ categoria: "ui", tipoAccion: "protocolos.pausar-reanudar", fase: "ok", leadId, resultado: estado, metadata: { lead_protocolo_id: leadProtocoloId } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
@@ -160,6 +162,7 @@ export async function registrarResultadoToqueAction(
   toqueRegistroId: string, resultado: string, notas: string, leadId: string
 ): Promise<void> {
   await registrarResultadoToque(toqueRegistroId, resultado, notas || undefined);
+  void logSistema({ categoria: "ui", tipoAccion: "protocolos.registrar-resultado-toque", fase: "ok", leadId, resultado, metadata: { toque_registro_id: toqueRegistroId, notas: notas || null } });
   revalidatePath(`/admin/leads/${leadId}`);
 }
 
