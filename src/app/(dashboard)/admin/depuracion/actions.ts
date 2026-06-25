@@ -90,7 +90,7 @@ export async function crearLeadRealAction(formData: FormData): Promise<void> {
     fase: "ok",
     traceId,
     leadId,
-    resultado: existente ? "Lead existente actualizado" : "Lead nuevo creado",
+    resultado: `${existente ? "Lead existente actualizado" : "Lead nuevo creado"} | canal: ${canal}`,
     metadata: { canal, tiene_nombre: !!nombre, tiene_email: !!email, es_nuevo: !existente },
   });
 
