@@ -2,6 +2,7 @@ import { sendTextMessageWithRetry } from "@/lib/whatsapp/client";
 import { encolarMensaje } from "@/services/mensajes-cola";
 import { obtenerModo } from "@/services/sistema";
 import { logDebugIA } from "@/services/log-ia";
+import { logSistema } from "@/services/log-sistema";
 
 const DELAY_MS = 1_500;
 
@@ -28,8 +29,18 @@ export async function enviarRespuestaWhatsApp(
     if (i > 0) await delay(DELAY_MS);
     try {
       await sendTextMessageWithRetry(telefono, bloque);
+      void logSistema({
+        categoria: "servicio", tipoAccion: "whatsapp-sender.enviar", fase: "ok",
+        resultado: `Bloque ${i + 1}/${bloques.length} enviado a ...${telefono.slice(-4)}`,
+        metadata: { bloque_index: i, chars: bloque.length, forzarEnvio: opts?.forzarEnvio ?? false },
+      });
     } catch (err) {
-      console.error("[whatsapp-sender] retry agotado, encolando:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      void logSistema({
+        categoria: "servicio", tipoAccion: "whatsapp-sender.enviar", fase: "error",
+        resultado: `Retry agotado bloque ${i + 1} — encolando: ${msg}`,
+        metadata: { bloque_index: i, telefono },
+      });
       await encolarMensaje(telefono, bloque);
     }
   }

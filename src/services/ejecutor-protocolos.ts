@@ -81,6 +81,9 @@ export async function ejecutarProtocolosPendientes(
             { lead_id: lead.id, tipo: "seguimiento", motivo, vence_at: new Date(Date.now() + 8 * 3600 * 1000).toISOString() },
             { onConflict: "lead_id" }
           );
+          void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "ok", traceId, leadId: lead.id, resultado: `Tarea de llamada creada para vendedor ${lead.vendedor_id}` });
+        } else {
+          void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "warn", traceId, leadId: lead.id, resultado: "Lead sin vendedor asignado — tarea de llamada no creada" });
         }
         if (registroId) {
           await db().from("lead_toque_registro")
@@ -121,7 +124,14 @@ export async function ejecutarProtocolosPendientes(
           resultado.enAprobacion++;
         } else {
           await enviarRespuestaWhatsApp(lead.telefono, [mensaje], { forzarEnvio: enviarDirecto });
-          await guardarMensaje({ leadId: lead.id, contenido: mensaje, direccion: "saliente" });
+          const msgGuardado = await guardarMensaje({ leadId: lead.id, contenido: mensaje, direccion: "saliente" });
+          void logSistema({
+            categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: msgGuardado ? "debug" : "warn",
+            traceId, leadId: lead.id,
+            resultado: msgGuardado
+              ? `Mensaje persistido en DB — id: ${(msgGuardado as { id: string }).id}`
+              : "guardarMensaje retornó null — el mensaje NO aparecerá en el perfil",
+          });
           if (registroId) {
             await db().from("lead_toque_registro")
               .update({ resultado: "enviado", ejecutado_at: ahora })
@@ -140,6 +150,7 @@ export async function ejecutarProtocolosPendientes(
       }
 
       await avanzarToque(lp.id, lp.protocolo_id, lp.toque_actual);
+      void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "debug", traceId, leadId: lead.id, resultado: `Avanzado de toque ${toque.orden} → ${toque.orden + 1}` });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "error", traceId, leadId: lead.id, resultado: msg });
