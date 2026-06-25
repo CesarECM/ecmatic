@@ -11,6 +11,7 @@ import { inscribirEnPipeline } from "@/services/pipeline-multi";
 import { asignarEtiquetaProducto } from "@/services/etiquetas-hooks";
 import { asignarVarianteAB, registrarAvanceAB } from "@/services/pipeline-ab";
 import { cerrarTarea } from "@/services/tareas";
+import { enrollarLeadEnProtocolosPorEtapa } from "@/services/lead-protocolo";
 import type { PipelineRuta, MovidoPor } from "@/lib/supabase/types";
 
 export interface FiltrosLeads {
@@ -81,7 +82,7 @@ export async function moverLead(
   // Valida que la etapa exista en la ruta del lead
   const { data: etapaValida } = await supabase
     .from("pipeline_etapas")
-    .select("nombre")
+    .select("id, nombre")
     .eq("nombre", nuevaEtapa)
     .eq("ruta", lead.pipeline_ruta)
     .eq("activo", true)
@@ -95,6 +96,9 @@ export async function moverLead(
     .from("leads")
     .update({ pipeline_stage: nuevaEtapa })
     .eq("id", leadId);
+
+  // Enrolar en protocolos de seguimiento asignados a esta etapa
+  void enrollarLeadEnProtocolosPorEtapa(leadId, etapaValida.id).catch(console.error);
 
   // S13.5 — Mantener lead_pipelines sincronizado con el pipeline primario
   void inscribirEnPipeline(leadId, lead.pipeline_ruta, nuevaEtapa).catch(console.error);

@@ -9,6 +9,7 @@ import { FacturacionCard } from "@/components/leads/facturacion-card";
 import { ScoreSaludHistorial } from "@/components/leads/score-salud-historial";
 import { EmailsInterceptadosCard } from "@/components/leads/emails-interceptados-card";
 import { PipelinesLead } from "@/components/leads/pipelines-lead";
+import { LeadProtocoloPanel } from "@/components/leads/lead-protocolo-panel";
 import {
   moverLeadDesdePerfilAction,
   asignarVendedorAction,
@@ -18,6 +19,7 @@ import {
 } from "@/app/(dashboard)/admin/leads/[id]/actions";
 import type { EntradaContexto } from "@/lib/supabase/types";
 import type { EmailInterceptado } from "@/services/bandeja-email";
+import type { LeadProtocolo, ToqueRegistro } from "@/services/lead-protocolo";
 
 type Lead = {
   id: string; nombre: string | null; telefono: string | null; email: string | null;
@@ -55,7 +57,7 @@ const SENAL_COLORS: Record<string, string> = {
   otro: "bg-gray-100 text-gray-800",
 };
 
-type Tab = "info" | "pipelines" | "emails";
+type Tab = "info" | "pipelines" | "emails" | "protocolo";
 
 interface Props {
   lead: Lead;
@@ -66,11 +68,14 @@ interface Props {
   pipelines: PipelineActivo[];
   etapasPorRuta: Record<string, EtapaSimple[]>;
   emailsInterceptados: EmailInterceptado[];
+  leadProtocolo?: (LeadProtocolo & { protocolo_nombre: string }) | null;
+  historialToques?: ToqueRegistro[];
 }
 
 export function LeadInfoPanel({
   lead, etapas, historial, vendedores, senales,
   pipelines, etapasPorRuta, emailsInterceptados,
+  leadProtocolo = null, historialToques = [],
 }: Props) {
   const [tab, setTab] = useState<Tab>("info");
   const rfc = lead.metadata?.rfc as string | undefined;
@@ -84,6 +89,7 @@ export function LeadInfoPanel({
     { id: "info", label: "Información" },
     { id: "pipelines", label: `Pipelines (${pipelines.length})` },
     { id: "emails", label: `Emails (${emailsInterceptados.length})` },
+    { id: "protocolo", label: `Protocolo${leadProtocolo ? " ●" : ""}` },
   ];
 
   return (
@@ -321,6 +327,14 @@ export function LeadInfoPanel({
               <EmailsInterceptadosCard emails={emailsInterceptados} />
             )}
           </div>
+        )}
+
+        {tab === "protocolo" && (
+          <LeadProtocoloPanel
+            leadId={lead.id}
+            leadProtocolo={leadProtocolo}
+            historial={historialToques}
+          />
         )}
       </div>
     </div>

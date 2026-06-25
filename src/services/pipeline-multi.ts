@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { enrollarLeadEnProtocolosPorEtapa } from "@/services/lead-protocolo";
 import type { MovidoPor, PipelineRuta } from "@/lib/supabase/types";
 
 export interface PipelineActivo {
@@ -74,7 +75,7 @@ export async function moverLeadEnPipeline(
   // Verificar que la etapa exista en esta ruta
   const { data: etapaValida } = await supabase
     .from("pipeline_etapas")
-    .select("nombre")
+    .select("id, nombre")
     .eq("nombre", nuevaEtapa)
     .eq("ruta", ruta as PipelineRuta)
     .eq("activo", true)
@@ -102,6 +103,9 @@ export async function moverLeadEnPipeline(
       { onConflict: "lead_id,ruta" }
     );
   if (upsertError) throw new Error(`[pipeline-multi] Error moviendo: ${upsertError.message}`);
+
+  // Enrolar en protocolos de seguimiento asignados a esta etapa
+  void enrollarLeadEnProtocolosPorEtapa(leadId, etapaValida.id).catch(console.error);
 
   // Registrar en historial con ruta
   await supabase.from("pipeline_movimientos").insert({

@@ -45,6 +45,7 @@ const SECTIONS: NavSection[] = [
     label: "Operaciones",
     items: [
       { href: "/admin/pipelines",      label: "Pipelines",           emoji: "🔀", roles: ["admin"] },
+      { href: "/admin/protocolos",    label: "Protocolos",          emoji: "🎯", roles: ["admin"] },
       { href: "/admin/aprobaciones",  label: "Aprobaciones",        emoji: "✅", roles: ["admin"] },
       { href: "/admin/postventa",     label: "Post-Venta",          emoji: "🎓", roles: ["admin"] },
       { href: "/admin/vendedores",    label: "Vendedores",          emoji: "🏆", roles: ["admin"] },
