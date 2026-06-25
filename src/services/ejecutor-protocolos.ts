@@ -119,7 +119,7 @@ export async function ejecutarProtocolosPendientes(
           void logSistema({ categoria: "cron", tipoAccion: "cron.protocolos-toque", fase: "debug", traceId, leadId: lead.id, resultado: `WA → cola_aprobacion (modo: ${modo})`, metadata: { cola_id: cola?.id ?? null } });
           resultado.enAprobacion++;
         } else {
-          await enviarRespuestaWhatsApp(lead.telefono, [mensaje]);
+          await enviarRespuestaWhatsApp(lead.telefono, [mensaje], { forzarEnvio: enviarDirecto });
           if (registroId) {
             await db().from("lead_toque_registro")
               .update({ resultado: "enviado", ejecutado_at: ahora })

@@ -6,14 +6,16 @@ import { logDebugIA } from "@/services/log-ia";
 const DELAY_MS = 1_500;
 
 // S1.5 + S1.6 — Envía bloques con delay simulado entre ellos.
-// En modo depuración los bloques se interceptan y no llegan al lead.
+// En modo depuración los bloques se interceptan y no llegan al lead,
+// salvo que el llamador pase forzarEnvio:true (ej. protocolo no-show manual).
 export async function enviarRespuestaWhatsApp(
   telefono: string,
-  bloques: string[]
+  bloques: string[],
+  opts?: { forzarEnvio?: boolean }
 ): Promise<void> {
   const modo = await obtenerModo().catch(() => "automatico" as const);
 
-  if (modo === "depuracion") {
+  if (modo === "depuracion" && !opts?.forzarEnvio) {
     void logDebugIA(
       "DEPURACION_WA_INTERCEPTADO",
       `[DEPURACION] ${bloques.length} bloque(s) interceptados — no se envían al lead`,
