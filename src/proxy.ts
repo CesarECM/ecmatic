@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/supabase/types";
 
-const PUBLIC_PATHS = ["/login", "/api/whatsapp/webhook", "/api/stripe/webhook", "/api/admin/", "/api/auth/google"];
+const PUBLIC_PATHS = ["/login", "/api/whatsapp/webhook", "/api/stripe/webhook", "/api/admin/", "/api/auth/google", "/api/ghl/"];
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
