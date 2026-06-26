@@ -6,7 +6,7 @@ export const metadata = { title: "GHL Workflows · ECMatic" };
 export const revalidate = 0;
 
 const CLASIFICACIONES = [
-  { value: "all",     label: "Todos"     },
+  { value: "all",     label: "Todos"        },
   { value: "keep",    label: "✅ Conservar" },
   { value: "rescue",  label: "🔧 Rescatar"  },
   { value: "delete",  label: "🗑 Eliminar"  },
@@ -18,14 +18,21 @@ export default async function GHLWorkflowsPage({
 }: {
   searchParams: Promise<{ clasificacion?: string; status?: string }>;
 }) {
-  const sp             = await searchParams;
-  const clasificacion  = sp.clasificacion ?? "all";
-  const status         = sp.status        ?? "all";
+  const sp            = await searchParams;
+  const clasificacion = sp.clasificacion ?? "all";
+  const status        = sp.status        ?? "all";
 
-  const workflows = await listarWorkflows({
-    clasificacion: clasificacion !== "all" ? clasificacion : undefined,
-    status:        status        !== "all" ? status        : undefined,
-  });
+  let workflows: Awaited<ReturnType<typeof listarWorkflows>> = [];
+  let errorMsg: string | null = null;
+
+  try {
+    workflows = await listarWorkflows({
+      clasificacion: clasificacion !== "all" ? clasificacion : undefined,
+      status:        status        !== "all" ? status        : undefined,
+    });
+  } catch (err) {
+    errorMsg = err instanceof Error ? err.message : String(err);
+  }
 
   const totales = {
     total:   workflows.length,
@@ -42,17 +49,24 @@ export default async function GHLWorkflowsPage({
         <div>
           <h1 className="text-2xl font-bold">GHL Workflows</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {totales.total} workflows · ✅ {totales.keep} conservar · 🔧 {totales.rescue} rescatar · 🗑 {totales.delete} eliminar · ⏳ {totales.pending} pendiente
+            {totales.total} workflows · ✅ {totales.keep} · 🔧 {totales.rescue} · 🗑 {totales.delete} · ⏳ {totales.pending} pendiente
           </p>
         </div>
         <SincronizarBtn />
       </div>
 
+      {/* Error de carga */}
+      {errorMsg && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <strong>Error al cargar workflows:</strong> {errorMsg}
+        </div>
+      )}
+
       {/* Filtros */}
       <div className="flex gap-2 flex-wrap">
         {CLASIFICACIONES.map((c) => {
           const active = clasificacion === c.value;
-          const href   = new URLSearchParams({
+          const href = new URLSearchParams({
             clasificacion: c.value,
             ...(status !== "all" ? { status } : {}),
           }).toString();
@@ -79,7 +93,7 @@ export default async function GHLWorkflowsPage({
           { value: "draft",     label: "Borradores"        },
         ].map((s) => {
           const active = status === s.value;
-          const href   = new URLSearchParams({
+          const href = new URLSearchParams({
             status: s.value,
             ...(clasificacion !== "all" ? { clasificacion } : {}),
           }).toString();
@@ -100,13 +114,13 @@ export default async function GHLWorkflowsPage({
       </div>
 
       {/* Empty state */}
-      {workflows.length === 0 && (
+      {!errorMsg && workflows.length === 0 && (
         <div className="rounded-lg border bg-card p-12 text-center space-y-3">
           <p className="text-muted-foreground text-sm">
-            No hay workflows con este filtro.
+            No hay workflows importados aún.
           </p>
           <p className="text-xs text-muted-foreground">
-            Usa el botón <strong>Sincronizar GHL</strong> para importar los workflows desde GoHighLevel.
+            Presiona <strong>⟳ Sincronizar GHL</strong> para importar los workflows desde GoHighLevel y clasificarlos con IA.
           </p>
         </div>
       )}

@@ -14,38 +14,57 @@ export interface GHLWorkflow {
   clasificacion:   "keep" | "rescue" | "delete" | "pending";
   notas:           string | null;
   resumen_ia:      string | null;
-  tags_detectados: string[];
+  tags_detectados: string[] | null;
   ultima_sync:     string;
   created_at:      string;
   updated_at:      string;
 }
 
-// Sincroniza los 57 workflows de GHL con la tabla ghl_workflows.
-// Clasifica con IA los que sean nuevos o hayan cambiado de status.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function db() { return createServiceClient() as any; }
+
 export async function sincronizarWorkflows(): Promise<{ insertados: number; actualizados: number; errores: number }> {
   const traceId = randomUUID();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createServiceClient() as any;
 
-  void logSistema({ categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "inicio", traceId });
+  await logSistema({ categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "inicio", traceId });
 
   let workflows;
   try {
     workflows = await fetchWorkflowsGHL();
   } catch (err) {
-    void logSistema({ categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "error",
-      traceId, resultado: String(err) });
+    await logSistema({
+      categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "error",
+      traceId, resultado: `fetchWorkflowsGHL falló: ${String(err)}`,
+      metadata: { error: String(err) },
+    });
     throw err;
   }
 
-  const { data: existentes } = await supabase
-    .from("ghl_workflows")
-    .select("ghl_id, status, clasificacion");
+  await logSistema({
+    categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "debug",
+    traceId, resultado: `GHL devolvió ${workflows.length} workflows`,
+    metadata: { total: workflows.length, nombres: workflows.slice(0, 5).map((w) => w.name) },
+  });
+
+  let existentes: { ghl_id: string; status: string; clasificacion: string }[] = [];
+  try {
+    const { data, error } = await db()
+      .from("ghl_workflows")
+      .select("ghl_id, status, clasificacion");
+    if (error) throw new Error(error.message);
+    existentes = data ?? [];
+  } catch (err) {
+    await logSistema({
+      categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "error",
+      traceId, resultado: `SELECT existentes falló: ${String(err)}`,
+      metadata: { error: String(err) },
+    });
+    throw err;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const existenteMap = new Map<string, { status: string; clasificacion: string }>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (existentes ?? []).map((r: any) => [r.ghl_id, { status: r.status, clasificacion: r.clasificacion }])
+    existentes.map((r) => [r.ghl_id, { status: r.status, clasificacion: r.clasificacion }])
   );
 
   let insertados = 0;
@@ -57,11 +76,10 @@ export async function sincronizarWorkflows(): Promise<{ insertados: number; actu
     const esNuevo = !previo;
     const cambioPendiente = previo?.clasificacion === "pending";
     const cambioStatus = previo && previo.status !== wf.status;
-
-    // Solo re-clasificar si es nuevo, está pendiente, o cambió de status
     const debeClasificar = esNuevo || cambioPendiente || cambioStatus;
 
-    let clasificacion: "keep" | "rescue" | "delete" | "pending" = previo?.clasificacion as "keep" | "rescue" | "delete" | "pending" ?? "pending";
+    let clasificacion: "keep" | "rescue" | "delete" | "pending" =
+      (previo?.clasificacion as "keep" | "rescue" | "delete" | "pending") ?? "pending";
     let resumen_ia: string | null = null;
     let tags_detectados: string[] = [];
 
@@ -71,9 +89,13 @@ export async function sincronizarWorkflows(): Promise<{ insertados: number; actu
         clasificacion   = result.clasificacion;
         resumen_ia      = result.resumen_ia;
         tags_detectados = result.tags_detectados;
-      } catch {
+      } catch (err) {
         errores++;
         clasificacion = "pending";
+        void logSistema({
+          categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "warn",
+          traceId, resultado: `Clasificación IA falló para "${wf.name}": ${String(err)}`,
+        });
       }
     }
 
@@ -83,17 +105,21 @@ export async function sincronizarWorkflows(): Promise<{ insertados: number; actu
       status:          wf.status,
       version:         wf.version ?? 1,
       clasificacion,
-      resumen_ia:      resumen_ia ?? undefined,
-      tags_detectados: tags_detectados.length ? tags_detectados : undefined,
+      resumen_ia:      resumen_ia ?? null,
+      tags_detectados: tags_detectados.length ? tags_detectados : [],
       ultima_sync:     new Date().toISOString(),
     };
 
-    const { error } = await supabase
+    const { error } = await db()
       .from("ghl_workflows")
       .upsert(row, { onConflict: "ghl_id" });
 
     if (error) {
       errores++;
+      void logSistema({
+        categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "warn",
+        traceId, resultado: `Upsert falló para "${wf.name}": ${error.message}`,
+      });
     } else if (esNuevo) {
       insertados++;
     } else {
@@ -101,7 +127,7 @@ export async function sincronizarWorkflows(): Promise<{ insertados: number; actu
     }
   }
 
-  void logSistema({
+  await logSistema({
     categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "ok",
     traceId, resultado: `${insertados} nuevos · ${actualizados} actualizados · ${errores} errores`,
     metadata: { total: workflows.length, insertados, actualizados, errores },
@@ -114,12 +140,10 @@ export async function listarWorkflows(filtros?: {
   clasificacion?: string;
   status?: string;
 }): Promise<GHLWorkflow[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createServiceClient() as any;
-  let q = supabase
+  let q = db()
     .from("ghl_workflows")
     .select("*")
-    .order("status", { ascending: false }) // published primero
+    .order("status", { ascending: false })
     .order("nombre");
 
   if (filtros?.clasificacion && filtros.clasificacion !== "all") {
@@ -130,7 +154,14 @@ export async function listarWorkflows(filtros?: {
   }
 
   const { data, error } = await q;
-  if (error) throw new Error(`ghl-workflows.listar: ${error.message}`);
+  if (error) {
+    await logSistema({
+      categoria: "servicio", tipoAccion: "ghl.sync_workflows", fase: "error",
+      resultado: `listarWorkflows falló: ${error.message}`,
+      metadata: { filtros, error: error.message },
+    });
+    throw new Error(`ghl-workflows.listar: ${error.message}`);
+  }
   return (data ?? []) as GHLWorkflow[];
 }
 
@@ -138,9 +169,7 @@ export async function actualizarWorkflow(
   id: string,
   cambios: { clasificacion?: "keep" | "rescue" | "delete"; notas?: string | null }
 ): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createServiceClient() as any;
-  const { error } = await supabase
+  const { error } = await db()
     .from("ghl_workflows")
     .update({ ...cambios })
     .eq("id", id);

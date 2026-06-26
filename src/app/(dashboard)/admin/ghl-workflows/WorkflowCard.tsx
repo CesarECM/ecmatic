@@ -64,9 +64,9 @@ export function WorkflowCard({ wf }: { wf: GHLWorkflow }) {
       </div>
 
       {/* Tags */}
-      {wf.tags_detectados?.length > 0 && (
+      {(wf.tags_detectados ?? []).length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {wf.tags_detectados.map((t) => (
+          {(wf.tags_detectados ?? []).map((t) => (
             <span key={t} className="text-[10px] rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
               {t}
             </span>
