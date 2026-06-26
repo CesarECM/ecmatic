@@ -7,6 +7,7 @@ import { marcarMensajeEnviado, rechazarMensaje } from "@/services/mensajes-aprob
 import { aprobarComprobante, rechazarComprobante } from "@/services/comprobantes";
 import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 import { logSistema } from "@/services/log-sistema";
+import { safeAction, type ActionResult } from "@/lib/safe-action";
 
 const PATH = "/admin/aprobaciones";
 
@@ -119,25 +120,26 @@ export async function archivarEtiquetaAction(id: string) {
   revalidatePath(PATH);
 }
 
-export async function aprobarMensajeAction(id: string, telefono: string, bloques: string[]) {
+export async function aprobarMensajeAction(id: string, telefono: string, bloques: string[]): Promise<ActionResult> {
   try {
     await enviarRespuestaWhatsApp(telefono, bloques);
     await marcarMensajeEnviado(id);
     void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-mensaje", fase: "ok", metadata: { mensaje_id: id, telefono, bloques_count: bloques.length } });
+    revalidatePath(PATH);
+    return { data: undefined };
   } catch (err) {
     void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.aprobar-mensaje", fase: "error", resultado: err instanceof Error ? err.message : String(err), metadata: { mensaje_id: id, telefono } });
-    throw err;
+    return { error: err instanceof Error ? err.message : "Error al enviar mensaje" };
   }
-  revalidatePath(PATH);
 }
 
-export async function rechazarMensajeAction(id: string) {
+export const rechazarMensajeAction = safeAction(async (id: string) => {
   await rechazarMensaje(id);
   void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-mensaje", fase: "ok", metadata: { mensaje_id: id } });
   revalidatePath(PATH);
-}
+});
 
-export async function actualizarMensajeAction(id: string, respuesta: string) {
+export const actualizarMensajeAction = safeAction(async (id: string, respuesta: string) => {
   const supabase = createServiceClient();
   await (supabase as any)
     .from("mensajes_cola_aprobacion")
@@ -145,7 +147,7 @@ export async function actualizarMensajeAction(id: string, respuesta: string) {
     .eq("id", id);
   void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.actualizar-mensaje", fase: "ok", metadata: { mensaje_id: id } });
   revalidatePath(PATH);
-}
+});
 
 export async function aprobarComprobanteAction(id: string) {
   await aprobarComprobante(id);

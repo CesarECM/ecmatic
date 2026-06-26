@@ -10,15 +10,13 @@ export function GenerarSugerenciasBtn() {
   function handleClick() {
     const id = toast.loading("Generando sugerencias IA...");
     startTransition(async () => {
-      try {
-        const { generadas } = await generarSugerenciasAction();
-        if (generadas > 0) {
-          toast.success(`${generadas} sugerencia${generadas > 1 ? "s" : ""} generada${generadas > 1 ? "s" : ""} — revísalas en "Pendientes"`, { id });
-        } else {
-          toast.info("No hay combinaciones vacías que generar", { id });
-        }
-      } catch {
-        toast.error("Error al generar sugerencias", { id });
+      const result = await generarSugerenciasAction();
+      if (result.error) { toast.error(result.error, { id }); return; }
+      const generadas = result.data?.generadas ?? 0;
+      if (generadas > 0) {
+        toast.success(`${generadas} sugerencia${generadas > 1 ? "s" : ""} generada${generadas > 1 ? "s" : ""} — revísalas en "Pendientes"`, { id });
+      } else {
+        toast.info("No hay combinaciones vacías que generar", { id });
       }
     });
   }

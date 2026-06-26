@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { toggleGatillo, actualizarGatillo, crearGatillo, sugerirGatillos } from "@/services/gatillos";
 import type { TipoGatillo, AudienciaGatillo } from "@/lib/supabase/types";
 import { logSistema } from "@/services/log-sistema";
+import { safeAction } from "@/lib/safe-action";
 
 export async function toggleGatilloAction(id: string, activo: boolean): Promise<void> {
   await toggleGatillo(id, activo);
@@ -34,7 +35,7 @@ export async function crearGatilloAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/gatillos");
 }
 
-export async function sugerirGatillosAction(): Promise<{ tipo: TipoGatillo; razon: string }[]> {
+export const sugerirGatillosAction = safeAction(async (): Promise<{ tipo: TipoGatillo; razon: string }[]> => {
   void logSistema({ categoria: "ui", tipoAccion: "gatillos.sugerir", fase: "ok" });
   return sugerirGatillos();
-}
+});

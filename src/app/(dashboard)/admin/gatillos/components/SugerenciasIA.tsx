@@ -10,11 +10,14 @@ export function SugerenciasIA() {
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
   const [pending, startTransition] = useTransition();
   const [visto, setVisto] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function analizar() {
+    setError(null);
     startTransition(async () => {
       const resultado = await sugerirGatillosAction();
-      setSugerencias(resultado);
+      if (resultado.error) { setError(resultado.error); return; }
+      setSugerencias(resultado.data ?? []);
       setVisto(true);
     });
   }
@@ -35,6 +38,7 @@ export function SugerenciasIA() {
         </button>
       </div>
 
+      {error && <p className="text-sm text-red-600">{error}</p>}
       {visto && sugerencias.length === 0 && (
         <p className="text-sm text-muted-foreground">Sin evidencia suficiente para sugerir gatillos en este momento.</p>
       )}

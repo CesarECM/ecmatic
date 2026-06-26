@@ -6,6 +6,7 @@ import { sugerirCeldasVacias } from "@/services/matriz-ia";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { DimensionesMatriz } from "@/lib/supabase/types";
 import { logSistema } from "@/services/log-sistema";
+import { safeAction } from "@/lib/safe-action";
 
 export async function aprobarCeldaAction(id: string): Promise<void> {
   await aprobarCelda(id);
@@ -36,10 +37,10 @@ export async function crearCeldaManualAction(
   revalidatePath("/admin/matriz");
 }
 
-export async function generarSugerenciasAction(): Promise<{ generadas: number }> {
+export const generarSugerenciasAction = safeAction(async (): Promise<{ generadas: number }> => {
   void logSistema({ categoria: "ui", tipoAccion: "matriz.generar-sugerencias", fase: "inicio" });
   const generadas = await sugerirCeldasVacias();
   void logSistema({ categoria: "ui", tipoAccion: "matriz.generar-sugerencias", fase: "ok", resultado: `${generadas} celdas generadas`, metadata: { generadas } });
   revalidatePath("/admin/matriz");
   return { generadas };
-}
+});

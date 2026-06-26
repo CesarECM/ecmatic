@@ -38,37 +38,27 @@ function ItemMensaje({ item }: { item: MensajeItem }) {
   function enviar() {
     const id = toast.loading("Enviando mensaje...");
     startTransition(async () => {
-      try {
-        await aprobarMensajeAction(item.id, item.telefono, [respuesta]);
-        toast.success("Mensaje enviado", { id });
-      } catch {
-        toast.error("Error al enviar", { id });
-      }
+      const r = await aprobarMensajeAction(item.id, item.telefono, [respuesta]);
+      if (r.error) toast.error(r.error, { id });
+      else toast.success("Mensaje enviado", { id });
     });
   }
 
   function soloGuardar() {
     const id = toast.loading("Guardando...");
     startTransition(async () => {
-      try {
-        await actualizarMensajeAction(item.id, respuesta);
-        toast.success("Cambios guardados", { id });
-        setEditando(false);
-      } catch {
-        toast.error("Error al guardar", { id });
-      }
+      const r = await actualizarMensajeAction(item.id, respuesta);
+      if (r.error) toast.error(r.error, { id });
+      else { toast.success("Cambios guardados", { id }); setEditando(false); }
     });
   }
 
   function rechazar() {
     const id = toast.loading("Rechazando...");
     startTransition(async () => {
-      try {
-        await rechazarMensajeAction(item.id);
-        toast.success("Mensaje rechazado", { id });
-      } catch {
-        toast.error("Error al rechazar", { id });
-      }
+      const r = await rechazarMensajeAction(item.id);
+      if (r.error) toast.error(r.error, { id });
+      else toast.success("Mensaje rechazado", { id });
     });
   }
 
