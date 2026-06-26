@@ -45,12 +45,15 @@ export async function POST(request: NextRequest) {
 
   const tipo = (payload.type ?? payload.event ?? "") as string;
 
+  // GHL workflow webhooks no incluyen `type` ni body — solo contactId es suficiente
+  const esMensajeWF = !tipo && !!payload.contactId;
+
   // Log diagnóstico: captura todo lo que llega al webhook
   void logSistema({
     categoria:  "webhook",
     tipoAccion: "webhook.ghl.raw",
     fase:       "inicio",
-    resultado:  tipo || "(sin tipo)",
+    resultado:  tipo || (esMensajeWF ? "(workflow-mensaje)" : "(sin tipo)"),
     metadata:   {
       type:           payload.type,
       event:          payload.event,
@@ -58,12 +61,14 @@ export async function POST(request: NextRequest) {
       contactId:      payload.contactId,
       conversationId: payload.conversationId,
       channel:        payload.channel,
+      direction:      payload.direction,
       body_preview:   typeof payload.body === "string" ? payload.body.slice(0, 100) : null,
+      keys:           Object.keys(payload),
     },
   });
 
   // ── Mensajes entrantes WA (respuestas a la campaña SBC) ─────────────────
-  if (EVENTOS_MENSAJE.has(tipo)) {
+  if (EVENTOS_MENSAJE.has(tipo) || esMensajeWF) {
     void logSistema({
       categoria:  "webhook",
       tipoAccion: "webhook.ghl.mensaje",

@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 import { callClaudeIA } from "@/lib/ai/client";
 import { agregarTagsContacto } from "@/lib/ghl/contacts-api";
-import { buscarConversacionWA, enviarMensajeGHL } from "@/lib/ghl/conversations-api";
+import { buscarConversacionWA, obtenerMensajes, enviarMensajeGHL } from "@/lib/ghl/conversations-api";
 import { registrarRespuestaGHL } from "@/services/ab-workflows-ghl";
 
 const CAMPANA_ACTIVA = "sbc_jun26";
@@ -22,16 +22,34 @@ const TEXTOS_POSITIVOS = [
 export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   const contactId      = payload.contactId as string | undefined;
   const conversationId = payload.conversationId as string | undefined;
-  const cuerpo         = ((payload.body ?? payload.message ?? payload.text ?? "") as string).toLowerCase().trim();
+
+  // GHL workflow webhooks no incluyen el cuerpo del mensaje — lo obtenemos via API
+  let cuerpo = ((payload.body ?? payload.message ?? payload.text ?? "") as string).trim();
+
+  if (!contactId) {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "error", resultado: "sin contactId" });
+    return;
+  }
+
+  if (!cuerpo) {
+    try {
+      const conv = await buscarConversacionWA(contactId);
+      if (conv) {
+        const mensajes = await obtenerMensajes(conv.id, 5);
+        const ultimo = mensajes.find((m) => m.direction === "inbound");
+        cuerpo = (ultimo?.body ?? ultimo?.text ?? "").trim();
+      }
+    } catch { /* sin conversación — cuerpo queda vacío */ }
+  }
 
   void logSistema({
     categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "inicio",
-    resultado: cuerpo.slice(0, 80) || "(sin cuerpo)",
+    resultado: cuerpo.slice(0, 80) || "(sin cuerpo tras API lookup)",
     metadata:  { contactId, conversationId, cuerpo_raw: cuerpo.slice(0, 200) },
   });
 
-  if (!contactId || !cuerpo) {
-    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "error", resultado: "sin contactId o cuerpo" });
+  if (!cuerpo) {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "error", resultado: "cuerpo vacío tras API lookup" });
     return;
   }
 
