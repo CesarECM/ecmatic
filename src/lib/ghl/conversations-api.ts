@@ -41,10 +41,11 @@ export async function inscribirEnWorkflow(contactId: string, workflowId: string)
   });
 }
 
-export async function enviarMensajeGHL(conversationId: string, mensaje: string): Promise<void> {
+export async function enviarMensajeGHL(conversationId: string, mensaje: string, contactId?: string): Promise<void> {
   await ghlPost("/conversations/messages", {
     type: "WhatsApp",
     conversationId,
+    contactId,
     message: mensaje,
   });
 }

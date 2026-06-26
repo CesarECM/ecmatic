@@ -97,7 +97,8 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, "negativo");
     if (convId) {
       await enviarMensajeGHL(convId,
-        "Entendido, no hay problema. Si en algún momento reconsideras tu certificación EC0217.01, aquí estaremos. Que te vaya muy bien."
+        "Entendido, no hay problema. Si en algún momento reconsideras tu certificación EC0217.01, aquí estaremos. Que te vaya muy bien.",
+        contactId
       ).catch((e) => void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) }));
     }
     return;
@@ -125,7 +126,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   });
 
   if (respuesta) {
-    await enviarMensajeGHL(convId, respuesta).catch((e) =>
+    await enviarMensajeGHL(convId, respuesta, contactId).catch((e) =>
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) })
     );
     void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `conv:${convId}` });
