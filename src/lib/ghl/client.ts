@@ -33,3 +33,30 @@ export async function ghlPost<T>(path: string, body: unknown): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+export async function ghlPut<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${GHL_BASE}${path}`, {
+    method:  "PUT",
+    headers: headers(),
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`GHL API PUT ${res.status} ${path}: ${text.slice(0, 200)}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function ghlDelete<T = void>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${GHL_BASE}${path}`, {
+    method:  "DELETE",
+    headers: headers(),
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`GHL API DELETE ${res.status} ${path}: ${text.slice(0, 200)}`);
+  }
+  const text = await res.text().catch(() => "");
+  return (text ? JSON.parse(text) : {}) as T;
+}
