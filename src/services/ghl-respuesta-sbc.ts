@@ -79,7 +79,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     await agregarTagsContacto(contactId, ["ecm_blacklist", "ecm_sbc_descartado"]).catch(() => null);
     await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, "negativo");
 
-    const convId = conversationId ?? (await buscarConversacionWA(contactId).catch(() => null))?.id;
+    const convId = conversationId || (await buscarConversacionWA(contactId).catch(() => null))?.id;
     if (convId) {
       await enviarMensajeGHL(convId,
         "Entendido, no hay problema. Si en algún momento reconsideras tu certificación EC0217.01, aquí estaremos. Que te vaya muy bien."
