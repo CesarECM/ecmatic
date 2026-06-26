@@ -70,36 +70,65 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   if (!log?.enviado) return;
 
-  // Clasificar intención del mensaje
-  const esNegativo = TEXTOS_NEGATIVOS.some((t) => cuerpo.includes(t));
-  const esPositivo = TEXTOS_POSITIVOS.some((t) => cuerpo.includes(t)) || !esNegativo;
+  // Clasificar intención del mensaje (cuerpo ya viene del API lookup o del payload)
+  const cuerpoLower = cuerpo.toLowerCase();
+  const esNegativo  = TEXTOS_NEGATIVOS.some((t) => cuerpoLower.includes(t));
+  const esPositivo  = TEXTOS_POSITIVOS.some((t) => cuerpoLower.includes(t)) || !esNegativo;
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.clasificacion", fase: "ok",
+    resultado: esNegativo ? "negativo" : "positivo",
+    metadata:  { cuerpo },
+  });
+
+  // Buscar conversación — conversationId puede llegar vacío desde el workflow webhook
+  const convId = conversationId || (await buscarConversacionWA(contactId).catch((e) => {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.buscar_conv", fase: "error", resultado: String(e) });
+    return null;
+  }))?.id;
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.buscar_conv", fase: convId ? "ok" : "error",
+    resultado: convId ?? "sin conversación WA",
+  });
 
   if (esNegativo) {
-    // Blacklist + respuesta de cierre amable
     await agregarTagsContacto(contactId, ["ecm_blacklist", "ecm_sbc_descartado"]).catch(() => null);
     await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, "negativo");
-
-    const convId = conversationId || (await buscarConversacionWA(contactId).catch(() => null))?.id;
     if (convId) {
       await enviarMensajeGHL(convId,
         "Entendido, no hay problema. Si en algún momento reconsideras tu certificación EC0217.01, aquí estaremos. Que te vaya muy bien."
-      ).catch(() => null);
+      ).catch((e) => void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) }));
     }
     return;
   }
 
-  // Respuesta positiva o neutra → generar respuesta con Sonnet
-  await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, esPositivo ? "positivo" : "neutro");
+  await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, "positivo");
 
-  const convId = conversationId ?? (await buscarConversacionWA(contactId).catch(() => null))?.id;
-  if (!convId) return;
+  if (!convId) {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: "sin convId — no se puede responder" });
+    return;
+  }
 
   const linkPago = process.env.SBC_PAGO_URL ?? "https://ceecm.mx/smartbuilder";
-  const mensajeOriginal = payload.body ?? payload.message ?? payload.text ?? "";
 
-  const respuesta = await generarRespuestaSBC(mensajeOriginal, linkPago).catch(() => null);
+  void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "inicio", resultado: cuerpo.slice(0, 80) });
+
+  const respuesta = await generarRespuestaSBC(cuerpo, linkPago).catch((e) => {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "error", resultado: String(e) });
+    return null;
+  });
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: respuesta ? "ok" : "error",
+    resultado: respuesta?.slice(0, 120) ?? "null",
+  });
+
   if (respuesta) {
-    await enviarMensajeGHL(convId, respuesta).catch(() => null);
+    await enviarMensajeGHL(convId, respuesta).catch((e) =>
+      void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) })
+    );
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `conv:${convId}` });
   }
 }
 
