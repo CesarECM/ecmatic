@@ -22,7 +22,8 @@ export type TareaIA =
   | "DESCONFIANZA"      // S31.5 — mapeo a Tres Desconfianzas Raíz
   | "BRIEF_DISENO"         // S33.3 — genera brief de diseño para assets faltantes
   | "CLUSTERING"           // S33.8 — genera título para cluster de sugerencias
-  | "DETECTOR_REVELACION"; // detecta señal para revelar producto (oculto→preguntando→revelado)
+  | "DETECTOR_REVELACION"  // detecta señal para revelar producto (oculto→preguntando→revelado)
+  | "CLASIFICAR_WORKFLOW"; // GHL-3: clasifica workflows de GHL (keep/rescue/delete)
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -54,6 +55,7 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   BRIEF_DISENO:          "haiku",
   CLUSTERING:            "haiku",
   DETECTOR_REVELACION:   "haiku",
+  CLASIFICAR_WORKFLOW:   "haiku",
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.
