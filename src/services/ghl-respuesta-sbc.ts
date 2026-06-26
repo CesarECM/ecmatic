@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { logSistema } from "@/services/log-sistema";
 import { callClaudeIA } from "@/lib/ai/client";
 import { agregarTagsContacto } from "@/lib/ghl/contacts-api";
 import { buscarConversacionWA, enviarMensajeGHL } from "@/lib/ghl/conversations-api";
@@ -23,7 +24,16 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   const conversationId = payload.conversationId as string | undefined;
   const cuerpo         = ((payload.body ?? payload.message ?? payload.text ?? "") as string).toLowerCase().trim();
 
-  if (!contactId || !cuerpo) return;
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "inicio",
+    resultado: cuerpo.slice(0, 80) || "(sin cuerpo)",
+    metadata:  { contactId, conversationId, cuerpo_raw: cuerpo.slice(0, 200) },
+  });
+
+  if (!contactId || !cuerpo) {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "error", resultado: "sin contactId o cuerpo" });
+    return;
+  }
 
   // Verificar que este contacto está en nuestra campaña activa
   const supabase = createServiceClient();
@@ -34,7 +44,13 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     .eq("campana", CAMPANA_ACTIVA)
     .maybeSingle() as { data: { id: string; variante: "a" | "b"; enviado: boolean } | null };
 
-  if (!log?.enviado) return; // No es contacto de la campaña o no recibió el template
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.lookup", fase: log?.enviado ? "ok" : "error",
+    resultado: log ? (log.enviado ? "en campaña" : "no enviado") : "no encontrado",
+    metadata:  { contactId, campana: CAMPANA_ACTIVA, log_id: log?.id ?? null },
+  });
+
+  if (!log?.enviado) return;
 
   // Clasificar intención del mensaje
   const esNegativo = TEXTOS_NEGATIVOS.some((t) => cuerpo.includes(t));

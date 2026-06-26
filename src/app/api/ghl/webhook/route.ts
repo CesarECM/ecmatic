@@ -20,6 +20,12 @@ const EVENTOS_CONTACTO = new Set([
 const EVENTOS_MENSAJE = new Set([
   "InboundMessage",
   "inbound.message",
+  "inbound_message",
+  "MESSAGE_RECEIVED",
+  "message_received",
+  "CustomerReplied",
+  "customer_replied",
+  "customer.replied",
 ]);
 
 export async function POST(request: NextRequest) {
@@ -38,6 +44,23 @@ export async function POST(request: NextRequest) {
   }
 
   const tipo = (payload.type ?? payload.event ?? "") as string;
+
+  // Log diagnóstico: captura todo lo que llega al webhook
+  void logSistema({
+    categoria:  "webhook",
+    tipoAccion: "webhook.ghl.raw",
+    fase:       "inicio",
+    resultado:  tipo || "(sin tipo)",
+    metadata:   {
+      type:           payload.type,
+      event:          payload.event,
+      messageType:    payload.messageType,
+      contactId:      payload.contactId,
+      conversationId: payload.conversationId,
+      channel:        payload.channel,
+      body_preview:   typeof payload.body === "string" ? payload.body.slice(0, 100) : null,
+    },
+  });
 
   // ── Mensajes entrantes WA (respuestas a la campaña SBC) ─────────────────
   if (EVENTOS_MENSAJE.has(tipo)) {
