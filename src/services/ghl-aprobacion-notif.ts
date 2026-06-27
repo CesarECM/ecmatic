@@ -49,20 +49,44 @@ export async function notificarMensajePendienteGHL(params: ParamsNotifGHL): Prom
     `🎯 Score IA: ${scoreDisplay}\n\n` +
     `Revisar → ${fichaUrl}`;
 
+  void logSistema({
+    categoria:  "webhook",
+    tipoAccion: "ghl_aprobacion.notif",
+    fase:       "inicio",
+    resultado:  `adminWa:${adminWa} urgencia:${urgencia}`,
+    metadata:   { contactId, scoreIA },
+  });
+
   try {
     const adminContactId = await buscarOCrearContactoGHL(adminWa, "César Admin");
-    if (!adminContactId) throw new Error("No se pudo obtener contactId del admin en GHL");
+    if (!adminContactId) throw new Error("buscarOCrearContactoGHL retornó null");
 
-    const convId = await obtenerOCrearConversacionWA(adminContactId);
-    if (!convId) throw new Error("No se pudo obtener conversación WA del admin en GHL");
+    void logSistema({
+      categoria:  "webhook",
+      tipoAccion: "ghl_aprobacion.notif",
+      fase:       "llamado",
+      resultado:  `contacto_ok adminContactId:${adminContactId}`,
+      metadata:   { contactId, scoreIA },
+    });
 
-    await enviarMensajeGHL(convId, texto, adminContactId);
+    const adminConvId = await obtenerOCrearConversacionWA(adminContactId);
+    if (!adminConvId) throw new Error("obtenerOCrearConversacionWA retornó null");
+
+    void logSistema({
+      categoria:  "webhook",
+      tipoAccion: "ghl_aprobacion.notif",
+      fase:       "llamado",
+      resultado:  `conv_ok adminConvId:${adminConvId}`,
+      metadata:   { contactId, scoreIA },
+    });
+
+    await enviarMensajeGHL(adminConvId, texto, adminContactId);
 
     void logSistema({
       categoria:  "webhook",
       tipoAccion: "ghl_aprobacion.notif",
       fase:       "ok",
-      resultado:  `adminWa:${adminWa}`,
+      resultado:  `mensaje_enviado adminWa:${adminWa}`,
       metadata:   { contactId, scoreIA },
     });
   } catch (err) {
