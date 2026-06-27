@@ -27,6 +27,17 @@ export async function buscarConversacionWA(contactId: string): Promise<GHLConver
   return data.conversations?.[0] ?? null;
 }
 
+export async function obtenerOCrearConversacionWA(contactId: string): Promise<string | null> {
+  const locationId = process.env.GHL_LOCATION_ID!;
+  const existente = await buscarConversacionWA(contactId);
+  if (existente) return existente.id;
+  const data = await ghlPost<{ conversation: GHLConversation }>("/conversations/", {
+    contactId,
+    locationId,
+  });
+  return data.conversation?.id ?? null;
+}
+
 export async function obtenerMensajes(conversationId: string, limit = 20): Promise<GHLMessage[]> {
   const data = await ghlGet<{ messages: { messages: GHLMessage[] } }>(
     `/conversations/${conversationId}/messages`,
