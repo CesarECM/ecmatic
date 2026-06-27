@@ -60,10 +60,12 @@ export async function eliminarConversacion(conversationId: string): Promise<void
 }
 
 // Crea una nota interna en la conversación — trigger de push en LeadConnector
-export async function crearNotaInternaGHL(conversationId: string, texto: string): Promise<void> {
+// GHL requiere contactId además de conversationId para este endpoint
+export async function crearNotaInternaGHL(conversationId: string, texto: string, contactId?: string): Promise<void> {
   await ghlPost("/conversations/messages", {
     type: "Note",
     conversationId,
+    ...(contactId ? { contactId } : {}),
     message: texto,
   });
 }
