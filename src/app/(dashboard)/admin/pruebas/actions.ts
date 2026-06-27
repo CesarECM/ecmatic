@@ -141,10 +141,10 @@ export async function agregarACampanaAction(
   const db = createServiceClient();
   await db.from("leads").upsert(
     {
-      telefono:           `ghl_${ghlContactId}`,
-      canal_origen:       "whatsapp",
+      telefono:            `ghl_${ghlContactId}`,
+      canal_origen:        "whatsapp",
       privacidad_aceptada: true,
-      nombre:             usuario.nombre,
+      nombre:              usuario.nombre,
     },
     { onConflict: "telefono" }
   );
@@ -153,21 +153,28 @@ export async function agregarACampanaAction(
   await agregarTagsContacto(ghlContactId, [TAG_FUENTE]).catch(() => null);
   const variante = await elegirVarianteWorkflow(CAMPANA_ACTIVA);
   const workflowId = variante === "a" ? workflowA : workflowB;
-  await inscribirEnWorkflow(ghlContactId, workflowId);
 
-  // Registrar en ghl_campana_logs
-  await (db as any).from("ghl_campana_logs").upsert(
-    {
-      ghl_contact_id: ghlContactId,
-      nombre:         usuario.nombre,
-      campana:        CAMPANA_ACTIVA,
-      variante,
-      enviado:        true,
-      enviado_at:     new Date().toISOString(),
-      categoria_sbc:  "prueba_manual",
-    },
-    { onConflict: "ghl_contact_id,campana" }
-  );
+  try {
+    await inscribirEnWorkflow(ghlContactId, workflowId);
+  } catch (err) {
+    return { ok: false, error: `Error al inscribir en workflow GHL: ${String(err).slice(0, 150)}` };
+  }
+
+  // Registrar en ghl_campana_logs (delete + insert para evitar duplicados sin necesitar constraint única)
+  await (db as any).from("ghl_campana_logs")
+    .delete()
+    .eq("ghl_contact_id", ghlContactId)
+    .eq("campana", CAMPANA_ACTIVA);
+
+  await (db as any).from("ghl_campana_logs").insert({
+    ghl_contact_id: ghlContactId,
+    nombre:         usuario.nombre,
+    campana:        CAMPANA_ACTIVA,
+    variante,
+    enviado:        true,
+    enviado_at:     new Date().toISOString(),
+    categoria_sbc:  "prueba_manual",
+  });
 
   void logSistema({
     categoria:  "servicio",
