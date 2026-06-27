@@ -61,16 +61,14 @@ export async function notificarMensajePendienteGHL(params: ParamsNotifGHL): Prom
   const waErr  = !waOk  ? (resultados[0] as PromiseRejectedResult).reason : null;
   const ghlErr = !ghlOk ? (resultados[1] as PromiseRejectedResult).reason : null;
 
+  const waErrStr  = waErr  ? ` | wa_err: ${String(waErr).slice(0, 150)}`  : "";
+  const ghlErrStr = ghlErr ? ` | ghl_err: ${String(ghlErr).slice(0, 150)}` : "";
+
   void logSistema({
     categoria:  "webhook",
     tipoAccion: "ghl_aprobacion.notif",
     fase:       waOk || ghlOk ? "ok" : "error",
-    resultado:  `wa:${waOk} ghl:${ghlOk} urgencia:${urgencia}`,
-    metadata:   {
-      itemId, contactId, scoreIA,
-      adminWa: adminWa ?? "(no configurado)",
-      wa_error:  waErr  ? String(waErr).slice(0, 200)  : null,
-      ghl_error: ghlErr ? String(ghlErr).slice(0, 200) : null,
-    },
+    resultado:  `wa:${waOk} ghl:${ghlOk} adminWa:${adminWa ?? "null"} convId:${convId}${waErrStr}${ghlErrStr}`,
+    metadata:   { itemId, contactId, scoreIA },
   });
 }
