@@ -239,15 +239,25 @@ async function generarRespuestaMotorCompleto(
   const telefono = `ghl_${contactId}`;
 
   let nombre: string | null = null;
+  let tagsGHL: string[] = [];
   try {
     const c = await obtenerContacto(contactId);
-    nombre = (c.name ?? [c.firstName, c.lastName].filter(Boolean).join(" ")) || null;
+    nombre  = (c.name ?? [c.firstName, c.lastName].filter(Boolean).join(" ")) || null;
+    tagsGHL = c.tags ?? [];
   } catch { /* usar null */ }
+
+  // Ruta del pipeline SBC — garantiza que el motor inyecte la ficha del servicio
+  const SBC_PIPELINE_RUTA = process.env.GHL_SBC_PIPELINE_RUTA ?? "smartbuilder_vd_wa_mqqau2nj";
 
   const { data: lead, error } = await supabase
     .from("leads")
     .upsert(
-      { telefono, canal_origen: "whatsapp", privacidad_aceptada: true, ...(nombre && { nombre }) },
+      {
+        telefono,
+        canal_origen:  "whatsapp",
+        privacidad_aceptada: true,
+        ...(nombre && { nombre }),
+      },
       { onConflict: "telefono" }
     )
     .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado, modo_revelacion")
@@ -304,15 +314,25 @@ async function generarRespuestaMotorCompleto(
     if (slots?.length) slotsDemo = slots;
   }
 
+  // pipeline_ruta efectiva: la del lead si ya fue asignada a algo específico, si no la SBC
+  const pipelineRutaEfectiva = (lead.pipeline_ruta && lead.pipeline_ruta !== "tripwire" && lead.pipeline_ruta !== "premium")
+    ? lead.pipeline_ruta
+    : SBC_PIPELINE_RUTA;
+
+  const etiquetasMotor = [
+    ...etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
+    ...tagsGHL.map((t) => `ghl:${t}`),
+  ];
+
   const { texto, recursosIds } = await generarRespuesta([cuerpo], {
     nombre:        nombre ?? lead.nombre ?? null,
     temperamento:  lead.temperamento_inferido ?? null,
     pipelineStage: lead.pipeline_stage ?? "Nuevo",
     compraPreviaa: lead.compra_previa ?? false,
     historial,
-    pipelineRuta:  lead.pipeline_ruta ?? "tripwire",
+    pipelineRuta:  pipelineRutaEfectiva as import("@/lib/supabase/types").PipelineRuta,
     faseCAGC:      estadoCagc?.fase_numero,
-    etiquetas:     etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
+    etiquetas:     etiquetasMotor,
     canal_origen:  "whatsapp",
     setterEstado,
     protocoloObjecion,
