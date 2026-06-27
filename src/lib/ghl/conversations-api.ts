@@ -1,4 +1,4 @@
-import { ghlGet, ghlPost } from "./client";
+import { ghlGet, ghlPost, ghlDelete } from "./client";
 
 export interface GHLMessage {
   id: string;
@@ -48,6 +48,15 @@ export async function enviarMensajeGHL(conversationId: string, mensaje: string, 
     contactId,
     message: mensaje,
   });
+}
+
+// Sprint 38 — Elimina una conversación completa en GHL (reset usuario prueba)
+export async function eliminarConversacion(conversationId: string): Promise<void> {
+  try {
+    await ghlDelete(`/conversations/${conversationId}`);
+  } catch {
+    // Si la API no soporta DELETE en este endpoint, el error es silencioso
+  }
 }
 
 // Crea una nota interna en la conversación — trigger de push en LeadConnector

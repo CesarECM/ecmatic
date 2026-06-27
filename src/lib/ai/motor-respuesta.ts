@@ -6,6 +6,7 @@ import { registrarUsoIA } from "@/services/alertas-ia";
 import { inferirRespuestaMatriz } from "@/services/matriz-ia";
 import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
 import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
+import { listarPagosServicio } from "@/services/servicio-pagos";
 import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
 import { instruccionReglaOroCierre } from "./regla-oro-cierre";
 import { generarBloqueEstrategiaPrecio, type DatosPrecioServicio, type LinkPago } from "./estrategia-precio";
@@ -109,15 +110,16 @@ export async function generarRespuesta(
     serviciosAncla.length > 0
       ? Promise.all(serviciosAncla.map(async (s) => {
           const supabase = createServiceClient();
-          const [pago, svcRow] = await Promise.all([
+          const [pago, svcRow, todosLinks] = await Promise.all([
             seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
             supabase.from("servicios" as "recursos_conocimiento")
               .select("precio_centavos, precio_descuento_centavos, precio_apartado_centavos, modo_venta")
               .eq("id", s.id).single()
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               .then((r: any) => r.data ?? null, () => null),
+            listarPagosServicio(s.id).catch(() => []),
           ]);
-          return { titulo: s.titulo, id: s.id, pago, svc: svcRow };
+          return { titulo: s.titulo, id: s.id, pago, svc: svcRow, todosLinks };
         }))
       : Promise.resolve([]),
     listarCuentasActivas().catch(() => []),
@@ -151,9 +153,10 @@ export async function generarRespuesta(
   }).join("\n\n");
 
   // Estrategia de cierre (solo cuando producto revelado y hay servicio)
+  // Usa todosLinks del servicio principal para incluir tipo=apartado en la estrategia
   const svcPrincipal = pagosServicios[0]?.svc as DatosPrecioServicio | null ?? null;
-  const linksParaEstrategia: LinkPago[] = pagosConLink.map((p) => ({
-    tipo: p.pago!.tipo, url: p.pago!.url, descripcion: p.pago!.descripcion ?? null,
+  const linksParaEstrategia: LinkPago[] = (pagosServicios[0]?.todosLinks ?? []).map((p) => ({
+    tipo: p.tipo, url: p.url, nombre: p.nombre,
   }));
   const bloqueEstrategia = (modoRevelacion === "revelado" && svcPrincipal)
     ? generarBloqueEstrategiaPrecio(svcPrincipal, linksParaEstrategia, contexto.historial)

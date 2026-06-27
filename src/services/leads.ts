@@ -2,10 +2,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { callClaudeIA } from "@/lib/ai/client";
 import { enviarBienvenida } from "@/lib/email/transaccional";
 import { verificarBlacklist } from "@/services/limpieza-leads";
+import { esUsuarioPrueba } from "@/services/usuarios-prueba";
 import type { Temperamento, IntencionClasificada } from "@/lib/supabase/types";
 
 // ── S1.7 / S15.3: Busca o crea el lead por número de teléfono ───────────
 // Si el teléfono está en blacklist, lanza error silencioso para cortar el flujo.
+// S38.1: Si el teléfono es un usuario de prueba, marca is_test=true automáticamente.
 export async function obtenerOCrearLead(telefono: string) {
   const enBlacklist = await verificarBlacklist(telefono).catch(() => false);
   if (enBlacklist) throw new Error("[leads] Número en blacklist — flujo abortado");
@@ -20,9 +22,12 @@ export async function obtenerOCrearLead(telefono: string) {
 
   if (existente) return existente;
 
-  const { data: nuevo, error } = await supabase
+  const esPrueba = await esUsuarioPrueba(telefono).catch(() => false);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: nuevo, error } = await (supabase as any)
     .from("leads")
-    .insert({ telefono, canal_origen: "whatsapp" })
+    .insert({ telefono, canal_origen: "whatsapp", ...(esPrueba ? { is_test: true } : {}) })
     .select()
     .single();
 

@@ -47,6 +47,27 @@ export async function eliminarTagsContacto(contactId: string, tags: string[]): P
   await ghlDelete(`/contacts/${contactId}/tags`, { tags });
 }
 
+// Sprint 38 — Oportunidades por contacto (para reset GHL)
+
+export async function buscarOportunidadesContacto(
+  contactId: string
+): Promise<{ id: string }[]> {
+  const locationId = process.env.GHL_LOCATION_ID!;
+  try {
+    const data = await ghlGet<{ opportunities: { id: string }[] }>(
+      "/opportunities/search",
+      { location_id: locationId, contact_id: contactId, limit: "100" }
+    );
+    return data.opportunities ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function eliminarOportunidad(opportunityId: string): Promise<void> {
+  await ghlDelete(`/opportunities/${opportunityId}`);
+}
+
 // GHL-9.5 — Busca un contacto en GHL por número de teléfono.
 // Si no existe, lo crea con el nombre del lead. Retorna el contactId.
 export async function buscarOCrearContactoGHL(

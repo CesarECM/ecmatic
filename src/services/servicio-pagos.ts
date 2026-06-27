@@ -1,5 +1,5 @@
 // S24.1 — CRUD de links de pago por servicio.
-// Cada servicio puede tener múltiples permalinks (landing, pasarela).
+// Cada servicio puede tener múltiples permalinks (landing, pasarela, apartado).
 // La IA elige cuál compartir según fase CAGC del lead.
 
 import { createServiceClient } from "@/lib/supabase/service";
@@ -10,7 +10,7 @@ export interface ServicioPago {
   servicio_id: string;
   tipo: TipoPagoServicio;
   url: string;
-  descripcion: string | null;
+  nombre: string;
   activo: boolean;
   created_at: string;
   updated_at: string;
@@ -20,10 +20,11 @@ export interface CrearServicioPagoInput {
   servicio_id: string;
   tipo: TipoPagoServicio;
   url: string;
-  descripcion?: string | null;
+  nombre: string;
   activo?: boolean;
 }
 
+// Para el motor IA: solo activos
 export async function listarPagosServicio(servicioId: string): Promise<ServicioPago[]> {
   const supabase = createServiceClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,6 +38,20 @@ export async function listarPagosServicio(servicioId: string): Promise<ServicioP
   return (data ?? []) as ServicioPago[];
 }
 
+// Para el panel admin: todos (activos e inactivos)
+export async function listarTodosPagosServicio(servicioId: string): Promise<ServicioPago[]> {
+  const supabase = createServiceClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("servicio_pagos")
+    .select("*")
+    .eq("servicio_id", servicioId)
+    .order("tipo")
+    .order("created_at");
+  if (error) throw new Error(`[servicio-pagos] Error listando: ${error.message}`);
+  return (data ?? []) as ServicioPago[];
+}
+
 export async function crearServicioPago(input: CrearServicioPagoInput): Promise<ServicioPago> {
   const supabase = createServiceClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,7 +61,7 @@ export async function crearServicioPago(input: CrearServicioPagoInput): Promise<
       servicio_id: input.servicio_id,
       tipo:        input.tipo,
       url:         input.url,
-      descripcion: input.descripcion ?? null,
+      nombre:      input.nombre,
       activo:      input.activo ?? true,
     })
     .select()

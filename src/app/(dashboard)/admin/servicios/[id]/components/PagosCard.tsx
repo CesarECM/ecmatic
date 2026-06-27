@@ -60,8 +60,9 @@ export function PagosCard({ servicioId, pagos }: Props) {
               <div key={p.id} className={`flex items-center justify-between rounded border px-3 py-2 text-sm ${!p.activo ? "opacity-50" : ""}`}>
                 <div className="flex items-center gap-2 min-w-0">
                   <Badge variant="outline" className="text-xs shrink-0">{p.tipo}</Badge>
+                  <span className="text-xs font-medium shrink-0">{p.nombre}</span>
                   <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate">
-                    {p.descripcion || p.url}
+                    {p.url}
                   </a>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-2">
@@ -88,7 +89,7 @@ export function PagosCard({ servicioId, pagos }: Props) {
               <option value="landing">Landing</option>
               <option value="pasarela">Pasarela de pago</option>
             </select>
-            <Input name="descripcion" placeholder="Descripción (opcional)" className="text-sm" />
+            <Input name="nombre" required placeholder="Nombre *" className="text-sm" />
           </div>
           <div className="flex gap-2">
             <Input name="url" required placeholder="https://…" className="text-sm flex-1" />

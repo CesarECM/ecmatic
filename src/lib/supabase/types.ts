@@ -42,7 +42,7 @@ export type TemperaturaCierre = "fria" | "tibia" | "caliente";
 export type ActorPromesa = "vendedor" | "lead" | "ia";
 export type TipoTarea = "limpieza" | "informacion" | "nutricion" | "seguimiento" | "cierre";
 export type TipoLeadmagnet = "pre-creado" | "generable-ia" | "requiere-humano";
-export type TipoPagoServicio = "landing" | "pasarela";
+export type TipoPagoServicio = "landing" | "pasarela" | "apartado";
 
 // S34 — Prospección omnicanal + Templates Meta
 export type CanalProspeccion = "email" | "whatsapp";
@@ -975,20 +975,20 @@ export interface Database {
       servicio_pagos: {
         Row: {
           id: string;
-          recurso_id: string;
+          servicio_id: string;
           tipo: TipoPagoServicio;
           url: string;
-          descripcion: string | null;
+          nombre: string;
           activo: boolean;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
-          recurso_id: string;
+          servicio_id: string;
           tipo: TipoPagoServicio;
           url: string;
-          descripcion?: string | null;
+          nombre: string;
           activo?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["servicio_pagos"]["Insert"]>;

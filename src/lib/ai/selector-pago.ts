@@ -9,7 +9,7 @@ import type { TipoPagoServicio } from "@/lib/supabase/types";
 export interface PagoSeleccionado {
   url: string;
   tipo: TipoPagoServicio;
-  descripcion: string | null;
+  nombre: string;
 }
 
 export async function seleccionarPagoServicio(
@@ -19,12 +19,14 @@ export async function seleccionarPagoServicio(
   const pagos = await listarPagosServicio(recursoId).catch(() => []);
   if (!pagos.length) return null;
 
+  // Solo considera landing/pasarela (apartado se maneja por separado en estrategia-precio)
+  const regulares = pagos.filter((p) => p.tipo !== "apartado");
   const tipoPrioridad: TipoPagoServicio = (faseCagc ?? 0) >= 8 ? "pasarela" : "landing";
-  const seleccionado = pagos.find((p) => p.tipo === tipoPrioridad) ?? pagos[0];
+  const seleccionado = regulares.find((p) => p.tipo === tipoPrioridad) ?? regulares[0] ?? pagos[0];
 
   return {
-    url:         seleccionado.url,
-    tipo:        seleccionado.tipo,
-    descripcion: seleccionado.descripcion,
+    url:    seleccionado.url,
+    tipo:   seleccionado.tipo,
+    nombre: seleccionado.nombre,
   };
 }

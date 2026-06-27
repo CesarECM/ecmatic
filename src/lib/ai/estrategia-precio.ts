@@ -12,7 +12,7 @@ export interface DatosPrecioServicio {
 export interface LinkPago {
   tipo: string;
   url: string;
-  descripcion: string | null;
+  nombre: string;
 }
 
 const fmt = (c: number) => `$${(c / 100).toLocaleString("es-MX")} MXN`;

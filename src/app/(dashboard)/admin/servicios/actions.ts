@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { crearServicio, actualizarServicio, eliminarServicio } from "@/services/servicios";
 import { crearServicioPago, actualizarServicioPago, eliminarServicioPago } from "@/services/servicio-pagos";
+import {
+  crearCuentaBancaria, actualizarCuentaBancaria, eliminarCuentaBancaria,
+} from "@/services/cuentas-bancarias";
 import { crearRelacion, eliminarRelacion } from "@/services/servicio-relaciones";
 import { toggleImagenActiva, eliminarImagenServicio } from "@/services/imagen-servicio";
 import type { TipoRelacion } from "@/services/servicio-relaciones";
@@ -68,21 +71,32 @@ export async function actualizarDatosGeneralesAction(formData: FormData) {
 }
 
 export async function actualizarPreciosAction(formData: FormData) {
-  const id    = formData.get("id")    as string;
-  const lista = formData.get("precio_lista")     as string;
+  const id   = formData.get("id")               as string;
+  const lista = formData.get("precio_lista")    as string;
   const desc  = formData.get("precio_descuento") as string;
   if (!id) throw new Error("ID requerido");
 
-  const apartado = formData.get("precio_apartado") as string;
   await actualizarServicio(id, {
-    precio_centavos:           lista    ? Math.round(parseFloat(lista)    * 100) : null,
-    precio_descuento_centavos: desc     ? Math.round(parseFloat(desc)     * 100) : null,
-    precio_apartado_centavos:  apartado ? Math.round(parseFloat(apartado) * 100) : null,
+    precio_centavos:           lista ? Math.round(parseFloat(lista) * 100) : null,
+    precio_descuento_centavos: desc  ? Math.round(parseFloat(desc)  * 100) : null,
   });
 
   void logSistema({ categoria: "ui", tipoAccion: "servicios.actualizar-precios", fase: "ok", metadata: { servicio_id: id } });
   revalidatePath(`/admin/servicios/${id}`);
   revalidatePath("/admin/servicios");
+}
+
+export async function actualizarApartadoAction(formData: FormData) {
+  const id      = formData.get("id")             as string;
+  const monto   = formData.get("precio_apartado") as string;
+  if (!id) throw new Error("ID requerido");
+
+  await actualizarServicio(id, {
+    precio_apartado_centavos: monto ? Math.round(parseFloat(monto) * 100) : null,
+  });
+
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.actualizar-apartado", fase: "ok", metadata: { servicio_id: id } });
+  revalidatePath(`/admin/servicios/${id}`);
 }
 
 export async function eliminarServicioAction(id: string) {
@@ -136,12 +150,12 @@ export async function regenerarEmbeddingAction(id: string) {
 // ── Links de pago ────────────────────────────────────────────
 
 export async function crearPagoAction(formData: FormData) {
-  const servicioId  = formData.get("servicio_id") as string;
-  const tipo        = formData.get("tipo") as "landing" | "pasarela";
-  const url         = (formData.get("url") as string)?.trim();
-  const descripcion = (formData.get("descripcion") as string)?.trim() || null;
-  if (!servicioId || !tipo || !url) throw new Error("Faltan campos");
-  await crearServicioPago({ servicio_id: servicioId, tipo, url, descripcion });
+  const servicioId = formData.get("servicio_id") as string;
+  const tipo       = formData.get("tipo") as "landing" | "pasarela" | "apartado";
+  const url        = (formData.get("url")    as string)?.trim();
+  const nombre     = (formData.get("nombre") as string)?.trim();
+  if (!servicioId || !tipo || !url || !nombre) throw new Error("Faltan campos");
+  await crearServicioPago({ servicio_id: servicioId, tipo, url, nombre });
   void logSistema({ categoria: "ui", tipoAccion: "servicios.crear-pago", fase: "ok", metadata: { servicio_id: servicioId, tipo } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }
@@ -188,5 +202,31 @@ export async function toggleImagenActivaAction(imagenId: string, activa: boolean
 export async function eliminarImagenAction(imagenId: string, storagePath: string, servicioId: string) {
   await eliminarImagenServicio(imagenId, storagePath);
   void logSistema({ categoria: "ui", tipoAccion: "servicios.eliminar-imagen", fase: "ok", metadata: { imagen_id: imagenId, servicio_id: servicioId } });
+  revalidatePath(`/admin/servicios/${servicioId}`);
+}
+
+// ── Cuentas bancarias (globales) ─────────────────────────────
+
+export async function crearCuentaAction(formData: FormData, servicioId: string) {
+  const banco   = (formData.get("banco")   as string)?.trim();
+  const titular = (formData.get("titular") as string)?.trim();
+  const clabe   = (formData.get("clabe")   as string)?.trim() || null;
+  const cuenta  = (formData.get("cuenta")  as string)?.trim() || null;
+  const orden   = parseInt(formData.get("orden") as string ?? "0", 10) || 0;
+  if (!banco || !titular) throw new Error("Banco y titular son requeridos");
+  await crearCuentaBancaria({ banco, titular, clabe, cuenta, orden });
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.crear-cuenta-bancaria", fase: "ok" });
+  revalidatePath(`/admin/servicios/${servicioId}`);
+}
+
+export async function eliminarCuentaAction(cuentaId: string, servicioId: string) {
+  await eliminarCuentaBancaria(cuentaId);
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.eliminar-cuenta-bancaria", fase: "ok", metadata: { cuenta_id: cuentaId } });
+  revalidatePath(`/admin/servicios/${servicioId}`);
+}
+
+export async function toggleCuentaActivaAction(cuentaId: string, activa: boolean, servicioId: string) {
+  await actualizarCuentaBancaria(cuentaId, { activa });
+  void logSistema({ categoria: "ui", tipoAccion: "servicios.toggle-cuenta-bancaria", fase: "ok", metadata: { cuenta_id: cuentaId, activa } });
   revalidatePath(`/admin/servicios/${servicioId}`);
 }

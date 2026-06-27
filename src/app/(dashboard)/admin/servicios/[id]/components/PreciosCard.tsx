@@ -10,12 +10,11 @@ interface Props {
   servicioId: string;
   precioCentavos: number | null;
   precioDescuentoCentavos: number | null;
-  precioApartadoCentavos: number | null;
 }
 
 const toMXN = (c: number | null) => (c != null ? (c / 100).toFixed(2) : "");
 
-export function PreciosCard({ servicioId, precioCentavos, precioDescuentoCentavos, precioApartadoCentavos }: Props) {
+export function PreciosCard({ servicioId, precioCentavos, precioDescuentoCentavos }: Props) {
   const [pending, startTransition] = useTransition();
 
   const descuento = precioCentavos && precioDescuentoCentavos
@@ -83,25 +82,6 @@ export function PreciosCard({ servicioId, precioCentavos, precioDescuentoCentavo
               Descuento activo: {descuento}% sobre precio de lista
             </p>
           )}
-
-          <div className="space-y-1 border-t pt-3">
-            <label className="text-xs text-muted-foreground">Monto mínimo de apartado (MXN) — opcional</label>
-            <div className="flex items-center border rounded-md px-3 py-1.5 text-sm bg-background gap-1">
-              <span className="text-muted-foreground">$</span>
-              <input
-                name="precio_apartado"
-                type="number"
-                step="0.01"
-                min="0"
-                defaultValue={toMXN(precioApartadoCentavos)}
-                placeholder="0.00"
-                className="flex-1 bg-transparent outline-none"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Si se configura, la IA ofrecerá apartar el lugar con este monto cuando el lead dude por el precio.
-            </p>
-          </div>
 
           <Button type="submit" size="sm" disabled={pending}>Guardar precios</Button>
         </form>
