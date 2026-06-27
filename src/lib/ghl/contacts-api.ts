@@ -46,3 +46,33 @@ export async function eliminarTagsContacto(contactId: string, tags: string[]): P
   if (!tags.length) return;
   await ghlDelete(`/contacts/${contactId}/tags`, { tags });
 }
+
+// GHL-9.5 — Busca un contacto en GHL por número de teléfono.
+// Si no existe, lo crea con el nombre del lead. Retorna el contactId.
+export async function buscarOCrearContactoGHL(
+  telefono: string,
+  nombre?: string | null
+): Promise<string | null> {
+  const locationId = process.env.GHL_LOCATION_ID!;
+
+  try {
+    const busqueda = await ghlPost<SearchResponse>("/contacts/search", {
+      locationId,
+      filters: [{ field: "phone", operator: "eq", value: telefono }],
+      pageLimit: 1,
+    });
+
+    if (busqueda.contacts?.length) return busqueda.contacts[0].id;
+
+    // No existe — crear contacto en GHL
+    const creado = await ghlPost<{ contact: GHLContact }>("/contacts/", {
+      locationId,
+      phone: telefono,
+      ...(nombre ? { name: nombre } : {}),
+    });
+
+    return creado.contact?.id ?? null;
+  } catch {
+    return null;
+  }
+}

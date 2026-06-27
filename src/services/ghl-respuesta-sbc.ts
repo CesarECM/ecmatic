@@ -19,6 +19,8 @@ import { encolarMensajeGHL, obtenerUmbralAuto } from "@/services/ghl-aprobacion"
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { actualizarTagsYPipeline } from "@/services/ghl-tagging-progresivo";
 import { dispararDemoSbc, confirmarSlotDemo } from "@/services/ghl-demo-sbc";
+import { detectarEstadoPago } from "@/lib/ai/detectar-estado-pago";
+import { crearSeguimiento, marcarCompletado, obtenerActivo } from "@/services/seguimiento-lead";
 
 const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
@@ -113,7 +115,23 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   if (!resultado) return;
 
-  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds } = resultado;
+  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds, nuevoModo } = resultado;
+
+  // GHL-9: si el lead tiene seguimiento de pago activo, detectar si está enviando comprobante
+  void (async () => {
+    const seg = await obtenerActivo(leadId).catch(() => null);
+    if (seg?.tipo === "pago_pendiente") {
+      const deteccion = await detectarEstadoPago(cuerpo, { leadId }).catch(() => null);
+      if (deteccion?.estado === "comprobante") {
+        await marcarCompletado(leadId).catch(() => null);
+        void logSistema({
+          categoria: "webhook", tipoAccion: "ghl_sbc.pago_completado", fase: "ok",
+          resultado: "comprobante detectado — seguimiento cerrado",
+          metadata:  { contactId, leadId },
+        });
+      }
+    }
+  })();
 
   // GHL-6: tagging progresivo + pipeline — corre en background sin bloquear la respuesta
   void actualizarTagsYPipeline(contactId, cuerpo, intencion, nombre);
@@ -142,6 +160,14 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) })
     );
     void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `auto conv:${convId}` });
+
+    // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago
+    if (nuevoModo === "revelado") {
+      void crearSeguimiento({
+        leadId, tipo: "pago_pendiente",
+        ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA,
+      });
+    }
   } else {
     // Modo supervisado: encolar para aprobación
     const contexto = {
@@ -184,6 +210,14 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
         metadata:  { contactId, itemId },
       });
     }
+
+    // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago (modo supervisado)
+    if (nuevoModo === "revelado") {
+      void crearSeguimiento({
+        leadId, tipo: "pago_pendiente",
+        ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA,
+      });
+    }
   }
 }
 
@@ -194,6 +228,7 @@ interface ResultadoMotor {
   setterFaseActual: number;
   nombre: string | null;
   recursosIds: string[];
+  nuevoModo: ModoRevelacion;
 }
 
 async function generarRespuestaMotorCompleto(
@@ -288,5 +323,5 @@ async function generarRespuestaMotorCompleto(
   });
 
   // El mensaje saliente se guarda solo cuando se aprueba/envía, no aquí
-  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds };
+  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds, nuevoModo };
 }
