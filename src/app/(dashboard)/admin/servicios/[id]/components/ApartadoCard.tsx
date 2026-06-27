@@ -52,15 +52,20 @@ export function ApartadoCard({ servicioId, precioApartadoCentavos, pagosApartado
   }
 
   function handleEliminar(pagoId: string) {
+    const tid = toast.loading("Eliminando…");
     startTransition(async () => {
-      await eliminarPagoAction(pagoId, servicioId);
-      toast.success("Link eliminado");
+      try {
+        await eliminarPagoAction(pagoId, servicioId);
+        toast.success("Link eliminado", { id: tid });
+      } catch { toast.error("Error al eliminar", { id: tid }); }
     });
   }
 
   function handleToggle(pagoId: string, activo: boolean) {
     startTransition(async () => {
-      await togglePagoActivoAction(pagoId, !activo, servicioId);
+      try {
+        await togglePagoActivoAction(pagoId, !activo, servicioId);
+      } catch { toast.error("Error al cambiar estado"); }
     });
   }
 
