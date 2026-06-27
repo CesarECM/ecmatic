@@ -1,6 +1,10 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerStatsAB } from "@/services/ab-workflows-ghl";
-import { obtenerStatsAprobacion, calcularNivel, contarEnviadosHoy, contarPendientes } from "@/services/ghl-aprobacion";
+import {
+  obtenerStatsAprobacion, calcularNivel,
+  contarEnviadosHoy, contarPendientes,
+  obtenerEstadosLeadsCampana, type EstadosLeadsCampana,
+} from "@/services/ghl-aprobacion";
 import { CampanaControls } from "./CampanaControls";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
@@ -20,10 +24,11 @@ export default async function GHLCampaignPage() {
     errorMsg = err instanceof Error ? err.message : String(err);
   }
 
-  const [aprobacionStats, enviadosHoy, pendientes] = await Promise.all([
+  const [aprobacionStats, enviadosHoy, pendientes, estadosLeads] = await Promise.all([
     obtenerStatsAprobacion(CAMPANA),
     contarEnviadosHoy(CAMPANA),
     contarPendientes(CAMPANA),
+    obtenerEstadosLeadsCampana(CAMPANA),
   ]);
 
   const { data: recientes } = await (supabase as any)
@@ -31,7 +36,7 @@ export default async function GHLCampaignPage() {
     .select("ghl_contact_id, nombre, categoria_sbc, variante, enviado, enviado_at, respuesta_tipo, convirtio, error_msg, updated_at")
     .eq("campana", CAMPANA)
     .order("updated_at", { ascending: false })
-    .limit(100) as {
+    .limit(500) as {
       data: {
         ghl_contact_id: string; nombre: string | null; categoria_sbc: string;
         variante: "a" | "b" | null; enviado: boolean; enviado_at: string | null;
@@ -84,6 +89,17 @@ export default async function GHLCampaignPage() {
           <MetricCard label="Negativos / Blacklist" value={stats.total_negativos.toString()} accent="red" />
         </div>
       )}
+
+      {/* Estado de leads en ECMatic */}
+      <div className="rounded-lg border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Estado en ECMatic</h2>
+          <span className="text-xs text-muted-foreground">
+            {estadosLeads.total} lead{estadosLeads.total !== 1 ? "s" : ""} en campaña
+          </span>
+        </div>
+        <EstadosChart estados={estadosLeads} />
+      </div>
 
       {/* Checklist de prerrequisitos */}
       <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
@@ -162,6 +178,8 @@ export default async function GHLCampaignPage() {
   );
 }
 
+// ── Componentes ──────────────────────────────────────────────────────────────
+
 function MetricCard({
   label, value, sub, accent,
 }: {
@@ -182,10 +200,49 @@ function MetricCard({
   );
 }
 
+const ESTADOS_CONFIG = [
+  { key: "sin_contactar",   label: "Aún no contactado",     color: "bg-slate-400",   dot: "bg-slate-400"   },
+  { key: "en_espera",       label: "En espera de respuesta", color: "bg-yellow-500",  dot: "bg-yellow-500"  },
+  { key: "en_conversacion", label: "En conversación",        color: "bg-blue-500",    dot: "bg-blue-500"    },
+  { key: "cerrado",         label: "Cerrado",                color: "bg-green-500",   dot: "bg-green-500"   },
+  { key: "inactivo",        label: "Inactivo",               color: "bg-red-400",     dot: "bg-red-400"     },
+] as const;
+
+function EstadosChart({ estados }: { estados: EstadosLeadsCampana }) {
+  const total = estados.total;
+
+  return (
+    <div className="space-y-3">
+      {ESTADOS_CONFIG.map(({ key, label, color, dot }) => {
+        const count = estados[key];
+        const pct   = total > 0 ? (count / total) * 100 : 0;
+        return (
+          <div key={key} className="flex items-center gap-3 text-xs">
+            <span className={`h-2 w-2 rounded-full shrink-0 ${dot}`} />
+            <span className="w-44 shrink-0 text-muted-foreground">{label}</span>
+            <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
+              <div
+                className={`h-3 rounded-full ${color} transition-all duration-500`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="w-14 text-right font-semibold">
+              {count} <span className="text-muted-foreground font-normal">({pct.toFixed(0)}%)</span>
+            </span>
+          </div>
+        );
+      })}
+      {total === 0 && (
+        <p className="text-xs text-muted-foreground">Sin datos todavía — inicia la campaña para ver resultados.</p>
+      )}
+    </div>
+  );
+}
+
 function categoriaBadgeColor(cat: string): string {
-  if (cat.includes("caliente")) return "text-orange-500 font-medium";
-  if (cat.includes("tibio"))    return "text-yellow-500";
-  if (cat.includes("ya_compro")) return "text-green-500";
+  if (cat.includes("caliente"))   return "text-orange-500 font-medium";
+  if (cat.includes("tibio"))      return "text-yellow-500";
+  if (cat.includes("ya_compro"))  return "text-green-500";
   if (cat.includes("descartado")) return "text-red-500";
   return "text-muted-foreground";
 }

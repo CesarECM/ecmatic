@@ -114,6 +114,18 @@ export async function procesarLoteCampana(
       const variante  = await elegirVarianteWorkflow(CAMPANA_ACTIVA);
       const workflowId = variante === "a" ? workflowA : workflowB;
 
+      // Pre-crear lead en ECMatic antes del workflow (patrón idéntico a usuarios de prueba —
+      // el webhook SBC necesita que el lead ya exista cuando llegue la respuesta del contacto)
+      await (supabase as any).from("leads").upsert(
+        {
+          telefono:            `ghl_${contacto.id}`,
+          canal_origen:        "whatsapp",
+          privacidad_aceptada: true,
+          nombre:              nombreContacto(contacto),
+        },
+        { onConflict: "telefono" }
+      );
+
       // Inscribir en workflow (GHL envía el template automáticamente)
       await inscribirEnWorkflow(contacto.id, workflowId);
 

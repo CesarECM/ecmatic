@@ -290,6 +290,55 @@ export async function registrarNotifPausa(campana: string): Promise<void> {
     .eq("campana_key", campana);
 }
 
+// Distribución de leads de la campaña por estado ECMatic
+export interface EstadosLeadsCampana {
+  sin_contactar: number;
+  en_espera:     number;
+  en_conversacion: number;
+  cerrado:       number;
+  inactivo:      number;
+  total:         number;
+}
+
+const STAGES_CONVERSACION = new Set(["Interesado", "Propuesta", "Negociación"]);
+
+export async function obtenerEstadosLeadsCampana(campana: string): Promise<EstadosLeadsCampana> {
+  const supabase = createServiceClient();
+
+  const { data: logs } = await (supabase as any)
+    .from("ghl_campana_logs")
+    .select("ghl_contact_id, respuesta_tipo, convirtio")
+    .eq("campana", campana)
+    .eq("enviado", true) as {
+      data: { ghl_contact_id: string; respuesta_tipo: string | null; convirtio: boolean | null }[] | null;
+    };
+
+  const resultado: EstadosLeadsCampana = { sin_contactar: 0, en_espera: 0, en_conversacion: 0, cerrado: 0, inactivo: 0, total: 0 };
+  if (!logs?.length) return resultado;
+  resultado.total = logs.length;
+
+  const telefonos = logs.map((l) => `ghl_${l.ghl_contact_id}`);
+  const { data: leads } = await (supabase as any)
+    .from("leads")
+    .select("telefono, archivado, pipeline_stage")
+    .in("telefono", telefonos) as {
+      data: { telefono: string; archivado: boolean; pipeline_stage: string }[] | null;
+    };
+
+  const leadMap = new Map((leads ?? []).map((l) => [l.telefono, l]));
+
+  for (const log of logs) {
+    const lead = leadMap.get(`ghl_${log.ghl_contact_id}`);
+    if (log.convirtio === true)                                { resultado.cerrado++;        continue; }
+    if (log.respuesta_tipo === "negativo" || lead?.archivado) { resultado.inactivo++;       continue; }
+    if (!log.respuesta_tipo)                                   { resultado.sin_contactar++;  continue; }
+    if (STAGES_CONVERSACION.has(lead?.pipeline_stage ?? ""))  { resultado.en_conversacion++; continue; }
+    resultado.en_espera++;
+  }
+
+  return resultado;
+}
+
 // Marca notificación SLA enviada e incrementa contador
 export async function registrarNotificacionSLA(id: string, conteoActual: number): Promise<void> {
   const supabase = createServiceClient();
