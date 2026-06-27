@@ -59,13 +59,8 @@ export async function eliminarConversacion(conversationId: string): Promise<void
   }
 }
 
-// Crea una nota interna en la conversación — trigger de push en LeadConnector
-// GHL requiere contactId además de conversationId para este endpoint
-export async function crearNotaInternaGHL(conversationId: string, texto: string, contactId?: string): Promise<void> {
-  await ghlPost("/conversations/messages", {
-    type: "Note",
-    conversationId,
-    ...(contactId ? { contactId } : {}),
-    message: texto,
-  });
+// Crea una nota en el contacto GHL — endpoint correcto para notas internas
+// /conversations/messages no acepta type "Note"; usar /contacts/{id}/notes
+export async function crearNotaInternaGHL(contactId: string, texto: string): Promise<void> {
+  await ghlPost(`/contacts/${contactId}/notes`, { body: texto });
 }

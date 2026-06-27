@@ -81,11 +81,14 @@ export async function crearSeguimiento(params: {
 
   if (error) {
     // Conflicto de unique index = ya existe uno activo → no es error, simplemente ignorar
-    const msg = String(error);
-    if (!msg.includes("unique") && !msg.includes("23505")) {
+    const errObj = error as { code?: string; message?: string };
+    const code = errObj?.code ?? "";
+    const msg  = errObj?.message ?? JSON.stringify(error);
+    if (code !== "23505" && !msg.includes("unique")) {
       void logSistema({
         categoria: "servicio", tipoAccion: "seguimiento.crear", fase: "error",
-        resultado: msg, metadata: { leadId: params.leadId, tipo: params.tipo },
+        resultado: `${code}: ${msg}`.slice(0, 200),
+        metadata: { leadId: params.leadId, tipo: params.tipo },
       });
     }
     return null;

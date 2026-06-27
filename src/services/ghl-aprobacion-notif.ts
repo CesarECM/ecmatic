@@ -53,7 +53,7 @@ export async function notificarMensajePendienteGHL(params: ParamsNotifGHL): Prom
     adminWa
       ? sendTextMessage(adminWa, mensajeWA)
       : Promise.reject(new Error("ADMIN_WHATSAPP no configurado")),
-    crearNotaInternaGHL(convId, notaGHL, contactId),
+    crearNotaInternaGHL(contactId, notaGHL),
   ]);
 
   const waOk   = resultados[0].status === "fulfilled";
