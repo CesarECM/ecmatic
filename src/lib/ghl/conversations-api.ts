@@ -47,7 +47,7 @@ export async function obtenerMensajes(conversationId: string, limit = 20): Promi
 }
 
 export async function inscribirEnWorkflow(contactId: string, workflowId: string): Promise<void> {
-  const t = new Date(Date.now() + 60_000);
+  const t = new Date(Date.now() + 360_000);
   t.setMilliseconds(0);
   await ghlPost(`/contacts/${contactId}/workflow/${workflowId}`, {
     eventStartTime: t.toISOString(),
