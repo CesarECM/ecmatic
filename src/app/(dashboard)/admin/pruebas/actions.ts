@@ -119,39 +119,52 @@ export async function agregarACampanaAction(
   }
 
   const usuario = await obtenerUsuarioPruebaPorId(id);
-  if (!usuario) return { ok: false, error: "Usuario no encontrado" };
+  if (!usuario) return { ok: false, error: "Usuario no encontrado en usuarios_prueba" };
 
-  // Obtener o crear contacto GHL
-  let ghlContactId = usuario.ghl_contact_id;
-  if (!ghlContactId) {
-    ghlContactId = await buscarOCrearContactoGHL(usuario.telefono, usuario.nombre).catch(() => null);
-    if (!ghlContactId) return { ok: false, error: "No se pudo obtener contacto GHL" };
+  // Siempre re-verificar el contacto GHL (el reset puede haber dejado el ID cacheado pero el contacto en estado inconsistente)
+  const ghlContactId = await buscarOCrearContactoGHL(usuario.telefono, usuario.nombre).catch(() => null);
+  if (!ghlContactId) return { ok: false, error: "No se pudo obtener contacto GHL" };
+  if (ghlContactId !== usuario.ghl_contact_id) {
     await actualizarGhlContactId(id, ghlContactId);
   }
 
-  // Tag fuente + elegir variante + inscribir
+  // Crear el lead en ECMatic antes de lanzar el trigger (el webhook SBC lo necesita)
+  const db = createServiceClient();
+  await db.from("leads").upsert(
+    {
+      telefono:           `ghl_${ghlContactId}`,
+      canal_origen:       "whatsapp",
+      privacidad_aceptada: true,
+      nombre:             usuario.nombre,
+    },
+    { onConflict: "telefono" }
+  );
+
+  // Tag fuente + elegir variante + inscribir en workflow GHL
   await agregarTagsContacto(ghlContactId, [TAG_FUENTE]).catch(() => null);
   const variante = await elegirVarianteWorkflow(CAMPANA_ACTIVA);
   const workflowId = variante === "a" ? workflowA : workflowB;
   await inscribirEnWorkflow(ghlContactId, workflowId);
 
   // Registrar en ghl_campana_logs
-  const db = createServiceClient();
-  await (db as any).from("ghl_campana_logs").insert({
-    ghl_contact_id: ghlContactId,
-    nombre: usuario.nombre,
-    campana: CAMPANA_ACTIVA,
-    variante,
-    enviado: true,
-    enviado_at: new Date().toISOString(),
-    categoria_sbc: "prueba_manual",
-  });
+  await (db as any).from("ghl_campana_logs").upsert(
+    {
+      ghl_contact_id: ghlContactId,
+      nombre:         usuario.nombre,
+      campana:        CAMPANA_ACTIVA,
+      variante,
+      enviado:        true,
+      enviado_at:     new Date().toISOString(),
+      categoria_sbc:  "prueba_manual",
+    },
+    { onConflict: "ghl_contact_id,campana" }
+  );
 
   void logSistema({
-    categoria: "servicio",
+    categoria:  "servicio",
     tipoAccion: "campana_usuario_prueba",
-    fase: "ok",
-    metadata: { usuario_prueba_id: id, ghl_contact_id: ghlContactId, variante, campana: CAMPANA_ACTIVA },
+    fase:       "ok",
+    metadata:   { usuario_prueba_id: id, ghl_contact_id: ghlContactId, variante, campana: CAMPANA_ACTIVA },
   });
 
   revalidatePath("/admin/pruebas");
