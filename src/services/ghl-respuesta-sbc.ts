@@ -55,10 +55,17 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   void logSistema({
     categoria: "webhook", tipoAccion: "ghl_sbc.recibido", fase: "inicio",
     resultado: cuerpo.slice(0, 80) || "(sin cuerpo)",
-    metadata:  { contactId, conversationId },
+    metadata:  { contactId, conversationId, tiene_cuerpo: !!cuerpo },
   });
 
-  if (!cuerpo) return;
+  if (!cuerpo) {
+    void logSistema({
+      categoria: "webhook", tipoAccion: "ghl_sbc.cuerpo_vacio", fase: "warn",
+      resultado: "sin cuerpo en payload ni inbound en GHL — procesamiento abortado",
+      metadata:  { contactId, conversationId, payload_keys: Object.keys(payload) },
+    });
+    return;
+  }
 
   const supabase = createServiceClient();
   const { data: log } = await (supabase as any)
@@ -71,7 +78,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   void logSistema({
     categoria: "webhook", tipoAccion: "ghl_sbc.lookup", fase: log?.enviado ? "ok" : "error",
     resultado: log ? (log.enviado ? "en campaña" : "no enviado") : "no encontrado",
-    metadata:  { contactId, campana: CAMPANA_ACTIVA },
+    metadata:  { contactId, campana: CAMPANA_ACTIVA, respuesta_tipo: log?.respuesta_tipo ?? null, enviado: log?.enviado ?? null },
   });
 
   if (!log?.enviado) return;
@@ -83,6 +90,12 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   }
 
   const convId = conversationId || (await buscarConversacionWA(contactId).catch(() => null))?.id;
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.convid", fase: convId ? "ok" : "warn",
+    resultado: convId ? `convId resuelto (${convId.slice(-8)})` : "convId no disponible",
+    metadata:  { contactId, desde_payload: !!conversationId, conv_encontrado: !!convId },
+  });
 
   const esNegativo = TEXTOS_NEGATIVOS.some((t) => cuerpo.toLowerCase().includes(t));
 
@@ -97,7 +110,11 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, "positivo");
 
   if (!convId) {
-    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: "sin convId" });
+    void logSistema({
+      categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error",
+      resultado: "sin convId — mensaje perdido (ni enviado ni encolado)",
+      metadata:  { contactId, conversationId_en_payload: conversationId ?? null },
+    });
     return;
   }
 
@@ -157,72 +174,76 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     metadata: { contactId },
   });
 
-  if (pasaUmbral) {
-    // Score suficiente — enviar directo sin revisión humana
-    await enviarMensajeGHL(convId, texto, contactId).catch((e) =>
-      void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) })
-    );
-    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `auto conv:${convId}` });
+  const contextoItem = { intencion, setter_fase: setterFaseActual, conv_id: convId, recursosIds };
 
-    // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago
-    if (nuevoModo === "revelado") {
-      void crearSeguimiento({
-        leadId, tipo: "pago_pendiente",
-        ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA,
-      });
+  if (pasaUmbral) {
+    // Score suficiente — intentar enviar directo sin revisión humana
+    let enviado = false;
+    try {
+      await enviarMensajeGHL(convId, texto, contactId);
+      enviado = true;
+      void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `auto conv:${convId}` });
+    } catch (e) {
+      void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) });
+    }
+
+    // Invariante: si el envío directo falló, encolar para que siempre llegue al admin o al lead
+    if (!enviado) {
+      await encolarYNotificar(contactId, convId, leadId, cuerpo, texto, score, `[auto-send falló] ${razon}`, contextoItem, 1);
     }
   } else {
-    // Modo supervisado: encolar para aprobación
-    const contexto = {
-      intencion,
-      setter_fase: setterFaseActual,
-      conv_id: convId,
-      recursosIds,
-    };
-
-    const itemId = await encolarMensajeGHL({
-      campana:       CAMPANA_ACTIVA,
-      ghlContactId:  contactId,
-      convId,
-      leadEcmaticId: leadId,
-      mensajeLead:   cuerpo,
-      mensajeIA:     texto,
-      contexto,
-      scoreIA:       score,
-      razonScore:    razon,
-    });
-
-    if (itemId) {
-      const nombreContacto = await obtenerContacto(contactId)
-        .then((c) => c.name ?? c.firstName ?? null)
-        .catch(() => null);
-
-      // await garantiza que el WA al admin no se pierda por timeout de after()
-      await notificarMensajePendienteGHL({
-        itemId,
-        convId,
-        contactId,
-        nombre: nombreContacto,
-        mensajeLead: cuerpo,
-        scoreIA: score,
-        leadEcmaticId: leadId,
-      });
-
-      await logSistema({
-        categoria: "webhook", tipoAccion: "ghl_sbc.cola", fase: "ok",
-        resultado: `item:${itemId} score:${score.toFixed(2)} notif:enviada`,
-        metadata:  { contactId, itemId },
-      });
-    }
-
-    // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago (modo supervisado)
-    if (nuevoModo === "revelado") {
-      void crearSeguimiento({
-        leadId, tipo: "pago_pendiente",
-        ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA,
-      });
-    }
+    // Modo supervisado: encolar para aprobación — siempre notificar al admin
+    await encolarYNotificar(contactId, convId, leadId, cuerpo, texto, score, razon, contextoItem, 0);
   }
+
+  // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago
+  if (nuevoModo === "revelado") {
+    void crearSeguimiento({ leadId, tipo: "pago_pendiente", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA });
+  }
+}
+
+// Garantiza la invariante: siempre llega el mensaje al lead O la notificación al admin
+async function encolarYNotificar(
+  contactId: string,
+  convId: string,
+  leadId: string,
+  mensajeLead: string,
+  mensajeIA: string,
+  score: number,
+  razon: string,
+  contexto: Record<string, unknown>,
+  urgencia: number,
+): Promise<void> {
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.cola", fase: "inicio",
+    resultado: `encolarYNotificar invocado urgencia:${urgencia} score:${score.toFixed(2)}`,
+    metadata:  { contactId, leadId, razon: razon.slice(0, 120) },
+  });
+
+  const itemId = await encolarMensajeGHL({
+    campana: CAMPANA_ACTIVA, ghlContactId: contactId, convId, leadEcmaticId: leadId,
+    mensajeLead, mensajeIA, contexto, scoreIA: score, razonScore: razon,
+  });
+
+  const nombre = await obtenerContacto(contactId)
+    .then((c) => c.name ?? c.firstName ?? null)
+    .catch(() => null);
+
+  // Notificar siempre: si encolar falló, itemId es null → se pasa "error" como fallback
+  // El admin recibe la alerta y puede revisar /admin/aprobaciones
+  await notificarMensajePendienteGHL({
+    itemId: itemId ?? "error", convId, contactId, nombre,
+    mensajeLead, scoreIA: score, leadEcmaticId: leadId, urgencia,
+  });
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.cola",
+    fase: itemId ? "ok" : "error",
+    resultado: itemId
+      ? `item:${itemId} score:${score.toFixed(2)} notif:enviada`
+      : `encolar falló — notif directa urgencia:${urgencia}`,
+    metadata: { contactId, itemId },
+  });
 }
 
 interface ResultadoMotor {

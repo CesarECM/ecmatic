@@ -105,10 +105,14 @@ export async function resetLeadECMatic(
   await db.from("pagos").delete().eq("lead_id", lead.id);
   await db.from("leads").delete().eq("id", lead.id);
 
-  // Limpiar ghl_campana_logs por contact_id para permitir re-inscripción
+  // Limpiar ghl_campana_logs y ghl_approval_queue para permitir re-inscripción limpia
   if (ghlContactId) {
     await (db as any)
       .from("ghl_campana_logs")
+      .delete()
+      .eq("ghl_contact_id", ghlContactId);
+    await (db as any)
+      .from("ghl_approval_queue")
       .delete()
       .eq("ghl_contact_id", ghlContactId);
   }
