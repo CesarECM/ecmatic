@@ -19,6 +19,14 @@ import { createServiceClient } from "@/lib/supabase/service";
 const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 const TAG_FUENTE = process.env.GHL_TAG_FUENTE ?? "ecm_b_caliente";
 
+// Convierte número mexicano a E.164 para llamadas a GHL
+function aE164(tel: string): string {
+  const d = tel.replace(/\D/g, "");
+  if (d.length === 10) return `+52${d}`;
+  if (d.length === 12 && d.startsWith("52")) return `+${d}`;
+  return tel.startsWith("+") ? tel : `+${tel}`;
+}
+
 // ── Agregar ──────────────────────────────────────────────────────────────────
 
 export async function agregarUsuarioPruebaAction(formData: FormData) {
@@ -52,7 +60,7 @@ export async function resetearUnoAction(
 
   // Resolver ghl_contact_id si no está cacheado
   if (!ghlContactId) {
-    ghlContactId = await buscarOCrearContactoGHL(usuario.telefono, usuario.nombre).catch(() => null);
+    ghlContactId = await buscarOCrearContactoGHL(aE164(usuario.telefono), usuario.nombre).catch(() => null);
     if (ghlContactId) await actualizarGhlContactId(id, ghlContactId);
   }
 
@@ -121,10 +129,10 @@ export async function agregarACampanaAction(
   const usuario = await obtenerUsuarioPruebaPorId(id);
   if (!usuario) return { ok: false, error: "Usuario no encontrado en usuarios_prueba" };
 
-  // Usar el ID cacheado si existe; si no, buscarlo/crearlo en GHL
+  // Usar el ID cacheado si existe; si no, buscarlo/crearlo en GHL normalizando a E.164
   let ghlContactId = usuario.ghl_contact_id;
   if (!ghlContactId) {
-    ghlContactId = await buscarOCrearContactoGHL(usuario.telefono, usuario.nombre).catch(() => null);
+    ghlContactId = await buscarOCrearContactoGHL(aE164(usuario.telefono), usuario.nombre).catch(() => null);
     if (!ghlContactId) return { ok: false, error: "No se pudo obtener contacto GHL — verifica GHL_API_KEY y formato del teléfono" };
     await actualizarGhlContactId(id, ghlContactId);
   }
