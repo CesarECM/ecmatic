@@ -29,7 +29,7 @@ export async function ghlPost<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`GHL API POST ${res.status} ${path}: ${text.slice(0, 200)}`);
+    throw new Error(`GHL API POST ${res.status} ${path}: ${text.slice(0, 800)}`);
   }
   return res.json() as Promise<T>;
 }

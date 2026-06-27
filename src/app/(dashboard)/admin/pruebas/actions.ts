@@ -129,17 +129,27 @@ export async function agregarACampanaAction(
   const usuario = await obtenerUsuarioPruebaPorId(id);
   if (!usuario) return { ok: false, error: "Usuario no encontrado en usuarios_prueba" };
 
+  void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: "inicio",
+    resultado: `telefono:${usuario.telefono} ghl_id_cacheado:${usuario.ghl_contact_id ?? "null"}`,
+    metadata: { usuario_prueba_id: id } });
+
   // Usar el ID cacheado si existe; si no, buscarlo/crearlo en GHL normalizando a E.164
   let ghlContactId = usuario.ghl_contact_id;
   if (!ghlContactId) {
-    ghlContactId = await buscarOCrearContactoGHL(aE164(usuario.telefono), usuario.nombre).catch(() => null);
+    const telefonoE164 = aE164(usuario.telefono);
+    void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: "llamado",
+      resultado: `buscando contacto GHL telefono_e164:${telefonoE164}` });
+    ghlContactId = await buscarOCrearContactoGHL(telefonoE164, usuario.nombre).catch(() => null);
     if (!ghlContactId) return { ok: false, error: "No se pudo obtener contacto GHL — verifica GHL_API_KEY y formato del teléfono" };
     await actualizarGhlContactId(id, ghlContactId);
   }
 
+  void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: "llamado",
+    resultado: `ghlContactId:${ghlContactId}` });
+
   // Crear el lead en ECMatic antes de lanzar el trigger (el webhook SBC lo necesita)
   const db = createServiceClient();
-  await db.from("leads").upsert(
+  const { error: leadErr } = await db.from("leads").upsert(
     {
       telefono:            `ghl_${ghlContactId}`,
       canal_origen:        "whatsapp",
@@ -148,16 +158,26 @@ export async function agregarACampanaAction(
     },
     { onConflict: "telefono" }
   );
+  void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: leadErr ? "error" : "llamado",
+    resultado: `lead_upsert:${leadErr ? leadErr.message : "ok"} telefono:ghl_${ghlContactId}` });
 
   // Tag fuente + elegir variante + inscribir en workflow GHL
-  await agregarTagsContacto(ghlContactId, [TAG_FUENTE]).catch(() => null);
+  await agregarTagsContacto(ghlContactId, [TAG_FUENTE]).catch((e) =>
+    void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: "warn", resultado: `tag_err:${String(e).slice(0,100)}` })
+  );
   const variante = await elegirVarianteWorkflow(CAMPANA_ACTIVA);
   const workflowId = variante === "a" ? workflowA : workflowB;
+
+  void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: "llamado",
+    resultado: `inscribiendo variante:${variante} workflowId:${workflowId} eventStartTime:${new Date(Date.now() + 360_000).toISOString()}` });
 
   try {
     await inscribirEnWorkflow(ghlContactId, workflowId);
   } catch (err) {
-    return { ok: false, error: `Error al inscribir en workflow GHL: ${String(err).slice(0, 150)}` };
+    const msg = String(err);
+    void logSistema({ categoria: "servicio", tipoAccion: "campana_usuario_prueba", fase: "error",
+      resultado: `workflow_err:${msg.slice(0, 500)}`, metadata: { ghlContactId, workflowId } });
+    return { ok: false, error: `Error workflow GHL: ${msg.slice(0, 300)}` };
   }
 
   // Registrar en ghl_campana_logs (delete + insert para evitar duplicados sin necesitar constraint única)
@@ -180,7 +200,8 @@ export async function agregarACampanaAction(
     categoria:  "servicio",
     tipoAccion: "campana_usuario_prueba",
     fase:       "ok",
-    metadata:   { usuario_prueba_id: id, ghl_contact_id: ghlContactId, variante, campana: CAMPANA_ACTIVA },
+    resultado:  `variante:${variante} workflowId:${workflowId}`,
+    metadata:   { usuario_prueba_id: id, ghl_contact_id: ghlContactId, campana: CAMPANA_ACTIVA },
   });
 
   revalidatePath("/admin/pruebas");
