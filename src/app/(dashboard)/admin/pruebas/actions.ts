@@ -121,10 +121,11 @@ export async function agregarACampanaAction(
   const usuario = await obtenerUsuarioPruebaPorId(id);
   if (!usuario) return { ok: false, error: "Usuario no encontrado en usuarios_prueba" };
 
-  // Siempre re-verificar el contacto GHL (el reset puede haber dejado el ID cacheado pero el contacto en estado inconsistente)
-  const ghlContactId = await buscarOCrearContactoGHL(usuario.telefono, usuario.nombre).catch(() => null);
-  if (!ghlContactId) return { ok: false, error: "No se pudo obtener contacto GHL" };
-  if (ghlContactId !== usuario.ghl_contact_id) {
+  // Usar el ID cacheado si existe; si no, buscarlo/crearlo en GHL
+  let ghlContactId = usuario.ghl_contact_id;
+  if (!ghlContactId) {
+    ghlContactId = await buscarOCrearContactoGHL(usuario.telefono, usuario.nombre).catch(() => null);
+    if (!ghlContactId) return { ok: false, error: "No se pudo obtener contacto GHL — verifica GHL_API_KEY y formato del teléfono" };
     await actualizarGhlContactId(id, ghlContactId);
   }
 
