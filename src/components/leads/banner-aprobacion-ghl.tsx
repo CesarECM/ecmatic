@@ -1,0 +1,171 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import type { ItemAprobacionGHL } from "@/services/ghl-aprobacion";
+import {
+  aprobarMensajeGHLAction,
+  editarAprobarMensajeGHLAction,
+  rechazarMensajeGHLAction,
+} from "@/app/(dashboard)/admin/leads/[id]/actions";
+
+interface Props {
+  item: ItemAprobacionGHL;
+  leadId: string;
+}
+
+function ScoreChip({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const cls =
+    pct >= 80 ? "bg-green-100 text-green-700" :
+    pct >= 60 ? "bg-amber-100 text-amber-700" :
+                "bg-red-100 text-red-700";
+  return (
+    <span className={`text-xs rounded px-1.5 py-0.5 font-medium ${cls}`}>
+      IA {pct}%
+    </span>
+  );
+}
+
+export function BannerAprobacionGHL({ item, leadId }: Props) {
+  const [modo, setModo] = useState<"ver" | "editar" | "rechazar">("ver");
+  const [texto, setTexto] = useState(item.mensaje_ia);
+  const [razon, setRazon] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  function aprobar() {
+    startTransition(async () => {
+      const id = toast.loading("Enviando…");
+      const r = await aprobarMensajeGHLAction(
+        item.id, item.conv_id, item.ghl_contact_id,
+        item.mensaje_ia, item.lead_ecmatic_id, item.campana, leadId
+      );
+      if (r.error) toast.error(r.error, { id });
+      else toast.success("Mensaje enviado", { id });
+    });
+  }
+
+  function enviarEditado() {
+    if (!razon.trim()) { toast.error("Indica la razón de la edición"); return; }
+    startTransition(async () => {
+      const id = toast.loading("Enviando editado…");
+      const r = await editarAprobarMensajeGHLAction(
+        item.id, item.conv_id, item.ghl_contact_id,
+        texto, razon, item.lead_ecmatic_id, item.campana, leadId
+      );
+      if (r.error) toast.error(r.error, { id });
+      else toast.success("Mensaje editado y enviado", { id });
+    });
+  }
+
+  function rechazar() {
+    startTransition(async () => {
+      const id = toast.loading("Rechazando…");
+      const r = await rechazarMensajeGHLAction(item.id, item.campana, leadId);
+      if (r.error) toast.error(r.error, { id });
+      else toast.success("Mensaje rechazado", { id });
+    });
+  }
+
+  return (
+    <div className="mx-3 mb-2 rounded-lg border-2 border-violet-300 bg-violet-50 p-3 space-y-2 text-sm shrink-0">
+      {/* Cabecera */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-semibold text-violet-800 text-xs uppercase tracking-wide">
+          ⏳ Respuesta IA pendiente
+        </span>
+        {item.score_ia !== null && <ScoreChip score={item.score_ia} />}
+        {item.razon_score && (
+          <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={item.razon_score}>
+            {item.razon_score}
+          </span>
+        )}
+      </div>
+
+      {/* Mensaje del lead */}
+      <div className="text-xs bg-white rounded border p-2 text-muted-foreground">
+        <span className="font-medium text-foreground">Lead: </span>
+        {item.mensaje_lead.slice(0, 200)}{item.mensaje_lead.length > 200 ? "…" : ""}
+      </div>
+
+      {/* Mensaje IA / Editor */}
+      {modo === "editar" ? (
+        <div className="space-y-2">
+          <textarea
+            className="w-full rounded border px-2 py-1.5 text-sm min-h-[100px] resize-y focus:outline-none focus:ring-1 focus:ring-violet-400"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+          />
+          <input
+            className="w-full rounded border px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400"
+            placeholder="¿Por qué editaste? (ayuda a mejorar la IA)"
+            value={razon}
+            onChange={(e) => setRazon(e.target.value)}
+          />
+          <div className="flex gap-1 flex-wrap">
+            <button
+              onClick={enviarEditado}
+              disabled={pending || !texto.trim()}
+              className="rounded bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              Enviar editado
+            </button>
+            <button
+              onClick={() => { setTexto(item.mensaje_ia); setRazon(""); setModo("ver"); }}
+              className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : modo === "rechazar" ? (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            El lead no recibirá respuesta. ¿Confirmas el rechazo?
+          </p>
+          <div className="flex gap-1">
+            <button
+              onClick={rechazar}
+              disabled={pending}
+              className="rounded bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-600 disabled:opacity-50"
+            >
+              Confirmar rechazo
+            </button>
+            <button onClick={() => setModo("ver")} className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="bg-white rounded border p-2 text-sm whitespace-pre-wrap">
+            {item.mensaje_ia}
+          </div>
+          <div className="flex gap-1 flex-wrap">
+            <button
+              onClick={aprobar}
+              disabled={pending}
+              className="rounded bg-violet-600 px-3 py-1.5 text-xs text-white hover:bg-violet-700 disabled:opacity-50 font-medium"
+            >
+              ✓ Aprobar y enviar
+            </button>
+            <button
+              onClick={() => setModo("editar")}
+              disabled={pending}
+              className="rounded bg-gray-100 px-3 py-1.5 text-xs hover:bg-gray-200 disabled:opacity-50"
+            >
+              ✏️ Editar
+            </button>
+            <button
+              onClick={() => setModo("rechazar")}
+              disabled={pending}
+              className="rounded bg-gray-100 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              ✗ Rechazar
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

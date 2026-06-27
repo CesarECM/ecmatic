@@ -49,3 +49,12 @@ export async function enviarMensajeGHL(conversationId: string, mensaje: string, 
     message: mensaje,
   });
 }
+
+// Crea una nota interna en la conversación — trigger de push en LeadConnector
+export async function crearNotaInternaGHL(conversationId: string, texto: string): Promise<void> {
+  await ghlPost("/conversations/messages", {
+    type: "Note",
+    conversationId,
+    message: texto,
+  });
+}

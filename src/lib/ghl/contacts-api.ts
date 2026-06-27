@@ -8,6 +8,7 @@ export interface GHLContact {
   phone?: string;
   email?: string;
   tags?: string[];
+  dateAdded?: string;
 }
 
 interface SearchResponse {

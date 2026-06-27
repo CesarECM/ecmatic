@@ -7,6 +7,7 @@ import { obtenerModo } from "@/services/sistema";
 import { listarTemplates } from "@/services/wa-templates";
 import { obtenerProtocoloActivoLead, obtenerHistorialToques } from "@/services/lead-protocolo";
 import { listarLlamadasLead } from "@/services/llamadas";
+import { obtenerPendienteGHLParaLead } from "@/services/ghl-aprobacion";
 import { ChatWhatsAppLead } from "@/components/leads/chat-whatsapp-lead";
 import { LeadInfoPanel } from "@/components/leads/lead-info-panel";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
@@ -44,6 +45,7 @@ export default async function LeadPerfilPage({
     leadProtocolo,
     historialToques,
     llamadasLead,
+    pendienteGHL,
   ] = await Promise.all([
     supabase.from("leads").select("*").eq("id", id).single(),
     obtenerHistorialPipeline(id),
@@ -70,6 +72,7 @@ export default async function LeadPerfilPage({
     obtenerProtocoloActivoLead(id).catch(() => null),
     obtenerHistorialToques(id).catch(() => []),
     listarLlamadasLead(id).catch(() => []),
+    obtenerPendienteGHLParaLead(id).catch(() => null),
   ]);
 
   if (!lead) notFound();
@@ -176,6 +179,7 @@ export default async function LeadPerfilPage({
             modoSistema={modoSistema}
             leadNombre={lead.nombre ?? null}
             templatesAprobados={templatesAprobados}
+            pendienteGHL={pendienteGHL}
           />
         </div>
 

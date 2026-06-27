@@ -25,7 +25,9 @@ export type TareaIA =
   | "DETECTOR_REVELACION"      // detecta señal para revelar producto (oculto→preguntando→revelado)
   | "CLASIFICAR_WORKFLOW"      // GHL-3: clasifica workflows de GHL (keep/rescue/delete)
   | "CALIFICAR_CONTACTO_GHL"   // GHL-4.3: clasifica historial WA en categoría SBC
-  | "RESPUESTA_GHL_SBC";       // GHL-4.7: genera respuesta conversacional para campaña SBC
+  | "RESPUESTA_GHL_SBC"        // GHL-4.7: genera respuesta conversacional para campaña SBC
+  | "SCORE_MENSAJE_GHL"        // GHL-5.2: evalúa calidad del mensaje IA generado (0-1)
+  | "DETERMINAR_TAGS_GHL";    // GHL-6.2: clasifica tags y etapa de pipeline por mensaje
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -60,6 +62,8 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   CLASIFICAR_WORKFLOW:   "haiku",
   CALIFICAR_CONTACTO_GHL: "haiku",
   RESPUESTA_GHL_SBC:      "sonnet",
+  SCORE_MENSAJE_GHL:      "haiku",
+  DETERMINAR_TAGS_GHL:    "haiku",
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.

@@ -14,6 +14,10 @@ import { filtrarResistencia } from "@/lib/ai/filtro-objecion";
 import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
 import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
 import { obtenerRolDinamico } from "@/services/rol-dinamico";
+import { evaluarScoreMensajeGHL } from "@/lib/ai/evaluar-score-ghl";
+import { encolarMensajeGHL, esModoAutomatico } from "@/services/ghl-aprobacion";
+import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
+import { actualizarTagsYPipeline } from "@/services/ghl-tagging-progresivo";
 
 const CAMPANA_ACTIVA = "sbc_jun26";
 
@@ -56,10 +60,10 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   const supabase = createServiceClient();
   const { data: log } = await (supabase as any)
     .from("ghl_campana_logs")
-    .select("id, variante, enviado")
+    .select("id, variante, enviado, respuesta_tipo")
     .eq("ghl_contact_id", contactId)
     .eq("campana", CAMPANA_ACTIVA)
-    .maybeSingle() as { data: { id: string; variante: "a" | "b"; enviado: boolean } | null };
+    .maybeSingle() as { data: { id: string; variante: "a" | "b"; enviado: boolean; respuesta_tipo: string | null } | null };
 
   void logSistema({
     categoria: "webhook", tipoAccion: "ghl_sbc.lookup", fase: log?.enviado ? "ok" : "error",
@@ -69,19 +73,21 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   if (!log?.enviado) return;
 
+  // Contacto ya blacklisteado en turno previo — ignorar
+  if (log.respuesta_tipo === "negativo") {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.blacklist", fase: "ok", resultado: "ignorado", metadata: { contactId } });
+    return;
+  }
+
   const convId = conversationId || (await buscarConversacionWA(contactId).catch(() => null))?.id;
 
   const esNegativo = TEXTOS_NEGATIVOS.some((t) => cuerpo.toLowerCase().includes(t));
 
   if (esNegativo) {
-    await agregarTagsContacto(contactId, ["ecm_blacklist", "ecm_sbc_descartado"]).catch(() => null);
+    // Solo etiquetar — sin responder para no ciclar la IA
+    await agregarTagsContacto(contactId, ["est_blacklist", "est_perdido_interes"]).catch(() => null);
     await registrarRespuestaGHL(contactId, CAMPANA_ACTIVA, "negativo");
-    if (convId) {
-      await enviarMensajeGHL(convId,
-        "Entendido, no hay problema. Si en algún momento reconsideras tu certificación EC0217.01, aquí estaremos. Que te vaya muy bien.",
-        contactId
-      ).catch(() => null);
-    }
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.negativo", fase: "ok", resultado: "blacklist aplicado", metadata: { contactId } });
     return;
   }
 
@@ -94,36 +100,105 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "inicio", resultado: cuerpo.slice(0, 80) });
 
-  const respuesta = await generarRespuestaMotorCompleto(contactId, cuerpo).catch((e) => {
+  const resultado = await generarRespuestaMotorCompleto(contactId, cuerpo).catch((e) => {
     void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "error", resultado: String(e) });
     return null;
   });
 
   void logSistema({
-    categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: respuesta ? "ok" : "error",
-    resultado: respuesta?.slice(0, 120) ?? "null",
+    categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: resultado ? "ok" : "error",
+    resultado: resultado?.texto.slice(0, 120) ?? "null",
   });
 
-  if (respuesta) {
-    await enviarMensajeGHL(convId, respuesta, contactId).catch((e) =>
+  if (!resultado) return;
+
+  const { texto, leadId, intencion, setterFaseActual, nombre } = resultado;
+
+  // GHL-6: tagging progresivo + pipeline — corre en background sin bloquear la respuesta
+  void actualizarTagsYPipeline(contactId, cuerpo, intencion, nombre);
+
+  // Evaluar score del mensaje generado
+  const { score, razon } = await evaluarScoreMensajeGHL(cuerpo, texto, contactId).catch(() => ({ score: 0.5, razon: "Error evaluando" }));
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.score", fase: "ok",
+    resultado: `score:${score.toFixed(2)}`,
+    metadata:  { contactId, score, razon },
+  });
+
+  const automatico = await esModoAutomatico(CAMPANA_ACTIVA);
+
+  if (automatico) {
+    // Modo autónomo: enviar directo
+    await enviarMensajeGHL(convId, texto, contactId).catch((e) =>
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) })
     );
-    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `conv:${convId}` });
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `auto conv:${convId}` });
+  } else {
+    // Modo supervisado: encolar para aprobación
+    const contexto = {
+      intencion,
+      setter_fase: setterFaseActual,
+      conv_id: convId,
+    };
+
+    const itemId = await encolarMensajeGHL({
+      campana:       CAMPANA_ACTIVA,
+      ghlContactId:  contactId,
+      convId,
+      leadEcmaticId: leadId,
+      mensajeLead:   cuerpo,
+      mensajeIA:     texto,
+      contexto,
+      scoreIA:       score,
+      razonScore:    razon,
+    });
+
+    if (itemId) {
+      const nombreContacto = await obtenerContacto(contactId)
+        .then((c) => c.name ?? c.firstName ?? null)
+        .catch(() => null);
+
+      void notificarMensajePendienteGHL({
+        itemId,
+        convId,
+        contactId,
+        nombre: nombreContacto,
+        mensajeLead: cuerpo,
+        scoreIA: score,
+        leadEcmaticId: leadId,
+      });
+
+      void logSistema({
+        categoria: "webhook", tipoAccion: "ghl_sbc.cola", fase: "ok",
+        resultado: `item:${itemId} score:${score.toFixed(2)}`,
+        metadata:  { contactId, itemId },
+      });
+    }
   }
 }
 
-async function generarRespuestaMotorCompleto(contactId: string, cuerpo: string): Promise<string | null> {
+interface ResultadoMotor {
+  texto: string;
+  leadId: string;
+  intencion: string;
+  setterFaseActual: number;
+  nombre: string | null;
+}
+
+async function generarRespuestaMotorCompleto(
+  contactId: string,
+  cuerpo: string
+): Promise<ResultadoMotor | null> {
   const supabase = createServiceClient();
   const telefono = `ghl_${contactId}`;
 
-  // Nombre del contacto desde GHL
   let nombre: string | null = null;
   try {
     const c = await obtenerContacto(contactId);
     nombre = (c.name ?? [c.firstName, c.lastName].filter(Boolean).join(" ")) || null;
   } catch { /* usar null */ }
 
-  // Crear o encontrar lead ECMatic para este contacto GHL
   const { data: lead, error } = await supabase
     .from("leads")
     .upsert(
@@ -175,8 +250,8 @@ async function generarRespuestaMotorCompleto(contactId: string, cuerpo: string):
   }
 
   const { texto } = await generarRespuesta([cuerpo], {
-    nombre:       nombre ?? lead.nombre ?? null,
-    temperamento: lead.temperamento_inferido ?? null,
+    nombre:        nombre ?? lead.nombre ?? null,
+    temperamento:  lead.temperamento_inferido ?? null,
     pipelineStage: lead.pipeline_stage ?? "Nuevo",
     compraPreviaa: lead.compra_previa ?? false,
     historial,
@@ -190,7 +265,6 @@ async function generarRespuestaMotorCompleto(contactId: string, cuerpo: string):
     modoRevelacion: nuevoModo,
   });
 
-  await guardarMensaje({ leadId: lead.id, contenido: texto, direccion: "saliente" });
-
-  return texto;
+  // El mensaje saliente se guarda solo cuando se aprueba/envía, no aquí
+  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre };
 }

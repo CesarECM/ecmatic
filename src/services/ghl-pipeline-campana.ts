@@ -44,8 +44,20 @@ export async function procesarLoteCampana(
   let excluidos = 0;
   let errores   = 0;
 
+  const umbral7dias = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
   for (const contacto of contacts) {
     try {
+      // Excluir contactos creados hace menos de 7 días
+      if (contacto.dateAdded) {
+        const fechaCreacion = new Date(contacto.dateAdded).getTime();
+        if (fechaCreacion > umbral7dias) {
+          await agregarTagsContacto(contacto.id, ["est_nuevo"]).catch(() => null);
+          excluidos++;
+          continue;
+        }
+      }
+
       // Verificar si ya fue procesado en esta campaña
       const { data: yaLog } = await (supabase as any)
         .from("ghl_campana_logs")

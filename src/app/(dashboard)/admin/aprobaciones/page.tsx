@@ -2,10 +2,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { listarPendientes } from "@/services/etiquetas";
 import { listarMensajesPendientes } from "@/services/mensajes-aprobacion";
 import { listarComprobantesPendientes } from "@/services/comprobantes";
+import { listarPendientesGHL } from "@/services/ghl-aprobacion";
 import { ColaKBSeccion } from "./ColaKBSeccion";
 import { ColaMatrizSeccion } from "./ColaMatrizSeccion";
 import { ColaMensajesSeccion } from "./ColaMensajesSeccion";
 import { ColaSugerenciasSeccion } from "./ColaSugerenciasSeccion";
+import { ColaGHLSeccion } from "./ColaGHLSeccion";
 import {
   aprobarSugerenciaAction, rechazarSugerenciaAction,
   aprobarClusterAction, rechazarClusterAction,
@@ -31,6 +33,7 @@ export default async function AprobacionesPage() {
     etiquetasPendientes,
     mensajesPendientes,
     comprobantesPendientes,
+    pendientesGHL,
   ] = await Promise.all([
     supabase.from("recursos_conocimiento")
       .select("id, tipo, titulo, contenido, origen, created_at")
@@ -46,11 +49,13 @@ export default async function AprobacionesPage() {
     listarPendientes(),
     listarMensajesPendientes(),
     listarComprobantesPendientes(),
+    listarPendientesGHL().catch(() => []),
   ]);
 
   const totalPendientes =
     (kb?.length ?? 0) + (matriz?.length ?? 0) + (sugerencias?.length ?? 0) +
-    etiquetasPendientes.length + mensajesPendientes.length + comprobantesPendientes.length;
+    etiquetasPendientes.length + mensajesPendientes.length + comprobantesPendientes.length +
+    pendientesGHL.length;
 
   return (
     <div className="space-y-6">
@@ -135,6 +140,8 @@ export default async function AprobacionesPage() {
           ))}
         </section>
       )}
+
+      <ColaGHLSeccion items={pendientesGHL} />
 
       <ColaMensajesSeccion items={mensajesPendientes} />
 

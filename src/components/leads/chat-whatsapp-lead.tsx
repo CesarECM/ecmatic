@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { VotoBotones } from "@/components/ui/voto-botones";
 import { ChatInput, type Mensaje, type MensajesUpdate } from "./chat-input";
+import { BannerAprobacionGHL } from "./banner-aprobacion-ghl";
 import type { WaTemplate } from "@/services/wa-templates";
 import type { ModoOperacion } from "@/services/sistema";
+import type { ItemAprobacionGHL } from "@/services/ghl-aprobacion";
 
 const CANAL_LABEL: Record<string, string> = {
   email: "✉️", meet: "📹", interno: "📝",
@@ -34,11 +36,12 @@ interface Props {
   modoSistema: ModoOperacion;
   leadNombre: string | null;
   templatesAprobados: WaTemplate[];
+  pendienteGHL?: ItemAprobacionGHL | null;
 }
 
 export function ChatWhatsAppLead({
   leadId, tieneTelefono, mensajesIniciales, hayMasIniciales,
-  dentro24h, modoSistema, leadNombre, templatesAprobados,
+  dentro24h, modoSistema, leadNombre, templatesAprobados, pendienteGHL,
 }: Props) {
   const [mensajes, setMensajes] = useState<Mensaje[]>(mensajesIniciales);
   const [hayMas, setHayMas] = useState(hayMasIniciales);
@@ -184,6 +187,11 @@ export function ChatWhatsAppLead({
         <p className="text-xs text-red-600 px-4 py-1 shrink-0 border-t bg-red-50">
           {errorCarga}
         </p>
+      )}
+
+      {/* Banner aprobación GHL */}
+      {pendienteGHL && (
+        <BannerAprobacionGHL item={pendienteGHL} leadId={leadId} />
       )}
 
       {/* Input */}

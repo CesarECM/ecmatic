@@ -13,6 +13,14 @@ import { headers } from "next/headers";
 import { logSistema } from "@/services/log-sistema";
 import { diffObjects } from "@/lib/diff";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
+import { enviarMensajeGHL } from "@/lib/ghl/conversations-api";
+import { guardarMensaje } from "@/services/mensajes";
+import {
+  resolverItemAprobacion,
+  actualizarStatsAprobacion,
+  obtenerStatsAprobacion,
+} from "@/services/ghl-aprobacion";
+import { crearRecurso } from "@/services/conocimiento";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -201,3 +209,92 @@ export async function toggleNurturingAction(formData: FormData) {
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/nurturing");
 }
+
+// GHL-5.9 — Aprueba y envía el mensaje GHL sin edición
+export const aprobarMensajeGHLAction = safeAction(async (
+  itemId: string,
+  convId: string,
+  ghlContactId: string,
+  mensajeIA: string,
+  leadEcmaticId: string | null,
+  campana: string,
+  leadId: string
+) => {
+  await enviarMensajeGHL(convId, mensajeIA, ghlContactId);
+
+  if (leadEcmaticId) {
+    await guardarMensaje({ leadId: leadEcmaticId, contenido: mensajeIA, direccion: "saliente" });
+  }
+
+  await resolverItemAprobacion({ id: itemId, estado: "aprobado", mensajeFinal: mensajeIA });
+  await actualizarStatsAprobacion(campana, "aprobado");
+
+  // Alimentar KB si tasa global >= 85% y >= 25 aprobados
+  const stats = await obtenerStatsAprobacion(campana);
+  if (stats && stats.tasa_limpia >= 0.85 && stats.aprobados >= 25) {
+    await crearRecurso(
+      "practica_venta",
+      `Respuesta SBC aprobada — ${new Date().toLocaleDateString("es-MX")}`,
+      `[Campaña ${campana}] Respuesta validada en conversación real\n\n${mensajeIA}`,
+      "ia_sugerido"
+    ).catch(() => null);
+  }
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.aprobar", fase: "ok",
+    leadId, resultado: `item:${itemId}`,
+  });
+
+  revalidatePath(`/admin/leads/${leadId}`);
+  revalidatePath("/admin/aprobaciones");
+});
+
+// GHL-5.9 — Edita el mensaje y lo envía, registrando la razón de la edición
+export const editarAprobarMensajeGHLAction = safeAction(async (
+  itemId: string,
+  convId: string,
+  ghlContactId: string,
+  textoFinal: string,
+  razonEdicion: string,
+  leadEcmaticId: string | null,
+  campana: string,
+  leadId: string
+) => {
+  await enviarMensajeGHL(convId, textoFinal, ghlContactId);
+
+  if (leadEcmaticId) {
+    await guardarMensaje({ leadId: leadEcmaticId, contenido: textoFinal, direccion: "saliente" });
+  }
+
+  await resolverItemAprobacion({
+    id: itemId, estado: "editado",
+    mensajeFinal: textoFinal, razonEdicion,
+  });
+  await actualizarStatsAprobacion(campana, "editado");
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.editar", fase: "ok",
+    leadId, resultado: `item:${itemId}`, metadata: { razonEdicion: razonEdicion.slice(0, 100) },
+  });
+
+  revalidatePath(`/admin/leads/${leadId}`);
+  revalidatePath("/admin/aprobaciones");
+});
+
+// GHL-5.9 — Rechaza el mensaje (no se envía nada al lead)
+export const rechazarMensajeGHLAction = safeAction(async (
+  itemId: string,
+  campana: string,
+  leadId: string
+) => {
+  await resolverItemAprobacion({ id: itemId, estado: "rechazado" });
+  await actualizarStatsAprobacion(campana, "rechazado");
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.rechazar", fase: "ok",
+    leadId, resultado: `item:${itemId}`,
+  });
+
+  revalidatePath(`/admin/leads/${leadId}`);
+  revalidatePath("/admin/aprobaciones");
+});
