@@ -18,6 +18,7 @@ import { evaluarScoreMensajeGHL } from "@/lib/ai/evaluar-score-ghl";
 import { encolarMensajeGHL, esModoAutomatico } from "@/services/ghl-aprobacion";
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { actualizarTagsYPipeline } from "@/services/ghl-tagging-progresivo";
+import { dispararDemoSbc, confirmarSlotDemo } from "@/services/ghl-demo-sbc";
 
 const CAMPANA_ACTIVA = "sbc_jun26";
 
@@ -112,7 +113,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   if (!resultado) return;
 
-  const { texto, leadId, intencion, setterFaseActual, nombre } = resultado;
+  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds } = resultado;
 
   // GHL-6: tagging progresivo + pipeline — corre en background sin bloquear la respuesta
   void actualizarTagsYPipeline(contactId, cuerpo, intencion, nombre);
@@ -140,6 +141,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
       intencion,
       setter_fase: setterFaseActual,
       conv_id: convId,
+      recursosIds,
     };
 
     const itemId = await encolarMensajeGHL({
@@ -184,6 +186,7 @@ interface ResultadoMotor {
   intencion: string;
   setterFaseActual: number;
   nombre: string | null;
+  recursosIds: string[];
 }
 
 async function generarRespuestaMotorCompleto(
@@ -249,7 +252,17 @@ async function generarRespuestaMotorCompleto(
     protocoloObjecion = construirProtocoloObjecion(filtroResult.tipo, desconfianza?.tipo ?? null);
   }
 
-  const { texto } = await generarRespuesta([cuerpo], {
+  // Demo automática SBC: slots para nuevo turno o meetLink para confirmación
+  let slotsDemo: import("@/services/citas").SlotDisponible[] | undefined;
+  let meetLinkDemo: string | null | undefined;
+  if (intencion === "confirmando_slot") {
+    meetLinkDemo = await confirmarSlotDemo(lead.id, cuerpo).catch(() => null);
+  } else {
+    const slots = await dispararDemoSbc(lead.id, intencion, historial, nuevoModo).catch(() => null);
+    if (slots?.length) slotsDemo = slots;
+  }
+
+  const { texto, recursosIds } = await generarRespuesta([cuerpo], {
     nombre:        nombre ?? lead.nombre ?? null,
     temperamento:  lead.temperamento_inferido ?? null,
     pipelineStage: lead.pipeline_stage ?? "Nuevo",
@@ -263,8 +276,10 @@ async function generarRespuestaMotorCompleto(
     protocoloObjecion,
     rolesDinamicos,
     modoRevelacion: nuevoModo,
+    ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
+    ...(meetLinkDemo && { meetLink: meetLinkDemo }),
   });
 
   // El mensaje saliente se guarda solo cuando se aprueba/envía, no aquí
-  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre };
+  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds };
 }

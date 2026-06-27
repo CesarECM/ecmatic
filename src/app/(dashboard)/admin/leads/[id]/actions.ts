@@ -20,7 +20,7 @@ import {
   actualizarStatsAprobacion,
   obtenerStatsAprobacion,
 } from "@/services/ghl-aprobacion";
-import { crearRecurso } from "@/services/conocimiento";
+import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -229,6 +229,13 @@ export const aprobarMensajeGHLAction = safeAction(async (
   await resolverItemAprobacion({ id: itemId, estado: "aprobado", mensajeFinal: mensajeIA });
   await actualizarStatsAprobacion(campana, "aprobado");
 
+  // Registrar cierre en los recursos KB que generaron esta respuesta
+  const supabase = createServiceClient();
+  const { data: qItem } = await (supabase as any)
+    .from("ghl_approval_queue").select("contexto").eq("id", itemId).maybeSingle();
+  const recursosIds = (qItem?.contexto as Record<string, unknown> | null)?.recursosIds as string[] | undefined;
+  if (recursosIds?.length) await registrarCierre(recursosIds).catch(() => null);
+
   // Alimentar KB si tasa global >= 85% y >= 25 aprobados
   const stats = await obtenerStatsAprobacion(campana);
   if (stats && stats.tasa_limpia >= 0.85 && stats.aprobados >= 25) {
@@ -271,6 +278,13 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
     mensajeFinal: textoFinal, razonEdicion,
   });
   await actualizarStatsAprobacion(campana, "editado");
+
+  // Registrar cierre en los recursos KB que generaron esta respuesta
+  const supabase = createServiceClient();
+  const { data: qItem } = await (supabase as any)
+    .from("ghl_approval_queue").select("contexto").eq("id", itemId).maybeSingle();
+  const recursosIds = (qItem?.contexto as Record<string, unknown> | null)?.recursosIds as string[] | undefined;
+  if (recursosIds?.length) await registrarCierre(recursosIds).catch(() => null);
 
   void logSistema({
     categoria: "ui", tipoAccion: "ghl_aprobacion.editar", fase: "ok",

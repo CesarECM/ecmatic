@@ -54,6 +54,7 @@ export interface RespuestaIA {
   texto: string;
   scoreConfianza: number;
   imagenUrl: string | null;  // S32.8
+  recursosIds: string[];
 }
 
 export async function generarRespuesta(
@@ -286,5 +287,10 @@ ${instruccionReglaOroCierre()}`;
 
   const raw  = (response.content[0] as { text: string }).text.trim();
   const texto = normalizarRespuesta(raw);
-  return { texto, scoreConfianza: calcularScore(todosRecursos, sugerenciaMatriz, texto), imagenUrl: imagenActivaUrl };
+  return {
+    texto,
+    scoreConfianza: calcularScore(todosRecursos, sugerenciaMatriz, texto),
+    imagenUrl: imagenActivaUrl,
+    recursosIds: todosRecursos.map((r) => r.id),
+  };
 }
