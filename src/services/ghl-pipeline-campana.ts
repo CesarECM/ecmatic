@@ -5,8 +5,8 @@ import { calificarContactoGHL, formatearHistorialGHL, type CategoriaSBC } from "
 import { elegirVarianteWorkflow } from "@/services/ab-workflows-ghl";
 import { logSistema } from "@/services/log-sistema";
 
-const CAMPANA_ACTIVA = "sbc_jun26";
-const TAG_FUENTE     = "ecm_b_caliente";
+const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
+const TAG_FUENTE     = process.env.GHL_TAG_FUENTE    ?? "ecm_b_caliente";
 
 // Categorías que reciben un workflow (los demás se excluyen o blacklistean)
 const CATEGORIAS_ELEGIBLES: CategoriaSBC[] = [

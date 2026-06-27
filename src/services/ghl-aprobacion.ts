@@ -31,6 +31,30 @@ export interface StatsAprobacionGHL {
   rechazados: number;
   tasa_limpia: number;
   automatizado: boolean;
+  activa: boolean;
+  umbral_auto: number;
+  ultimo_lote_at: string | null;
+  ultima_notif_pausa_at: string | null;
+}
+
+export interface NivelCampana {
+  nivel: 0 | 1 | 2 | 3 | 4;
+  tamanoLote: number;
+  intervaloMin: number;
+  umbral: number;
+  descripcion: string;
+}
+
+export function calcularNivel(stats: Pick<StatsAprobacionGHL, "aprobados" | "tasa_limpia" | "automatizado">): NivelCampana {
+  if (stats.automatizado)
+    return { nivel: 4, tamanoLote: 100, intervaloMin: 10, umbral: 0.70, descripcion: "Plena confianza — solo mensajes malos llegan a revisión" };
+  if (stats.aprobados >= 50 && stats.tasa_limpia >= 0.90)
+    return { nivel: 3, tamanoLote: 50,  intervaloMin: 15, umbral: 0.80, descripcion: "Alta confianza — solo mensajes dudosos llegan a revisión" };
+  if (stats.aprobados >= 25 && stats.tasa_limpia >= 0.80)
+    return { nivel: 2, tamanoLote: 30,  intervaloMin: 20, umbral: 0.85, descripcion: "Confianza media — la mayoría sale sola" };
+  if (stats.aprobados >= 10 && stats.tasa_limpia >= 0.70)
+    return { nivel: 1, tamanoLote: 20,  intervaloMin: 30, umbral: 0.88, descripcion: "Rodaje — los buenos salen solos, los justos van a revisión" };
+  return   { nivel: 0, tamanoLote: 10,  intervaloMin: 60, umbral: 0.92, descripcion: "Inicio — solo los casi perfectos salen sin revisión" };
 }
 
 // Inserta un mensaje en la cola de aprobación
@@ -168,12 +192,101 @@ export async function actualizarStatsAprobacion(
     nuevaTasa >= 0.95 &&
     nuevos.aprobados >= 50;
 
+  const statsActualizadas: StatsAprobacionGHL = {
+    ...(stats as StatsAprobacionGHL),
+    ...nuevos,
+    automatizado: debeAutomatizar ? true : stats.automatizado,
+  };
+  const { umbral } = calcularNivel(statsActualizadas);
+
   await (supabase as any)
     .from("ghl_approval_stats")
     .update({
       ...nuevos,
+      umbral_auto: umbral,
       ...(debeAutomatizar && { automatizado: true }),
     })
+    .eq("campana_key", campana);
+}
+
+// Toggle ON/OFF de la campaña
+export async function activarCampana(campana: string): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any).from("ghl_approval_stats").update({ activa: true }).eq("campana_key", campana);
+}
+
+export async function desactivarCampana(campana: string): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any).from("ghl_approval_stats").update({ activa: false }).eq("campana_key", campana);
+}
+
+// Umbral actual — si no está en DB, retorna el del nivel 0 (conservador)
+export async function obtenerUmbralAuto(campana: string): Promise<number> {
+  const stats = await obtenerStatsAprobacion(campana);
+  return stats?.umbral_auto ?? 0.92;
+}
+
+// Recalcula el umbral basado en el nivel y lo persiste
+export async function recalcularYGuardarUmbral(campana: string, stats: StatsAprobacionGHL): Promise<void> {
+  const supabase = createServiceClient();
+  const { umbral } = calcularNivel(stats);
+  await (supabase as any).from("ghl_approval_stats").update({ umbral_auto: umbral }).eq("campana_key", campana);
+}
+
+// Registra que se disparó un lote automático
+export async function registrarLoteAuto(campana: string): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any).from("ghl_approval_stats")
+    .update({ ultimo_lote_at: new Date().toISOString() })
+    .eq("campana_key", campana);
+}
+
+// Cuenta mensajes enviados hoy (medianoche CDMX = UTC-6)
+export async function contarEnviadosHoy(campana: string): Promise<number> {
+  const supabase = createServiceClient();
+  const ahora = new Date();
+  // Medianoche CDMX en UTC: hora UTC cuando CDMX marca las 00:00
+  const cdmxMidnight = new Date(Date.UTC(
+    ahora.getUTCFullYear(),
+    ahora.getUTCMonth(),
+    // Si son antes de las 06:00 UTC, la "medianoche CDMX" fue ayer en UTC
+    ahora.getUTCHours() < 6
+      ? ahora.getUTCDate() - 1
+      : ahora.getUTCDate(),
+    6, 0, 0, 0,
+  ));
+  const { count } = await (supabase as any)
+    .from("ghl_campana_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("campana", campana)
+    .eq("enviado", true)
+    .gte("enviado_at", cdmxMidnight.toISOString()) as { count: number | null };
+  return count ?? 0;
+}
+
+// Cuenta mensajes pendientes de aprobación
+export async function contarPendientes(campana: string): Promise<number> {
+  const supabase = createServiceClient();
+  const { count } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("id", { count: "exact", head: true })
+    .eq("campana", campana)
+    .eq("estado", "pendiente") as { count: number | null };
+  return count ?? 0;
+}
+
+// Registra notificación de pausa y retorna true si debe notificar (cooldown 60 min)
+export async function debeNotificarPausa(campana: string): Promise<boolean> {
+  const stats = await obtenerStatsAprobacion(campana);
+  if (!stats?.ultima_notif_pausa_at) return true;
+  const hace60 = new Date(Date.now() - 60 * 60 * 1000);
+  return new Date(stats.ultima_notif_pausa_at) < hace60;
+}
+
+export async function registrarNotifPausa(campana: string): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any).from("ghl_approval_stats")
+    .update({ ultima_notif_pausa_at: new Date().toISOString() })
     .eq("campana_key", campana);
 }
 

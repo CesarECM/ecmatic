@@ -15,12 +15,12 @@ import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
 import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
 import { obtenerRolDinamico } from "@/services/rol-dinamico";
 import { evaluarScoreMensajeGHL } from "@/lib/ai/evaluar-score-ghl";
-import { encolarMensajeGHL, esModoAutomatico } from "@/services/ghl-aprobacion";
+import { encolarMensajeGHL, obtenerUmbralAuto } from "@/services/ghl-aprobacion";
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { actualizarTagsYPipeline } from "@/services/ghl-tagging-progresivo";
 import { dispararDemoSbc, confirmarSlotDemo } from "@/services/ghl-demo-sbc";
 
-const CAMPANA_ACTIVA = "sbc_jun26";
+const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
 const TEXTOS_NEGATIVOS = [
   "ya no me interesa", "no me interesa", "no quiero",
@@ -127,10 +127,17 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     metadata:  { contactId, score, razon },
   });
 
-  const automatico = await esModoAutomatico(CAMPANA_ACTIVA);
+  const umbralAuto = await obtenerUmbralAuto(CAMPANA_ACTIVA);
+  const pasaUmbral = score >= umbralAuto;
 
-  if (automatico) {
-    // Modo autónomo: enviar directo
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.umbral", fase: "ok",
+    resultado: `score:${score.toFixed(2)} umbral:${umbralAuto.toFixed(2)} auto:${pasaUmbral}`,
+    metadata: { contactId },
+  });
+
+  if (pasaUmbral) {
+    // Score suficiente — enviar directo sin revisión humana
     await enviarMensajeGHL(convId, texto, contactId).catch((e) =>
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) })
     );

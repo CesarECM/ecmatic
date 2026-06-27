@@ -1,11 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { obtenerStatsAB } from "@/services/ab-workflows-ghl";
+import { obtenerStatsAprobacion, calcularNivel, contarEnviadosHoy, contarPendientes } from "@/services/ghl-aprobacion";
 import { CampanaControls } from "./CampanaControls";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
 export const revalidate = 0;
 
-const CAMPANA = "sbc_jun26";
+const CAMPANA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
 export default async function GHLCampaignPage() {
   const supabase = createServiceClient();
@@ -18,6 +19,12 @@ export default async function GHLCampaignPage() {
   } catch (err) {
     errorMsg = err instanceof Error ? err.message : String(err);
   }
+
+  const [aprobacionStats, enviadosHoy, pendientes] = await Promise.all([
+    obtenerStatsAprobacion(CAMPANA),
+    contarEnviadosHoy(CAMPANA),
+    contarPendientes(CAMPANA),
+  ]);
 
   const { data: recientes } = await (supabase as any)
     .from("ghl_campana_logs")
@@ -52,7 +59,14 @@ export default async function GHLCampaignPage() {
             Pipeline SBC · segmento <code className="text-xs bg-muted px-1 rounded">ecm_b_caliente</code> · 1 contacto cada 2 s
           </p>
         </div>
-        <CampanaControls campana={CAMPANA} />
+        <CampanaControls
+          activa={aprobacionStats?.activa ?? false}
+          nivel={calcularNivel(aprobacionStats ?? { aprobados: 0, tasa_limpia: 0, automatizado: false })}
+          enviadosHoy={enviadosHoy}
+          pendientes={pendientes}
+          ultimoLote={aprobacionStats?.ultimo_lote_at ?? null}
+          umbralAuto={aprobacionStats?.umbral_auto ?? 0.92}
+        />
       </div>
 
       {errorMsg && (

@@ -1,175 +1,111 @@
 "use client";
 
-import { useState, useCallback } from "react";
-
-interface LoteResultado {
-  procesados: number;
-  enviados:   number;
-  excluidos:  number;
-  errores:    number;
-  nextPage:   number | null;
-  totalGHL:   number;
-}
+import { useTransition } from "react";
+import { toggleCampanaAction } from "./actions";
+import type { NivelCampana } from "@/services/ghl-aprobacion";
 
 interface Props {
-  campana: string;
+  activa: boolean;
+  nivel: NivelCampana;
+  enviadosHoy: number;
+  pendientes: number;
+  ultimoLote: string | null;
+  umbralAuto: number;
 }
 
-export function CampanaControls({ campana }: Props) {
-  const [estado,     setEstado]     = useState<"idle" | "running" | "paused" | "done">("idle");
-  const [pagActual,  setPagActual]  = useState(1);
-  const [acumStats,  setAcumStats]  = useState({ procesados: 0, enviados: 0, excluidos: 0, errores: 0, total: 0 });
-  const [ultimoLog,  setUltimoLog]  = useState<string>("");
-  const [pauseFlag,  setPauseFlag]  = useState(false);
+const NIVEL_LABELS = [
+  "Nivel 0 — Inicio",
+  "Nivel 1 — Rodaje",
+  "Nivel 2 — Confianza media",
+  "Nivel 3 — Alta confianza",
+  "Nivel 4 — Plena confianza",
+] as const;
 
-  const procesarLote = useCallback(async (page: number, paused: boolean): Promise<void> => {
-    if (paused) {
-      setEstado("paused");
-      return;
-    }
+const NIVEL_COLORS = ["text-muted-foreground", "text-yellow-500", "text-blue-500", "text-green-500", "text-emerald-500"] as const;
 
-    setEstado("running");
-    setUltimoLog(`Procesando página ${page}...`);
+export function CampanaControls({ activa, nivel, enviadosHoy, pendientes, ultimoLote, umbralAuto }: Props) {
+  const [pending, startTransition] = useTransition();
 
-    let resultado: LoteResultado;
-    try {
-      const res = await fetch("/api/admin/ghl/campana", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ page, pageLimit: 20 }),
-        credentials: "include",
-      });
-      const data = await res.json() as { ok: boolean; error?: string } & LoteResultado;
-
-      if (!data.ok) {
-        setUltimoLog(`Error: ${data.error ?? "Error desconocido"}`);
-        setEstado("idle");
-        return;
-      }
-      resultado = data;
-    } catch (err) {
-      setUltimoLog(`Error de red: ${err instanceof Error ? err.message : String(err)}`);
-      setEstado("idle");
-      return;
-    }
-
-    setAcumStats((prev) => ({
-      procesados: prev.procesados + resultado.procesados,
-      enviados:   prev.enviados   + resultado.enviados,
-      excluidos:  prev.excluidos  + resultado.excluidos,
-      errores:    prev.errores    + resultado.errores,
-      total:      resultado.totalGHL,
-    }));
-
-    setPagActual(resultado.nextPage ?? page);
-
-    setUltimoLog(
-      `Pág ${page} — enviados: ${resultado.enviados} · excluidos: ${resultado.excluidos} · errores: ${resultado.errores}`
-    );
-
-    if (resultado.nextPage === null) {
-      setEstado("done");
-      setUltimoLog("Campaña completada.");
-      return;
-    }
-
-    // Pausa entre lotes para no saturar GHL (20 contactos × 2s = ~40s por lote)
-    await new Promise((r) => setTimeout(r, 500));
-    await procesarLote(resultado.nextPage, pauseFlag);
-  }, [pauseFlag]);
-
-  function iniciar() {
-    setPauseFlag(false);
-    setAcumStats({ procesados: 0, enviados: 0, excluidos: 0, errores: 0, total: 0 });
-    setPagActual(1);
-    void procesarLote(1, false);
+  function toggle() {
+    startTransition(() => void toggleCampanaAction(!activa));
   }
 
-  function pausar() {
-    setPauseFlag(true);
-    setEstado("paused");
-  }
-
-  function reanudar() {
-    setPauseFlag(false);
-    void procesarLote(pagActual, false);
-  }
-
-  const pct = acumStats.total > 0
-    ? Math.round((acumStats.procesados / acumStats.total) * 100)
-    : 0;
+  const pctDia = Math.min(100, Math.round((enviadosHoy / 1000) * 100));
 
   return (
-    <div className="flex flex-col gap-3 items-end min-w-[280px]">
-      {/* Botones de control */}
-      <div className="flex gap-2">
-        {estado === "idle" && (
-          <button
-            onClick={iniciar}
-            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Iniciar campaña
-          </button>
-        )}
-        {estado === "running" && (
-          <button
-            onClick={pausar}
-            className="px-4 py-2 text-sm font-medium rounded-lg bg-yellow-500 text-white hover:bg-yellow-600"
-          >
-            Pausar
-          </button>
-        )}
-        {estado === "paused" && (
-          <>
-            <button
-              onClick={reanudar}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Reanudar (pág {pagActual})
-            </button>
-            <button
-              onClick={() => setEstado("idle")}
-              className="px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted"
-            >
-              Cancelar
-            </button>
-          </>
-        )}
-        {estado === "done" && (
-          <button
-            onClick={() => setEstado("idle")}
-            className="px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted"
-          >
-            Nueva campaña
-          </button>
-        )}
-      </div>
+    <div className="flex flex-col gap-4 items-end min-w-[300px]">
 
-      {/* Barra de progreso */}
-      {(estado === "running" || estado === "paused") && (
-        <div className="w-full space-y-1">
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{acumStats.procesados} / {acumStats.total || "?"} contactos</span>
-            <span>{pct}%</span>
-          </div>
-          <div className="w-full bg-muted rounded-full h-1.5">
-            <div
-              className="bg-primary h-1.5 rounded-full transition-all"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <div className="flex gap-3 text-xs text-muted-foreground">
-            <span className="text-green-500">Enviados: {acumStats.enviados}</span>
-            <span>Excluidos: {acumStats.excluidos}</span>
-            {acumStats.errores > 0 && <span className="text-red-500">Errores: {acumStats.errores}</span>}
-          </div>
+      {/* Toggle principal */}
+      <button
+        onClick={toggle}
+        disabled={pending}
+        className={`
+          relative inline-flex h-10 w-44 items-center justify-center gap-2
+          rounded-lg text-sm font-semibold transition-all
+          ${activa
+            ? "bg-green-500 hover:bg-green-600 text-white"
+            : "bg-muted hover:bg-muted/70 text-muted-foreground border"
+          }
+          ${pending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+        `}
+      >
+        <span className={`h-2.5 w-2.5 rounded-full ${activa ? "bg-white animate-pulse" : "bg-muted-foreground"}`} />
+        {pending ? "Guardando…" : activa ? "Campaña ACTIVA" : "Campaña INACTIVA"}
+      </button>
+
+      {/* Banner pausa por pendientes */}
+      {activa && pendientes > 0 && (
+        <div className="w-full rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-2">
+          <span>⏸</span>
+          <span>
+            Pausada — <strong>{pendientes}</strong> mensaje{pendientes > 1 ? "s" : ""} pendiente{pendientes > 1 ? "s" : ""} de aprobación.{" "}
+            <a href="/admin/aprobaciones" className="underline">Revisar</a>
+          </span>
         </div>
       )}
 
-      {/* Log de estado */}
-      {ultimoLog && (
-        <p className="text-xs text-muted-foreground max-w-xs text-right">{ultimoLog}</p>
-      )}
+      {/* Panel de métricas adaptativas */}
+      <div className="w-full rounded-lg border bg-card p-3 space-y-2.5 text-xs">
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground font-medium">Nivel de confianza</span>
+          <span className={`font-bold ${NIVEL_COLORS[nivel.nivel]}`}>{NIVEL_LABELS[nivel.nivel]}</span>
+        </div>
+        <p className="text-muted-foreground leading-snug">{nivel.descripcion}</p>
+        <div className="grid grid-cols-3 gap-2 pt-1">
+          <div>
+            <p className="text-muted-foreground">Lote</p>
+            <p className="font-semibold">{nivel.tamanoLote}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Intervalo</p>
+            <p className="font-semibold">{nivel.intervaloMin} min</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Umbral IA</p>
+            <p className="font-semibold">{Math.round(umbralAuto * 100)}%</p>
+          </div>
+        </div>
+
+        {/* Cap diario */}
+        <div className="space-y-1 pt-1">
+          <div className="flex justify-between text-muted-foreground">
+            <span>Enviados hoy</span>
+            <span className={enviadosHoy >= 1000 ? "text-red-500 font-bold" : ""}>{enviadosHoy} / 1,000</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full transition-all ${pctDia >= 100 ? "bg-red-500" : pctDia >= 80 ? "bg-yellow-500" : "bg-primary"}`}
+              style={{ width: `${pctDia}%` }}
+            />
+          </div>
+        </div>
+
+        {ultimoLote && (
+          <p className="text-muted-foreground pt-0.5">
+            Último lote: {new Date(ultimoLote).toLocaleString("es-MX", { timeZone: "America/Mexico_City", dateStyle: "short", timeStyle: "short" })}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

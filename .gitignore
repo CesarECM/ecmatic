@@ -2,6 +2,11 @@
 
 # Notas locales
 lluvia_de_ideas.txt
+ficha_tecnica.txt
+
+# Datos de campaña GHL (exportaciones, logs de tagging — nunca comitear)
+*.csv
+ghl_*.txt
 
 # dependencies
 /node_modules

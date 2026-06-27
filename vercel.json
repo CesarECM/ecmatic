@@ -30,6 +30,7 @@
     { "path": "/api/admin/log-limpieza",                   "schedule": "0 3 * * *" },
     { "path": "/api/admin/protocolos-ejecutar",            "schedule": "0 * * * *" },
     { "path": "/api/admin/ghl-workflows/sync",            "schedule": "0 6 * * 1" },
-    { "path": "/api/admin/ghl/campana/sla-check",         "schedule": "*/5 * * * *" }
+    { "path": "/api/admin/ghl/campana/sla-check",         "schedule": "*/5 * * * *" },
+    { "path": "/api/admin/ghl/campana/auto-disparo",     "schedule": "*/10 * * * *" }
   ]
 }

@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { procesarLoteCampana } from "@/services/ghl-pipeline-campana";
 import { obtenerStatsAB } from "@/services/ab-workflows-ghl";
 
-const CAMPANA_ACTIVA = "sbc_jun26";
+const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
 async function verificarAdmin(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get("authorization");
