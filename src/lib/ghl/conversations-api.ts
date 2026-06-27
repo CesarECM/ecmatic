@@ -48,8 +48,10 @@ export async function obtenerMensajes(conversationId: string, limit = 20): Promi
 
 export async function inscribirEnWorkflow(contactId: string, workflowId: string): Promise<void> {
   const t = new Date(Date.now() + 360_000);
-  t.setMilliseconds(0);
-  const eventStartTime = t.toISOString().replace("Z", "+00:00");
+  const p = (n: number) => String(n).padStart(2, "0");
+  const eventStartTime =
+    `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())}` +
+    `T${p(t.getUTCHours())}:${p(t.getUTCMinutes())}:${p(t.getUTCSeconds())}+00:00`;
   await ghlPost(`/contacts/${contactId}/workflow/${workflowId}`, {
     eventStartTime,
   });
