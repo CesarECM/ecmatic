@@ -101,16 +101,19 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     return;
   }
 
-  void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "inicio", resultado: cuerpo.slice(0, 80) });
+  await logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "inicio", resultado: cuerpo.slice(0, 80) });
 
-  const resultado = await generarRespuestaMotorCompleto(contactId, cuerpo).catch((e) => {
-    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "error", resultado: String(e) });
-    return null;
-  });
+  let resultado: Awaited<ReturnType<typeof generarRespuestaMotorCompleto>> = null;
+  try {
+    resultado = await generarRespuestaMotorCompleto(contactId, cuerpo);
+  } catch (e) {
+    await logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: "error", resultado: `throw: ${String(e).slice(0, 200)}` });
+    return;
+  }
 
-  void logSistema({
-    categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: resultado ? "ok" : "error",
-    resultado: resultado?.texto.slice(0, 120) ?? "null",
+  await logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.generar", fase: resultado ? "ok" : "warn",
+    resultado: resultado ? resultado.texto.slice(0, 120) : "resultado null — ver ghl_sbc.motor",
   });
 
   if (!resultado) return;
@@ -194,7 +197,8 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
         .then((c) => c.name ?? c.firstName ?? null)
         .catch(() => null);
 
-      void notificarMensajePendienteGHL({
+      // await garantiza que el WA al admin no se pierda por timeout de after()
+      await notificarMensajePendienteGHL({
         itemId,
         convId,
         contactId,
@@ -204,9 +208,9 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
         leadEcmaticId: leadId,
       });
 
-      void logSistema({
+      await logSistema({
         categoria: "webhook", tipoAccion: "ghl_sbc.cola", fase: "ok",
-        resultado: `item:${itemId} score:${score.toFixed(2)}`,
+        resultado: `item:${itemId} score:${score.toFixed(2)} notif:enviada`,
         metadata:  { contactId, itemId },
       });
     }
@@ -263,7 +267,12 @@ async function generarRespuestaMotorCompleto(
     .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado, modo_revelacion")
     .single();
 
-  if (error || !lead) return null;
+  if (error || !lead) {
+    void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.motor", fase: "error", resultado: `upsert lead fallido: ${error?.message ?? "null lead"}`, metadata: { telefono } });
+    return null;
+  }
+
+  void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.motor", fase: "inicio", resultado: `lead:${lead.id.slice(0,8)} ruta:${lead.pipeline_ruta ?? "null"}`, metadata: { leadId: lead.id } });
 
   const historial     = await obtenerHistorial(lead.id);
   const intencion     = await clasificarIntencion([cuerpo], historial).catch(() => "fuera_de_contexto" as const);
@@ -324,22 +333,45 @@ async function generarRespuestaMotorCompleto(
     ...tagsGHL.map((t) => `ghl:${t}`),
   ];
 
-  const { texto, recursosIds } = await generarRespuesta([cuerpo], {
-    nombre:        nombre ?? lead.nombre ?? null,
-    temperamento:  lead.temperamento_inferido ?? null,
-    pipelineStage: lead.pipeline_stage ?? "Nuevo",
-    compraPreviaa: lead.compra_previa ?? false,
-    historial,
-    pipelineRuta:  pipelineRutaEfectiva as import("@/lib/supabase/types").PipelineRuta,
-    faseCAGC:      estadoCagc?.fase_numero,
-    etiquetas:     etiquetasMotor,
-    canal_origen:  "whatsapp",
-    setterEstado,
-    protocoloObjecion,
-    rolesDinamicos,
-    modoRevelacion: nuevoModo,
-    ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
-    ...(meetLinkDemo && { meetLink: meetLinkDemo }),
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.motor", fase: "llamado",
+    resultado: `intencion:${intencion} slots:${slotsDemo?.length ?? 0} meetLink:${!!meetLinkDemo} ruta:${pipelineRutaEfectiva}`,
+    leadId: lead.id,
+  });
+
+  let texto: string;
+  let recursosIds: string[];
+  try {
+    ({ texto, recursosIds } = await generarRespuesta([cuerpo], {
+      nombre:        nombre ?? lead.nombre ?? null,
+      temperamento:  lead.temperamento_inferido ?? null,
+      pipelineStage: lead.pipeline_stage ?? "Nuevo",
+      compraPreviaa: lead.compra_previa ?? false,
+      historial,
+      pipelineRuta:  pipelineRutaEfectiva as import("@/lib/supabase/types").PipelineRuta,
+      faseCAGC:      estadoCagc?.fase_numero,
+      etiquetas:     etiquetasMotor,
+      canal_origen:  "whatsapp",
+      setterEstado,
+      protocoloObjecion,
+      rolesDinamicos,
+      modoRevelacion: nuevoModo,
+      ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
+      ...(meetLinkDemo && { meetLink: meetLinkDemo }),
+    }));
+  } catch (e) {
+    void logSistema({
+      categoria: "webhook", tipoAccion: "ghl_sbc.motor", fase: "error",
+      resultado: `generarRespuesta throw: ${String(e).slice(0, 300)}`,
+      leadId: lead.id,
+    });
+    return null;
+  }
+
+  void logSistema({
+    categoria: "webhook", tipoAccion: "ghl_sbc.motor", fase: "ok",
+    resultado: texto.slice(0, 120),
+    leadId: lead.id,
   });
 
   // El mensaje saliente se guarda solo cuando se aprueba/envía, no aquí
