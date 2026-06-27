@@ -23,6 +23,7 @@ export async function verificarSalud(): Promise<IndicadorSalud[]> {
     checkBrevo(ts),
     checkStripe(ts),
     checkSmartBuilder(ts),
+    checkGHL(ts),
   ]);
   return checks.map((r) => r.status === "fulfilled" ? r.value : {
     nombre: "Desconocido", estado: "error" as EstadoSalud,
@@ -137,6 +138,28 @@ async function checkSmartBuilder(ts: string): Promise<IndicadorSalud> {
       mensaje: res.ok ? "Activo" : `HTTP ${res.status}`, timestamp: ts };
   } catch (e) {
     return { nombre: "SmartBuilderEC", estado: "error", mensaje: String(e), timestamp: ts };
+  }
+}
+
+async function checkGHL(ts: string): Promise<IndicadorSalud> {
+  const apiKey    = process.env.GHL_API_KEY;
+  const locationId = process.env.GHL_LOCATION_ID;
+  if (!apiKey || !locationId) {
+    return { nombre: "GoHighLevel", estado: "degraded", mensaje: "Sin credenciales (GHL_API_KEY / GHL_LOCATION_ID)", timestamp: ts };
+  }
+  try {
+    const res = await fetch(
+      `https://services.leadconnectorhq.com/locations/${locationId}`,
+      { headers: { Authorization: `Bearer ${apiKey}`, Version: "2021-07-28" } }
+    );
+    if (res.ok) {
+      const data = await res.json() as { location?: { name?: string } };
+      const nombre = data.location?.name ?? "OK";
+      return { nombre: "GoHighLevel", estado: "ok", mensaje: `Conectado · ${nombre}`, timestamp: ts };
+    }
+    return { nombre: "GoHighLevel", estado: "error", mensaje: `HTTP ${res.status}`, timestamp: ts };
+  } catch (e) {
+    return { nombre: "GoHighLevel", estado: "error", mensaje: String(e), timestamp: ts };
   }
 }
 
