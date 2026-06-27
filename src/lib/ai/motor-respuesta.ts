@@ -27,7 +27,8 @@ function normalizarRespuesta(texto: string): string {
     .replace(/^[—–] /gm, "")      // viñeta con raya al inicio de línea → quitar
     .replace(/ [—–]$/gm, ".")     // raya al final de oración → punto
     .replace(/ [—–] /g, ", ")     // raya entre dos frases → coma
-    .replace(/[—–]/g, ", ");      // cualquier raya restante → coma
+    .replace(/[—–]/g, ", ")       // cualquier raya restante → coma
+    .replace(/\*\*(.+?)\*\*/gs, "*$1*"); // markdown bold → WhatsApp bold
 }
 
 interface ContextoLead {

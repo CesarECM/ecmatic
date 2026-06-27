@@ -116,7 +116,7 @@ export default async function LeadPerfilPage({
   const temperamento = lead.temperamento_inferido as string | undefined;
 
   return (
-    <div className="-m-6 flex flex-col" style={{ height: "calc(100dvh - 53px)" }}>
+    <div className="-m-6 flex flex-col md:h-[calc(100dvh-53px)]">
       {/* Cabecera del lead */}
       <div className="px-6 py-3 border-b bg-card flex items-center gap-3 shrink-0 flex-wrap">
         <a href="/admin/leads" className="text-muted-foreground hover:text-foreground text-sm shrink-0">
@@ -167,9 +167,9 @@ export default async function LeadPerfilPage({
       </div>
 
       {/* Split panel */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Panel izquierdo — Chat WhatsApp (55%) */}
-        <div className="flex flex-col overflow-hidden border-r" style={{ width: "55%" }}>
+      <div className="flex flex-col md:flex-row flex-1 md:overflow-hidden">
+        {/* Chat WhatsApp — arriba en mobile, izquierda en desktop (55%) */}
+        <div className="flex flex-col min-h-[55vh] md:min-h-0 md:overflow-hidden border-b md:border-b-0 md:border-r md:w-[55%]">
           <ChatWhatsAppLead
             leadId={id}
             tieneTelefono={!!lead.telefono}
@@ -183,8 +183,8 @@ export default async function LeadPerfilPage({
           />
         </div>
 
-        {/* Panel derecho — Info / Pipelines / Emails (45%) */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Info / Pipelines / Emails — abajo en mobile, derecha en desktop (45%) */}
+        <div className="flex-1 flex flex-col md:overflow-hidden">
           <LeadInfoPanel
             lead={lead}
             etapas={etapasPrimarias}
