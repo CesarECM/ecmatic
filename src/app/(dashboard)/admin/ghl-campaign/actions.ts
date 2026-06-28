@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
-import { activarCampana, desactivarCampana } from "@/services/ghl-aprobacion";
+import { activarCampana, desactivarCampana, reiniciarNivelesCampana } from "@/services/ghl-aprobacion";
 import { logSistema } from "@/services/log-sistema";
 
 const CAMPANA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
@@ -18,6 +18,15 @@ export async function eliminarLogCampanaAction(ghlContactId: string): Promise<vo
   void logSistema({
     categoria: "ui", tipoAccion: "ghl_campana.eliminar_log", fase: "ok",
     resultado: ghlContactId,
+  });
+  revalidatePath("/admin/ghl-campaign");
+}
+
+export async function reiniciarNivelesAction(): Promise<void> {
+  await reiniciarNivelesCampana(CAMPANA);
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_campana.reiniciar_niveles", fase: "ok",
+    resultado: CAMPANA,
   });
   revalidatePath("/admin/ghl-campaign");
 }

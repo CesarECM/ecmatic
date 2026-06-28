@@ -7,7 +7,7 @@ import { detectarSilencios } from "@/services/detectar-silencio";
 import { generarFollowupGHL } from "@/lib/ai/generar-followup-ghl";
 import { buscarConversacionWA } from "@/lib/ghl/conversations-api";
 import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
-import { encolarMensajeGHL } from "@/services/ghl-aprobacion";
+import { encolarMensajeGHL, obtenerStatsAprobacion } from "@/services/ghl-aprobacion";
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -168,6 +168,11 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const statsActiva = await obtenerStatsAprobacion(CAMPANA_ACTIVA);
+  if (!statsActiva?.activa) {
+    return NextResponse.json({ ok: true, motivo: "campana_inactiva" });
   }
 
   const traceId = crypto.randomUUID();

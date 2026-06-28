@@ -44,10 +44,11 @@ const SECTIONS: NavSection[] = [
     id: "operaciones",
     label: "Operaciones",
     items: [
+      { href: "/admin/ghl-campaign",  label: "Campaña SBC",         emoji: "📣", roles: ["admin"] },
+      { href: "/admin/aprobaciones",  label: "Aprobaciones",        emoji: "✅", roles: ["admin"] },
       { href: "/admin/pipelines",        label: "Pipelines",           emoji: "🔀", roles: ["admin"] },
       { href: "/admin/ghl-workflows",  label: "GHL Workflows",       emoji: "⚡", roles: ["admin"] },
       { href: "/admin/protocolos",    label: "Protocolos",          emoji: "🎯", roles: ["admin"] },
-      { href: "/admin/aprobaciones",  label: "Aprobaciones",        emoji: "✅", roles: ["admin"] },
       { href: "/admin/postventa",     label: "Post-Venta",          emoji: "🎓", roles: ["admin"] },
       { href: "/admin/vendedores",    label: "Vendedores",          emoji: "🏆", roles: ["admin"] },
       { href: "/admin/marca",         label: "Identidad de marca",  emoji: "🎨", roles: ["admin"] },

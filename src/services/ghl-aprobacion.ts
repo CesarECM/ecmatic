@@ -30,6 +30,7 @@ export interface StatsAprobacionGHL {
   editados: number;
   rechazados: number;
   tasa_limpia: number;
+  aprobados_consecutivos: number;
   automatizado: boolean;
   activa: boolean;
   umbral_auto: number;
@@ -46,16 +47,20 @@ export interface NivelCampana {
   descripcion: string;
 }
 
-export function calcularNivel(stats: Pick<StatsAprobacionGHL, "aprobados" | "tasa_limpia" | "automatizado">): NivelCampana {
+// La progresión de niveles usa aprobados_consecutivos (racha), no el total histórico.
+// Un mensaje editado resetea la racha a 0, lo que baja el nivel inmediatamente.
+// tasa_limpia sigue siendo histórica (aprobados_totales / total) como métrica de calidad.
+export function calcularNivel(
+  stats: Pick<StatsAprobacionGHL, "aprobados_consecutivos" | "tasa_limpia" | "automatizado">,
+): NivelCampana {
   if (stats.automatizado)
     return { nivel: 4, tamanoLote: 100, intervaloMin: 10, umbral: 0.75, descripcion: "Plena confianza — solo mensajes malos llegan a revisión" };
-  if (stats.aprobados >= 50 && stats.tasa_limpia >= 0.90)
+  if (stats.aprobados_consecutivos >= 50 && stats.tasa_limpia >= 0.90)
     return { nivel: 3, tamanoLote: 50,  intervaloMin: 15, umbral: 0.85, descripcion: "Alta confianza — mensajes dudosos van a revisión" };
-  if (stats.aprobados >= 25 && stats.tasa_limpia >= 0.80)
+  if (stats.aprobados_consecutivos >= 25 && stats.tasa_limpia >= 0.80)
     return { nivel: 2, tamanoLote: 30,  intervaloMin: 20, umbral: 0.90, descripcion: "Confianza media — los mejores salen solos" };
-  if (stats.aprobados >= 10 && stats.tasa_limpia >= 0.70)
+  if (stats.aprobados_consecutivos >= 10 && stats.tasa_limpia >= 0.70)
     return { nivel: 1, tamanoLote: 20,  intervaloMin: 30, umbral: 0.95, descripcion: "Rodaje — casi todo va a revisión" };
-  // Nivel 0: umbral 1.0 es inalcanzable (score clampeado a [0,1]) → TODO va a cola de aprobación
   return   { nivel: 0, tamanoLote: 10,  intervaloMin: 60, umbral: 1.0,  descripcion: "Inicio — todos los mensajes requieren aprobación manual" };
 }
 
@@ -169,7 +174,9 @@ export async function resolverItemAprobacion(params: {
     .eq("id", params.id);
 }
 
-// Actualiza contadores globales de la campaña
+// Actualiza contadores globales de la campaña.
+// aprobados_consecutivos (racha) sube con aprobado y vuelve a 0 con editado.
+// tasa_limpia es generada en DB (aprobados_históricos / total), no se toca aquí.
 export async function actualizarStatsAprobacion(
   campana: string,
   decision: "aprobado" | "editado" | "rechazado"
@@ -178,25 +185,32 @@ export async function actualizarStatsAprobacion(
   const stats = await obtenerStatsAprobacion(campana);
   if (!stats) return;
 
+  const consecutivosActuales = stats.aprobados_consecutivos ?? 0;
+  const nuevosConsecutivos =
+    decision === "aprobado" ? consecutivosActuales + 1 :
+    decision === "editado"  ? 0 :
+    consecutivosActuales; // rechazado no interrumpe la racha
+
   const nuevos = {
-    total:      stats.total + 1,
-    aprobados:  stats.aprobados  + (decision === "aprobado"  ? 1 : 0),
-    editados:   stats.editados   + (decision === "editado"   ? 1 : 0),
-    rechazados: stats.rechazados + (decision === "rechazado" ? 1 : 0),
-    updated_at: new Date().toISOString(),
+    total:                   stats.total + 1,
+    aprobados:               stats.aprobados  + (decision === "aprobado"  ? 1 : 0),
+    editados:                stats.editados   + (decision === "editado"   ? 1 : 0),
+    rechazados:              stats.rechazados + (decision === "rechazado" ? 1 : 0),
+    aprobados_consecutivos:  nuevosConsecutivos,
+    updated_at:              new Date().toISOString(),
   };
 
-  const nuevaTasa = nuevos.total > 0 ? nuevos.aprobados / nuevos.total : 0;
+  const nuevaTasaHistorica = nuevos.total > 0 ? nuevos.aprobados / nuevos.total : 0;
 
-  // Evaluar si debe cambiar modo automático
   const debeAutomatizar =
     !stats.automatizado &&
-    nuevaTasa >= 0.95 &&
-    nuevos.aprobados >= 50;
+    nuevaTasaHistorica >= 0.95 &&
+    nuevosConsecutivos >= 50;
 
   const statsActualizadas: StatsAprobacionGHL = {
     ...(stats as StatsAprobacionGHL),
     ...nuevos,
+    tasa_limpia: nuevaTasaHistorica,
     automatizado: debeAutomatizar ? true : stats.automatizado,
   };
   const { umbral } = calcularNivel(statsActualizadas);
@@ -374,6 +388,25 @@ export async function obtenerEstadosLeadsCampana(campana: string): Promise<Estad
   }
 
   return resultado;
+}
+
+// Reinicia todos los contadores de confianza a cero.
+// Úsalo cuando hay cambios importantes en el servicio o mensajes que invalidan las aprobaciones previas.
+export async function reiniciarNivelesCampana(campana: string): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any)
+    .from("ghl_approval_stats")
+    .update({
+      total:                  0,
+      aprobados:              0,
+      editados:               0,
+      rechazados:             0,
+      aprobados_consecutivos: 0,
+      automatizado:           false,
+      umbral_auto:            1.0,
+      updated_at:             new Date().toISOString(),
+    })
+    .eq("campana_key", campana);
 }
 
 // Marca notificación SLA enviada e incrementa contador

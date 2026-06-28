@@ -12,6 +12,8 @@ import { LogTable, type LogRow } from "./LogTable";
 import { NivelesRoadmap } from "./NivelesRoadmap";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
+
+type MotivoItem = string | { texto: string; href: string };
 export const revalidate = 0;
 
 const CAMPANA    = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
@@ -52,7 +54,7 @@ export default async function GHLCampaignPage() {
     .order("updated_at", { ascending: false })
     .limit(50) as { data: LogRow[] | null };
 
-  const nivel        = calcularNivel(aprobacionStats ?? { aprobados: 0, tasa_limpia: 0, automatizado: false });
+  const nivel        = calcularNivel(aprobacionStats ?? { aprobados_consecutivos: 0, tasa_limpia: 0, automatizado: false });
   const totalGHL     = ghlResult.total;
   const paginaActual = aprobacionStats?.pagina_campana ?? 1;
   const totalPaginas = totalGHL > 0 ? Math.ceil(totalGHL / nivel.tamanoLote) : 0;
@@ -66,16 +68,20 @@ export default async function GHLCampaignPage() {
   const enVentanaMensajes     = hora >= 9.5 && hora < 19.5;
   const enVentanaRecordatorios = hora >= 9   && hora < 22;
 
-  const motivosPausaMensajes = [
-    !activa                  && "Campaña desactivada manualmente",
-    !enVentanaMensajes       && "Fuera de horario (09:30 – 19:30 CDMX)",
-    pendientes > 0           && `${pendientes} mensaje${pendientes > 1 ? "s" : ""} pendiente${pendientes > 1 ? "s" : ""} de aprobación`,
-    capAlcanzado             && `Cap diario de ${CAP_DIA.toLocaleString()} alcanzado`,
-  ].filter(Boolean) as string[];
+  const motivosPausaMensajes: MotivoItem[] = [
+    !activa            && "Campaña desactivada manualmente",
+    !enVentanaMensajes && "Fuera de horario (09:30 – 19:30 CDMX)",
+    pendientes > 0     && {
+      texto: `${pendientes} mensaje${pendientes > 1 ? "s" : ""} pendiente${pendientes > 1 ? "s" : ""} de aprobación`,
+      href:  "/admin/aprobaciones",
+    },
+    capAlcanzado       && `Cap diario de ${CAP_DIA.toLocaleString()} alcanzado`,
+  ].filter(Boolean) as MotivoItem[];
 
-  const motivosPausaRecordatorios = [
+  const motivosPausaRecordatorios: MotivoItem[] = [
+    !activa                 && "Campaña desactivada manualmente",
     !enVentanaRecordatorios && "Fuera de horario (09:00 – 22:00 CDMX)",
-  ].filter(Boolean) as string[];
+  ].filter(Boolean) as MotivoItem[];
 
   const tasaA = stats?.enviados_a  ? (stats.convertidos_a  / stats.enviados_a  * 100).toFixed(1) : "—";
   const tasaB = stats?.enviados_b  ? (stats.convertidos_b  / stats.enviados_b  * 100).toFixed(1) : "—";
@@ -162,7 +168,8 @@ export default async function GHLCampaignPage() {
       {/* ── Hoja de ruta ───────────────────────────────────────── */}
       <NivelesRoadmap
         nivelActual={nivel.nivel}
-        aprobados={aprobacionStats?.aprobados ?? 0}
+        aprobadosConsecutivos={aprobacionStats?.aprobados_consecutivos ?? 0}
+        aprobadosTotal={aprobacionStats?.aprobados ?? 0}
         tasaLimpia={aprobacionStats?.tasa_limpia ?? 0}
         automatizado={aprobacionStats?.automatizado ?? false}
       />
@@ -231,7 +238,7 @@ function NivelBadge({ nivel }: { nivel: 0 | 1 | 2 | 3 | 4 }) {
 }
 
 function VentanaCard({ titulo, ventana, activa, motivos, sub }: {
-  titulo: string; ventana: string; activa: boolean; motivos: string[]; sub: string;
+  titulo: string; ventana: string; activa: boolean; motivos: MotivoItem[]; sub: string;
 }) {
   return (
     <div className={`rounded-lg border p-4 space-y-2 ${activa ? "border-green-500/40 bg-green-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}>
@@ -242,11 +249,18 @@ function VentanaCard({ titulo, ventana, activa, motivos, sub }: {
         </span>
       </div>
       <p className="text-xs text-muted-foreground">Ventana: <strong>{ventana}</strong></p>
-      {motivos.map((m) => (
-        <p key={m} className="text-xs text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
-          <span>⏸</span>{m}
-        </p>
-      ))}
+      {motivos.map((m) => {
+        const texto = typeof m === "string" ? m : m.texto;
+        const href  = typeof m === "string" ? null : m.href;
+        return (
+          <p key={texto} className="text-xs text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
+            <span>⏸</span>
+            {href
+              ? <a href={href} className="underline font-medium hover:opacity-80">{texto}</a>
+              : texto}
+          </p>
+        );
+      })}
       <p className="text-xs text-muted-foreground">{sub}</p>
     </div>
   );
