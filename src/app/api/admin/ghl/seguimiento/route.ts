@@ -5,9 +5,13 @@ import { logSistema } from "@/services/log-sistema";
 import { obtenerVencidos, avanzarNivel, type SeguimientoLead } from "@/services/seguimiento-lead";
 import { detectarSilencios } from "@/services/detectar-silencio";
 import { generarFollowupGHL } from "@/lib/ai/generar-followup-ghl";
-import { enviarMensajeGHL, buscarConversacionWA } from "@/lib/ghl/conversations-api";
+import { buscarConversacionWA } from "@/lib/ghl/conversations-api";
 import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
+import { encolarMensajeGHL } from "@/services/ghl-aprobacion";
+import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { createServiceClient } from "@/lib/supabase/service";
+
+const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const CDMX_OFFSET = -6; // UTC-6 permanente
@@ -124,21 +128,38 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     return;
   }
 
-  // Enviar vía GHL
-  try {
-    await enviarMensajeGHL(convId, texto, contactId);
-    void logSistema({
-      categoria: "cron", tipoAccion: "cron.seguimiento.enviar", fase: "ok", traceId,
-      resultado: texto.slice(0, 80),
-      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, nivel, tipo: seg.tipo },
-    });
-  } catch (e) {
-    void logSistema({
-      categoria: "cron", tipoAccion: "cron.seguimiento.enviar", fase: "error", traceId,
-      resultado: String(e),
-      metadata:  { seguimientoId: seg.id, contactId, convId },
-    });
-  }
+  // Encolar para aprobación — igual que respuestas SBC, no se envía directo
+  const labelContexto = `Recordatorio ${seg.tipo} · nivel ${nivel}${seg.gatillo_snapshot ? ` · ${seg.gatillo_snapshot}` : ""}`;
+
+  const itemId = await encolarMensajeGHL({
+    campana:       seg.campana ?? CAMPANA_ACTIVA,
+    ghlContactId:  contactId,
+    convId,
+    leadEcmaticId: seg.lead_id,
+    nombre,
+    mensajeLead:   labelContexto,
+    mensajeIA:     texto,
+    contexto:      { tipo: seg.tipo, nivel, gatillo: seg.gatillo_snapshot },
+    scoreIA:       0.75,
+    razonScore:    `Recordatorio automático — ${labelContexto}`,
+  }).catch(() => null);
+
+  await notificarMensajePendienteGHL({
+    itemId:        itemId ?? "error",
+    convId,
+    contactId,
+    nombre,
+    mensajeLead:   labelContexto,
+    scoreIA:       0.75,
+    leadEcmaticId: seg.lead_id,
+    urgencia:      1,
+  }).catch(() => null);
+
+  void logSistema({
+    categoria: "cron", tipoAccion: "cron.seguimiento.encolar", fase: itemId ? "ok" : "error", traceId,
+    resultado: itemId ? `item:${itemId} encolado` : "encolar falló — notif directa enviada",
+    metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, nivel, tipo: seg.tipo },
+  });
 
   await avanzarNivel(seg);
 }

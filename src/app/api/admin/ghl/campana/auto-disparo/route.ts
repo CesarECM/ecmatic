@@ -3,7 +3,8 @@ import { procesarLoteCampana } from "@/services/ghl-pipeline-campana";
 import {
   obtenerStatsAprobacion, calcularNivel,
   contarEnviadosHoy, contarPendientes,
-  registrarLoteAuto, debeNotificarPausa, registrarNotifPausa,
+  registrarLoteAuto, actualizarPaginaCampana,
+  debeNotificarPausa, registrarNotifPausa,
 } from "@/services/ghl-aprobacion";
 import { sendTextMessage } from "@/lib/whatsapp/client";
 import { logSistema } from "@/services/log-sistema";
@@ -76,19 +77,24 @@ export async function GET() {
     resultado: `nivel:${nivel.nivel} lote:${tamanoLote} enviadosHoy:${enviadosHoy}`,
   });
 
-  const resultado = await procesarLoteCampana(1, tamanoLote).catch((e) => {
+  const paginaActual = stats.pagina_campana ?? 1;
+
+  const resultado = await procesarLoteCampana(paginaActual, tamanoLote).catch((e) => {
     void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "error", resultado: String(e) });
     return null;
   });
 
   if (resultado) {
-    await registrarLoteAuto(CAMPANA);
+    await Promise.all([
+      registrarLoteAuto(CAMPANA),
+      actualizarPaginaCampana(CAMPANA, resultado.nextPage),
+    ]);
     void logSistema({
       categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "ok",
-      resultado: `enviados:${resultado.enviados} excluidos:${resultado.excluidos}`,
-      metadata: { nivel: nivel.nivel, tamanoLote },
+      resultado: `enviados:${resultado.enviados} excluidos:${resultado.excluidos} pagina:${paginaActual}→${resultado.nextPage ?? 1}`,
+      metadata: { nivel: nivel.nivel, tamanoLote, paginaActual, nextPage: resultado.nextPage },
     });
   }
 
-  return NextResponse.json({ ok: true, nivel: nivel.nivel, tamanoLote, resultado });
+  return NextResponse.json({ ok: true, nivel: nivel.nivel, tamanoLote, paginaActual, resultado });
 }

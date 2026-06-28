@@ -33,6 +33,7 @@ export interface StatsAprobacionGHL {
   automatizado: boolean;
   activa: boolean;
   umbral_auto: number;
+  pagina_campana: number;
   ultimo_lote_at: string | null;
   ultima_notif_pausa_at: string | null;
 }
@@ -47,14 +48,15 @@ export interface NivelCampana {
 
 export function calcularNivel(stats: Pick<StatsAprobacionGHL, "aprobados" | "tasa_limpia" | "automatizado">): NivelCampana {
   if (stats.automatizado)
-    return { nivel: 4, tamanoLote: 100, intervaloMin: 10, umbral: 0.70, descripcion: "Plena confianza — solo mensajes malos llegan a revisión" };
+    return { nivel: 4, tamanoLote: 100, intervaloMin: 10, umbral: 0.75, descripcion: "Plena confianza — solo mensajes malos llegan a revisión" };
   if (stats.aprobados >= 50 && stats.tasa_limpia >= 0.90)
-    return { nivel: 3, tamanoLote: 50,  intervaloMin: 15, umbral: 0.80, descripcion: "Alta confianza — solo mensajes dudosos llegan a revisión" };
+    return { nivel: 3, tamanoLote: 50,  intervaloMin: 15, umbral: 0.85, descripcion: "Alta confianza — mensajes dudosos van a revisión" };
   if (stats.aprobados >= 25 && stats.tasa_limpia >= 0.80)
-    return { nivel: 2, tamanoLote: 30,  intervaloMin: 20, umbral: 0.85, descripcion: "Confianza media — la mayoría sale sola" };
+    return { nivel: 2, tamanoLote: 30,  intervaloMin: 20, umbral: 0.90, descripcion: "Confianza media — los mejores salen solos" };
   if (stats.aprobados >= 10 && stats.tasa_limpia >= 0.70)
-    return { nivel: 1, tamanoLote: 20,  intervaloMin: 30, umbral: 0.88, descripcion: "Rodaje — los buenos salen solos, los justos van a revisión" };
-  return   { nivel: 0, tamanoLote: 10,  intervaloMin: 60, umbral: 0.92, descripcion: "Inicio — solo los casi perfectos salen sin revisión" };
+    return { nivel: 1, tamanoLote: 20,  intervaloMin: 30, umbral: 0.95, descripcion: "Rodaje — casi todo va a revisión" };
+  // Nivel 0: umbral 1.0 es inalcanzable (score clampeado a [0,1]) → TODO va a cola de aprobación
+  return   { nivel: 0, tamanoLote: 10,  intervaloMin: 60, umbral: 1.0,  descripcion: "Inicio — todos los mensajes requieren aprobación manual" };
 }
 
 // Inserta un mensaje en la cola de aprobación
@@ -241,6 +243,19 @@ export async function registrarLoteAuto(campana: string): Promise<void> {
     .eq("campana_key", campana);
 }
 
+// Avanza (o reinicia) la página activa de la campaña.
+// nextPage === null significa que se llegó al final → resetea a 1.
+export async function actualizarPaginaCampana(
+  campana: string,
+  nextPage: number | null,
+): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any)
+    .from("ghl_approval_stats")
+    .update({ pagina_campana: nextPage ?? 1 })
+    .eq("campana_key", campana);
+}
+
 // Cuenta mensajes enviados hoy (medianoche CDMX = UTC-6)
 export async function contarEnviadosHoy(campana: string): Promise<number> {
   const supabase = createServiceClient();
@@ -288,6 +303,28 @@ export async function registrarNotifPausa(campana: string): Promise<void> {
   await (supabase as any).from("ghl_approval_stats")
     .update({ ultima_notif_pausa_at: new Date().toISOString() })
     .eq("campana_key", campana);
+}
+
+// Cuenta filas totales y excluidas (enviado=false) en ghl_campana_logs
+export async function contarLogsCampana(
+  campana: string
+): Promise<{ total: number; excluidos: number }> {
+  const supabase = createServiceClient();
+  const [resTotal, resExcluidos] = await Promise.all([
+    (supabase as any)
+      .from("ghl_campana_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("campana", campana) as Promise<{ count: number | null }>,
+    (supabase as any)
+      .from("ghl_campana_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("campana", campana)
+      .eq("enviado", false) as Promise<{ count: number | null }>,
+  ]);
+  return {
+    total:     resTotal.count     ?? 0,
+    excluidos: resExcluidos.count ?? 0,
+  };
 }
 
 // Distribución de leads de la campaña por estado ECMatic

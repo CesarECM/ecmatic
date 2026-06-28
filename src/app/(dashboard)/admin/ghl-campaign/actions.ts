@@ -1,10 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createServiceClient } from "@/lib/supabase/service";
 import { activarCampana, desactivarCampana } from "@/services/ghl-aprobacion";
 import { logSistema } from "@/services/log-sistema";
 
 const CAMPANA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
+
+// Elimina el registro de campaña y el lead pre-creado en ECMatic para ese contacto GHL.
+// Las estadísticas se recalculan automáticamente en el siguiente render.
+export async function eliminarLogCampanaAction(ghlContactId: string): Promise<void> {
+  const supabase = createServiceClient() as any;
+  await Promise.all([
+    supabase.from("ghl_campana_logs").delete().eq("ghl_contact_id", ghlContactId).eq("campana", CAMPANA),
+    supabase.from("leads").delete().eq("telefono", `ghl_${ghlContactId}`),
+  ]);
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_campana.eliminar_log", fase: "ok",
+    resultado: ghlContactId,
+  });
+  revalidatePath("/admin/ghl-campaign");
+}
 
 export async function toggleCampanaAction(activa: boolean): Promise<void> {
   if (activa) {

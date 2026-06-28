@@ -3,246 +3,252 @@ import { obtenerStatsAB } from "@/services/ab-workflows-ghl";
 import {
   obtenerStatsAprobacion, calcularNivel,
   contarEnviadosHoy, contarPendientes,
-  obtenerEstadosLeadsCampana, type EstadosLeadsCampana,
+  obtenerEstadosLeadsCampana, contarLogsCampana,
 } from "@/services/ghl-aprobacion";
+import { buscarContactosPorTag } from "@/lib/ghl/contacts-api";
 import { CampanaControls } from "./CampanaControls";
+import { EstadosChart } from "./EstadosChart";
+import { LogTable, type LogRow } from "./LogTable";
+import { NivelesRoadmap } from "./NivelesRoadmap";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
 export const revalidate = 0;
 
-const CAMPANA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
+const CAMPANA    = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
+const TAG_FUENTE = process.env.GHL_TAG_FUENTE     ?? "ecm_b_caliente";
+const CAP_DIA    = 1_000;
+
+// CDMX = UTC-6 permanente desde 2022 (sin DST)
+function horaCDMX(): number {
+  const now = new Date();
+  return ((now.getUTCHours() - 6) + 24) % 24 + now.getUTCMinutes() / 60;
+}
+function horaTexto(): string {
+  return new Date().toLocaleTimeString("es-MX", {
+    timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+}
+
 
 export default async function GHLCampaignPage() {
-  const supabase = createServiceClient();
+  const db   = createServiceClient() as any;
+  const hora = horaCDMX();
 
-  let stats: Awaited<ReturnType<typeof obtenerStatsAB>> | null = null;
-  let errorMsg: string | null = null;
+  const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult] =
+    await Promise.all([
+      obtenerStatsAB(CAMPANA).catch(() => null),
+      obtenerStatsAprobacion(CAMPANA),
+      contarEnviadosHoy(CAMPANA),
+      contarPendientes(CAMPANA),
+      obtenerEstadosLeadsCampana(CAMPANA),
+      contarLogsCampana(CAMPANA),
+      buscarContactosPorTag(TAG_FUENTE, 1, 1).catch(() => ({ contacts: [], total: 0 })),
+    ]);
 
-  try {
-    stats = await obtenerStatsAB(CAMPANA);
-  } catch (err) {
-    errorMsg = err instanceof Error ? err.message : String(err);
-  }
-
-  const [aprobacionStats, enviadosHoy, pendientes, estadosLeads] = await Promise.all([
-    obtenerStatsAprobacion(CAMPANA),
-    contarEnviadosHoy(CAMPANA),
-    contarPendientes(CAMPANA),
-    obtenerEstadosLeadsCampana(CAMPANA),
-  ]);
-
-  const { data: recientes } = await (supabase as any)
+  const { data: logs } = await db
     .from("ghl_campana_logs")
-    .select("ghl_contact_id, nombre, categoria_sbc, variante, enviado, enviado_at, respuesta_tipo, convirtio, error_msg, updated_at")
+    .select("ghl_contact_id, nombre, categoria_sbc, variante, enviado, enviado_at, respuesta_tipo, convirtio, updated_at")
     .eq("campana", CAMPANA)
     .order("updated_at", { ascending: false })
-    .limit(500) as {
-      data: {
-        ghl_contact_id: string; nombre: string | null; categoria_sbc: string;
-        variante: "a" | "b" | null; enviado: boolean; enviado_at: string | null;
-        respuesta_tipo: string | null; convirtio: boolean | null;
-        error_msg: string | null; updated_at: string;
-      }[] | null;
-    };
+    .limit(50) as { data: LogRow[] | null };
 
-  const logs = recientes ?? [];
+  const nivel        = calcularNivel(aprobacionStats ?? { aprobados: 0, tasa_limpia: 0, automatizado: false });
+  const totalGHL     = ghlResult.total;
+  const paginaActual = aprobacionStats?.pagina_campana ?? 1;
+  const totalPaginas = totalGHL > 0 ? Math.ceil(totalGHL / nivel.tamanoLote) : 0;
+  const noAlcanzados = Math.max(0, totalGHL - logsInfo.total);
+  const activa       = aprobacionStats?.activa ?? false;
+  const capAlcanzado = enviadosHoy >= CAP_DIA;
+  const pctPool      = totalGHL > 0 ? Math.min(100, Math.round((logsInfo.total / totalGHL) * 100)) : 0;
+  const pctDia       = Math.min(100, Math.round((enviadosHoy / CAP_DIA) * 100));
 
-  const tasaA = stats && stats.enviados_a > 0
-    ? ((stats.convertidos_a / stats.enviados_a) * 100).toFixed(1)
-    : "—";
-  const tasaB = stats && stats.enviados_b > 0
-    ? ((stats.convertidos_b / stats.enviados_b) * 100).toFixed(1)
-    : "—";
+  // Ventanas: 09:30–19:30 mensajes nuevos · 09:00–22:00 recordatorios
+  const enVentanaMensajes     = hora >= 9.5 && hora < 19.5;
+  const enVentanaRecordatorios = hora >= 9   && hora < 22;
+
+  const motivosPausaMensajes = [
+    !activa                  && "Campaña desactivada manualmente",
+    !enVentanaMensajes       && "Fuera de horario (09:30 – 19:30 CDMX)",
+    pendientes > 0           && `${pendientes} mensaje${pendientes > 1 ? "s" : ""} pendiente${pendientes > 1 ? "s" : ""} de aprobación`,
+    capAlcanzado             && `Cap diario de ${CAP_DIA.toLocaleString()} alcanzado`,
+  ].filter(Boolean) as string[];
+
+  const motivosPausaRecordatorios = [
+    !enVentanaRecordatorios && "Fuera de horario (09:00 – 22:00 CDMX)",
+  ].filter(Boolean) as string[];
+
+  const tasaA = stats?.enviados_a  ? (stats.convertidos_a  / stats.enviados_a  * 100).toFixed(1) : "—";
+  const tasaB = stats?.enviados_b  ? (stats.convertidos_b  / stats.enviados_b  * 100).toFixed(1) : "—";
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-5">
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Campaña SmartBuilderEC</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Pipeline SBC · segmento <code className="text-xs bg-muted px-1 rounded">ecm_b_caliente</code> · 1 contacto cada 2 s
+            Segmento <code className="text-xs bg-muted px-1 rounded">{TAG_FUENTE}</code>
+            {" · "}Hora CDMX: <strong>{horaTexto()}</strong>
           </p>
         </div>
-        <CampanaControls
-          activa={aprobacionStats?.activa ?? false}
-          nivel={calcularNivel(aprobacionStats ?? { aprobados: 0, tasa_limpia: 0, automatizado: false })}
-          enviadosHoy={enviadosHoy}
-          pendientes={pendientes}
-          ultimoLote={aprobacionStats?.ultimo_lote_at ?? null}
-          umbralAuto={aprobacionStats?.umbral_auto ?? 0.92}
+        <CampanaControls activa={activa} pendientes={pendientes} />
+      </div>
+
+      {/* ── Pool GHL ───────────────────────────────────────────── */}
+      <div className="rounded-lg border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Pool de contactos GHL</h2>
+          <span className="text-xs text-muted-foreground">
+            Página {paginaActual}{totalPaginas > 0 ? ` de ${totalPaginas}` : ""} · lote {nivel.tamanoLote}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <MiniStat label="En GHL con tag"  value={totalGHL.toLocaleString("es-MX")} />
+          <MiniStat label="Procesados"      value={logsInfo.total.toLocaleString("es-MX")} color="text-blue-500" />
+          <MiniStat label="Sin alcanzar"    value={noAlcanzados.toLocaleString("es-MX")} color="text-muted-foreground" />
+        </div>
+        <Barra pct={pctPool} color={pctPool >= 100 ? "bg-green-500" : "bg-primary"} />
+        <p className="text-xs text-muted-foreground">{pctPool}% del pool procesado</p>
+      </div>
+
+      {/* ── Ventanas operativas ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <VentanaCard
+          titulo="Mensajes nuevos"
+          ventana="09:30 – 19:30 CDMX"
+          activa={motivosPausaMensajes.length === 0}
+          motivos={motivosPausaMensajes}
+          sub={`Lote de ${nivel.tamanoLote} contactos cada ${nivel.intervaloMin} min`}
+        />
+        <VentanaCard
+          titulo="Recordatorios de seguimiento"
+          ventana="09:00 – 22:00 CDMX"
+          activa={motivosPausaRecordatorios.length === 0}
+          motivos={motivosPausaRecordatorios}
+          sub="Cron cada 30 min — detecta silencios y envía follow-ups"
         />
       </div>
 
-      {errorMsg && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-          Error cargando estadísticas: {errorMsg}
-        </div>
-      )}
-
-      {/* Métricas A/B */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard label="Enviados total" value={stats.total_enviados.toString()} />
-          <MetricCard label="Workflow A (caliente)" value={`${stats.enviados_a}`} sub={`Tasa: ${tasaA}%`} accent="green" />
-          <MetricCard label="Workflow B (tibio/sin hist)" value={`${stats.enviados_b}`} sub={`Tasa: ${tasaB}%`} accent="blue" />
-          <MetricCard label="Negativos / Blacklist" value={stats.total_negativos.toString()} accent="red" />
-        </div>
-      )}
-
-      {/* Estado de leads en ECMatic */}
+      {/* ── Velocidad y confianza ───────────────────────────────── */}
       <div className="rounded-lg border bg-card p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Estado en ECMatic</h2>
-          <span className="text-xs text-muted-foreground">
-            {estadosLeads.total} lead{estadosLeads.total !== 1 ? "s" : ""} en campaña
-          </span>
+          <h2 className="text-sm font-semibold">Velocidad y nivel de confianza</h2>
+          <NivelBadge nivel={nivel.nivel} />
         </div>
-        <EstadosChart estados={estadosLeads} />
-      </div>
-
-      {/* Checklist de prerrequisitos */}
-      <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-        <p className="text-sm font-semibold">Prerrequisitos antes de lanzar</p>
-        <ul className="text-sm space-y-1 text-muted-foreground">
-          <li>
-            <span className={process.env.GHL_WORKFLOW_A_ID ? "text-green-500" : "text-yellow-500"}>
-              {process.env.GHL_WORKFLOW_A_ID ? "✓" : "○"}
-            </span>{" "}
-            GHL_WORKFLOW_A_ID — Workflow A (sbc_cierre_directo)
-          </li>
-          <li>
-            <span className={process.env.GHL_WORKFLOW_B_ID ? "text-green-500" : "text-yellow-500"}>
-              {process.env.GHL_WORKFLOW_B_ID ? "✓" : "○"}
-            </span>{" "}
-            GHL_WORKFLOW_B_ID — Workflow B (sbc_reactivacion)
-          </li>
-          <li>
-            <span className={process.env.SBC_PAGO_URL ? "text-green-500" : "text-yellow-500"}>
-              {process.env.SBC_PAGO_URL ? "✓" : "○"}
-            </span>{" "}
-            SBC_PAGO_URL — Link de pago SmartBuilderEC
-          </li>
-        </ul>
-      </div>
-
-      {/* Log de actividad */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-          Actividad reciente ({logs.length} registros)
-        </h2>
-        {logs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin registros todavía. Inicia la campaña para comenzar.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left p-2 font-medium">Nombre</th>
-                  <th className="text-left p-2 font-medium">Categoría</th>
-                  <th className="text-left p-2 font-medium">Variante</th>
-                  <th className="text-left p-2 font-medium">Enviado</th>
-                  <th className="text-left p-2 font-medium">Respuesta</th>
-                  <th className="text-left p-2 font-medium">Convirtió</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {logs.map((log) => (
-                  <tr key={log.ghl_contact_id} className="hover:bg-muted/30">
-                    <td className="p-2">{log.nombre ?? log.ghl_contact_id.slice(-6)}</td>
-                    <td className="p-2">
-                      <span className={categoriaBadgeColor(log.categoria_sbc)}>
-                        {log.categoria_sbc.replace("ecm_sbc_", "")}
-                      </span>
-                    </td>
-                    <td className="p-2">
-                      {log.variante ? (
-                        <span className={log.variante === "a" ? "text-green-500 font-bold" : "text-blue-500 font-bold"}>
-                          {log.variante.toUpperCase()}
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className="p-2">{log.enviado ? "✓" : "—"}</td>
-                    <td className="p-2">{log.respuesta_tipo ?? "—"}</td>
-                    <td className="p-2">
-                      {log.convirtio === true ? "✓" : log.convirtio === false ? "✗" : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <p className="text-xs text-muted-foreground">{nivel.descripcion}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <MiniStat label="Lote"          value={`${nivel.tamanoLote} contactos`} />
+          <MiniStat label="Intervalo"     value={`${nivel.intervaloMin} min`} />
+          <MiniStat label="Aprobados"     value={(aprobacionStats?.aprobados ?? 0).toString()} />
+          <MiniStat label="Umbral IA"     value={`${Math.round((aprobacionStats?.umbral_auto ?? 0.92) * 100)}%`} />
+        </div>
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Enviados hoy</span>
+            <span className={capAlcanzado ? "text-red-500 font-bold" : ""}>{enviadosHoy.toLocaleString()} / {CAP_DIA.toLocaleString()}</span>
           </div>
+          <Barra pct={pctDia} color={pctDia >= 100 ? "bg-red-500" : pctDia >= 80 ? "bg-yellow-500" : "bg-primary"} />
+        </div>
+        {aprobacionStats?.ultimo_lote_at && (
+          <p className="text-xs text-muted-foreground">
+            Último lote: {new Date(aprobacionStats.ultimo_lote_at).toLocaleString("es-MX", {
+              timeZone: "America/Mexico_City", dateStyle: "short", timeStyle: "short",
+            })}
+          </p>
         )}
       </div>
-    </div>
-  );
-}
 
-// ── Componentes ──────────────────────────────────────────────────────────────
+      {/* ── Hoja de ruta ───────────────────────────────────────── */}
+      <NivelesRoadmap
+        nivelActual={nivel.nivel}
+        aprobados={aprobacionStats?.aprobados ?? 0}
+        tasaLimpia={aprobacionStats?.tasa_limpia ?? 0}
+        automatizado={aprobacionStats?.automatizado ?? false}
+      />
 
-function MetricCard({
-  label, value, sub, accent,
-}: {
-  label: string; value: string; sub?: string; accent?: "green" | "blue" | "red";
-}) {
-  const color =
-    accent === "green" ? "text-green-500"
-    : accent === "blue" ? "text-blue-500"
-    : accent === "red" ? "text-red-500"
-    : "text-foreground";
+      {/* ── Estado de leads ─────────────────────────────────────── */}
+      <div className="rounded-lg border bg-card p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Estado de leads en campaña</h2>
+          <span className="text-xs text-muted-foreground">Total GHL: {totalGHL.toLocaleString("es-MX")}</span>
+        </div>
+        <EstadosChart totalGHL={totalGHL} noAlcanzados={noAlcanzados} excluidos={logsInfo.excluidos} estados={estadosLeads} />
+      </div>
 
-  return (
-    <div className="rounded-lg border bg-card p-4 space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
-    </div>
-  );
-}
-
-const ESTADOS_CONFIG = [
-  { key: "sin_contactar",   label: "Aún no contactado",     color: "bg-slate-400",   dot: "bg-slate-400"   },
-  { key: "en_espera",       label: "En espera de respuesta", color: "bg-yellow-500",  dot: "bg-yellow-500"  },
-  { key: "en_conversacion", label: "En conversación",        color: "bg-blue-500",    dot: "bg-blue-500"    },
-  { key: "cerrado",         label: "Cerrado",                color: "bg-green-500",   dot: "bg-green-500"   },
-  { key: "inactivo",        label: "Inactivo",               color: "bg-red-400",     dot: "bg-red-400"     },
-] as const;
-
-function EstadosChart({ estados }: { estados: EstadosLeadsCampana }) {
-  const total = estados.total;
-
-  return (
-    <div className="space-y-3">
-      {ESTADOS_CONFIG.map(({ key, label, color, dot }) => {
-        const count = estados[key];
-        const pct   = total > 0 ? (count / total) * 100 : 0;
-        return (
-          <div key={key} className="flex items-center gap-3 text-xs">
-            <span className={`h-2 w-2 rounded-full shrink-0 ${dot}`} />
-            <span className="w-44 shrink-0 text-muted-foreground">{label}</span>
-            <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
-              <div
-                className={`h-3 rounded-full ${color} transition-all duration-500`}
-                style={{ width: `${pct}%` }}
-              />
+      {/* ── A/B ────────────────────────────────────────────────── */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Total enviados",      value: stats.total_enviados.toString(),  sub: undefined,          accent: undefined   },
+            { label: "Workflow A",          value: stats.enviados_a.toString(),       sub: `Tasa: ${tasaA}%`, accent: "green"     },
+            { label: "Workflow B",          value: stats.enviados_b.toString(),       sub: `Tasa: ${tasaB}%`, accent: "blue"      },
+            { label: "Negativos",           value: stats.total_negativos.toString(),  sub: undefined,          accent: "red"       },
+          ].map(({ label, value, sub, accent }) => (
+            <div key={label} className="rounded-lg border bg-card p-4 space-y-1">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className={`text-2xl font-bold ${accent === "green" ? "text-green-500" : accent === "blue" ? "text-blue-500" : accent === "red" ? "text-red-500" : ""}`}>
+                {value}
+              </p>
+              {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
             </div>
-            <span className="w-14 text-right font-semibold">
-              {count} <span className="text-muted-foreground font-normal">({pct.toFixed(0)}%)</span>
-            </span>
-          </div>
-        );
-      })}
-      {total === 0 && (
-        <p className="text-xs text-muted-foreground">Sin datos todavía — inicia la campaña para ver resultados.</p>
+          ))}
+        </div>
       )}
+
+      {/* ── Log ────────────────────────────────────────────────── */}
+      <LogTable logs={logs ?? []} />
     </div>
   );
 }
 
-function categoriaBadgeColor(cat: string): string {
-  if (cat.includes("caliente"))   return "text-orange-500 font-medium";
-  if (cat.includes("tibio"))      return "text-yellow-500";
-  if (cat.includes("ya_compro"))  return "text-green-500";
-  if (cat.includes("descartado")) return "text-red-500";
-  return "text-muted-foreground";
+// ── Sub-componentes ────────────────────────────────────────────────────────────
+
+function MiniStat({ label, value, color = "" }: { label: string; value: string; color?: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
+    </div>
+  );
 }
+
+function Barra({ pct, color }: { pct: number; color: string }) {
+  return (
+    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+      <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function NivelBadge({ nivel }: { nivel: 0 | 1 | 2 | 3 | 4 }) {
+  const labels = ["Nivel 0 — Inicio", "Nivel 1 — Rodaje", "Nivel 2 — Confianza media", "Nivel 3 — Alta confianza", "Nivel 4 — Plena confianza"];
+  const colors = ["bg-muted text-muted-foreground", "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"];
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors[nivel]}`}>{labels[nivel]}</span>;
+}
+
+function VentanaCard({ titulo, ventana, activa, motivos, sub }: {
+  titulo: string; ventana: string; activa: boolean; motivos: string[]; sub: string;
+}) {
+  return (
+    <div className={`rounded-lg border p-4 space-y-2 ${activa ? "border-green-500/40 bg-green-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold">{titulo}</p>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${activa ? "bg-green-500/20 text-green-600 dark:text-green-400" : "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400"}`}>
+          {activa ? "ACTIVO" : "EN PAUSA"}
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">Ventana: <strong>{ventana}</strong></p>
+      {motivos.map((m) => (
+        <p key={m} className="text-xs text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
+          <span>⏸</span>{m}
+        </p>
+      ))}
+      <p className="text-xs text-muted-foreground">{sub}</p>
+    </div>
+  );
+}
+
