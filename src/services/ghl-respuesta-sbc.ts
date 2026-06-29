@@ -196,8 +196,10 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     await encolarYNotificar(contactId, convId, leadId, cuerpo, texto, score, razon, contextoItem, 0);
   }
 
-  // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago
-  if (nuevoModo === "revelado") {
+  // Seguimiento de pago solo cuando el lead manifiesta intención explícita de compra inmediata.
+  // compra_inmediata = "¿cómo pago?", "quiero inscribirme" — el motor envía el link en esa respuesta.
+  // NO usar modo_revelacion: revelar el servicio no equivale a querer pagar.
+  if (intencion === "compra_inmediata") {
     void crearSeguimiento({ leadId, tipo: "payment", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA });
   }
 }
