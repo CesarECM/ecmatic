@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const CAMPANA       = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
-const CAP_DIA       = 1_000;
+const CAP_DIA       = 10_000;
 const HORA_INICIO   = 9 * 60 + 30;  // 09:30 CDMX
 const HORA_FIN      = 19 * 60 + 30; // 19:30 CDMX
 const BASE_URL      = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecmatic.vercel.app";
