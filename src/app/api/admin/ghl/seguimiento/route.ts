@@ -33,6 +33,27 @@ async function obtenerNombreLead(leadId: string): Promise<string | null> {
   return data?.nombre ?? null;
 }
 
+async function obtenerLinksLead(leadId: string): Promise<{ linkPago: string | null; linkApartado: string | null }> {
+  const { data: lead } = await db()
+    .from("leads").select("pipeline_ruta").eq("id", leadId).maybeSingle() as { data: { pipeline_ruta: string | null } | null };
+  if (!lead?.pipeline_ruta) return { linkPago: null, linkApartado: null };
+
+  const { data: pipeline } = await db()
+    .from("pipelines").select("servicio_id").eq("ruta", lead.pipeline_ruta).maybeSingle() as { data: { servicio_id: string | null } | null };
+  if (!pipeline?.servicio_id) return { linkPago: null, linkApartado: null };
+
+  const { data: pagos } = await db()
+    .from("servicio_pagos").select("tipo, url")
+    .eq("servicio_id", pipeline.servicio_id).eq("activo", true) as { data: Array<{ tipo: string; url: string }> | null };
+  if (!pagos?.length) return { linkPago: null, linkApartado: null };
+
+  const regulares = pagos.filter((p) => p.tipo !== "apartado");
+  return {
+    linkPago:     regulares[0]?.url ?? null,
+    linkApartado: pagos.find((p) => p.tipo === "apartado")?.url ?? null,
+  };
+}
+
 async function resolverConvId(seg: SeguimientoLead): Promise<string | null> {
   if (seg.conv_id) return seg.conv_id;
   if (seg.ghl_contact_id) {
@@ -78,9 +99,12 @@ async function registrarIntento(seg: SeguimientoLead): Promise<void> {
 async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promise<void> {
   const nivel = seg.nivel + 1;
 
-  const [nombre, contactId] = await Promise.all([
+  const [nombre, contactId, links] = await Promise.all([
     obtenerNombreLead(seg.lead_id),
     resolverContactoGHL(seg),
+    seg.tipo === "payment"
+      ? obtenerLinksLead(seg.lead_id).catch(() => ({ linkPago: null, linkApartado: null }))
+      : Promise.resolve({ linkPago: null, linkApartado: null }),
   ]);
 
   if (!contactId) {
@@ -109,7 +133,7 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     : null;
 
   const texto = await generarFollowupGHL(
-    { nombre, tipo: seg.tipo, nivel, horarioPrometido, gatilloSnapshot: seg.gatillo_snapshot },
+    { nombre, tipo: seg.tipo, nivel, horarioPrometido, gatilloSnapshot: seg.gatillo_snapshot, ...links },
     { leadId: seg.lead_id, traceId },
   );
 

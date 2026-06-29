@@ -9,6 +9,8 @@ export interface ContextoFollowup {
   nivel: number;          // 1=primer recordatorio, 2=empático, 3=social proof (payment)
   horarioPrometido?: string | null;  // texto legible, ej. "7pm" o "las 3 de la tarde"
   gatilloSnapshot?: string | null;   // ej. "Precio especial: $1,799 hasta el 30 jun"
+  linkPago?: string | null;          // URL de pago total (landing o pasarela)
+  linkApartado?: string | null;      // URL de apartado
 }
 
 const INSTRUCCIONES: Record<TipoSeguimiento, Record<number, string>> = {
@@ -68,8 +70,20 @@ export async function generarFollowupGHL(
   if (ctx.nombre) partes.push(`Nombre del lead: ${ctx.nombre}`);
   if (ctx.horarioPrometido) partes.push(`Hora que el lead prometió pagar: ${ctx.horarioPrometido}`);
   if (ctx.gatilloSnapshot) partes.push(`Gatillo de urgencia activo: ${ctx.gatilloSnapshot}`);
+  if (ctx.tipo === "payment") {
+    if (ctx.linkPago)     partes.push(`Link de pago principal: ${ctx.linkPago}`);
+    if (ctx.linkApartado) partes.push(`Link de apartado: ${ctx.linkApartado}`);
+  }
 
   const contextoTexto = partes.length > 0 ? partes.join("\n") : "(sin contexto adicional)";
+
+  const linksDisponibles = ctx.tipo === "payment" && (ctx.linkPago || ctx.linkApartado)
+    ? [
+        "\nLINKS DISPONIBLES — inclúyelos cuando refuercen el mensaje o el lead pueda necesitarlos:",
+        ctx.linkPago     ? `• Pago completo: ${ctx.linkPago}` : "",
+        ctx.linkApartado ? `• Apartar lugar: ${ctx.linkApartado}` : "",
+      ].filter(Boolean).join("\n")
+    : "";
 
   const system = `Eres la IA de ventas de Centro ECM (ceecm.mx), centro de certificación CONOCER en México.
 Escribes mensajes de seguimiento para WhatsApp. Estilo: cálido, profesional, conversacional.
@@ -77,7 +91,7 @@ Reglas: sin saludos formales de correo, sin emojis de negocios, máximo 3 oracio
 Siempre en español mexicano natural.
 
 TAREA:
-${instruccion}`;
+${instruccion}${linksDisponibles}`;
 
   const userContent = `CONTEXTO:\n${contextoTexto}`;
 
