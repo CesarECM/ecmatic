@@ -68,6 +68,21 @@ export async function eliminarOportunidad(opportunityId: string): Promise<void> 
   await ghlDelete(`/opportunities/${opportunityId}`);
 }
 
+// S44.1 — Actualiza campos de un contacto existente en GHL.
+// Solo envía los campos presentes en el objeto (parcial). Retorna true si tuvo éxito.
+export async function actualizarDatosContactoGHL(
+  contactId: string,
+  campos: { firstName?: string; lastName?: string; email?: string }
+): Promise<boolean> {
+  if (!Object.keys(campos).length) return false;
+  try {
+    await ghlPut(`/contacts/${contactId}`, campos);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // GHL-9.5 — Busca un contacto en GHL por número de teléfono.
 // Si no existe, lo crea con el nombre del lead. Retorna el contactId.
 export async function buscarOCrearContactoGHL(
