@@ -140,7 +140,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   // GHL-9: si el lead tiene seguimiento de pago activo, detectar si está enviando comprobante
   void (async () => {
     const seg = await obtenerActivo(leadId).catch(() => null);
-    if (seg?.tipo === "pago_pendiente") {
+    if (seg?.tipo === "payment") {
       const deteccion = await detectarEstadoPago(cuerpo, { leadId }).catch(() => null);
       if (deteccion?.estado === "comprobante") {
         await marcarCompletado(leadId).catch(() => null);
@@ -198,7 +198,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   // GHL-9: crear seguimiento de pago si la IA acaba de revelar precio/pago
   if (nuevoModo === "revelado") {
-    void crearSeguimiento({ leadId, tipo: "pago_pendiente", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA });
+    void crearSeguimiento({ leadId, tipo: "payment", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA });
   }
 }
 

@@ -64,6 +64,9 @@ src/
 │           ├── resumen-semanal/    # Resumen semanal por WA (cron lunes)
 │           ├── procesar-cola/      # Procesa mensajes_cola WA (cron c/5 min)
 │           └── seed-conocimiento/  # Carga inicial de KB (one-shot)
+│           └── ghl/
+│               ├── seguimiento/    # Cron 30min: ejecuta follow-ups vencidos + detecta silencios
+│               └── followup-learning/ # Cron 1h: cierra ventanas bayesianas, actualiza α/β
 ├── components/
 │   ├── ui/                         # shadcn/ui — no modificar directamente
 │   ├── auth/                       # LoginForm
@@ -72,6 +75,7 @@ src/
 │   ├── conocimiento/               # RecursosList, AlertasKB, ImportarFuente
 │   └── nurturing/                  # SecuenciasList, LeadsNurturing
 ├── services/                       # Lógica de negocio — solo servidor
+│   ├── followup-config.ts          # Parámetros de backoff por tipo (lee BD, fallback a defaults)
 │   ├── leads.ts                    # obtenerOCrearLead, inferirDISC, inferirEtapa
 │   ├── mensajes.ts                 # procesarMensajeEntrante, buffer 8s
 │   ├── pipeline.ts                 # listarLeads, moverLead, historial
@@ -109,6 +113,8 @@ src/
 │   └── whatsapp-sender.ts          # enviarRespuestaWhatsApp (fast-path + cola)
 └── lib/
     ├── supabase/                   # client, server, middleware, service, types
+    ├── followup/
+    │   └── timing-motor.ts         # Capa1: calcularDelayMs(); Capa2: calcularProximoAt() bayesiano; actualizarPosterior()
     ├── ai/
     │   ├── client.ts               # anthropic + openai singletons
     │   ├── model-router.ts         # modeloPorTarea() — configurable por env var
@@ -261,3 +267,4 @@ export async function moverLeadDesdePerfilAction(formData: FormData) {
 | S10 | Panel de Control y Alertas | ✅ Completo |
 | S11 | Analítica Avanzada | ✅ Completo |
 | S12 | Integraciones Pendientes y Escala | 🔄 En progreso |
+| MPS-5 | Motor de Seguimiento Adaptativo v1 | ✅ Completo |

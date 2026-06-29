@@ -1,8 +1,9 @@
-// GHL-9.8 — Cron cada 30 min: ejecuta follow-ups vencidos + detecta nuevos silencios.
-// Ventana de envío: 09:00–22:00 CDMX (UTC-6, México no tiene DST desde 2022).
+// GHL-9.8 / MPS-5 S39.4 — Cron cada 30 min: ejecuta follow-ups vencidos + detecta silencios.
+// Ventana de envío: window_start–window_end CDMX (configurado en followup_config).
+// avanzarNivel ya NO se llama aquí — se llama al aprobar/rechazar el item en la cola.
 import { type NextRequest, NextResponse } from "next/server";
 import { logSistema } from "@/services/log-sistema";
-import { obtenerVencidos, avanzarNivel, type SeguimientoLead } from "@/services/seguimiento-lead";
+import { obtenerVencidos, type SeguimientoLead } from "@/services/seguimiento-lead";
 import { detectarSilencios } from "@/services/detectar-silencio";
 import { generarFollowupGHL } from "@/lib/ai/generar-followup-ghl";
 import { buscarConversacionWA } from "@/lib/ghl/conversations-api";
@@ -10,29 +11,14 @@ import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
 import { encolarMensajeGHL, obtenerStatsAprobacion } from "@/services/ghl-aprobacion";
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getFollowupConfig } from "@/services/followup-config";
 
 const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
-
-const CRON_SECRET = process.env.CRON_SECRET;
-const CDMX_OFFSET = -6; // UTC-6 permanente
+const CRON_SECRET    = process.env.CRON_SECRET;
+const CDMX_OFFSET    = -6;
 
 function horaEnCDMX(): number {
-  const ahora = new Date();
-  return (ahora.getUTCHours() + 24 + CDMX_OFFSET) % 24;
-}
-
-function dentroDeLaVentana(): boolean {
-  const hora = horaEnCDMX();
-  return hora >= 9 && hora < 22;
-}
-
-// Proximo envío a las 09:00 CDMX del siguiente día
-function proximoDia09(): Date {
-  const ahora = new Date();
-  const mañana = new Date(ahora);
-  mañana.setUTCDate(mañana.getUTCDate() + 1);
-  mañana.setUTCHours(9 - CDMX_OFFSET, 0, 0, 0); // 15:00 UTC = 09:00 CDMX
-  return mañana;
+  return (new Date().getUTCHours() + 24 + CDMX_OFFSET) % 24;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,22 +44,40 @@ async function resolverConvId(seg: SeguimientoLead): Promise<string | null> {
 
 async function resolverContactoGHL(seg: SeguimientoLead): Promise<string | null> {
   if (seg.ghl_contact_id) return seg.ghl_contact_id;
-
-  // Para leads con teléfono regular, buscar o crear en GHL
   const { data: lead } = await db()
     .from("leads")
     .select("telefono, nombre")
     .eq("id", seg.lead_id)
     .maybeSingle() as { data: { telefono: string; nombre: string | null } | null };
-
   if (!lead?.telefono) return null;
   return buscarOCrearContactoGHL(lead.telefono, lead.nombre).catch(() => null);
 }
 
-async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promise<void> {
-  const nivel = seg.nivel + 1; // nivel del mensaje a enviar (1-based para el copy)
+// Registra el intento en followup_attempts_log para aprendizaje bayesiano
+async function registrarIntento(seg: SeguimientoLead): Promise<void> {
+  const ahora = new Date();
+  // Convertir a CDMX para slot correcto
+  const cdmxMs = ahora.getTime() + CDMX_OFFSET * 3_600_000;
+  const cdmx = new Date(cdmxMs);
+  await db()
+    .from("followup_attempts_log")
+    .insert({
+      seguimiento_id:   seg.id,
+      lead_id:          seg.lead_id,
+      sent_at:          ahora.toISOString(),
+      day_of_week:      cdmx.getUTCDay(),
+      hour_of_day:      cdmx.getUTCHours(),
+      window_closes_at: new Date(ahora.getTime() + 24 * 3_600_000).toISOString(),
+    })
+    .catch((e: unknown) => void logSistema({
+      categoria: "cron", tipoAccion: "cron.seguimiento.log_intento", fase: "error",
+      resultado: String(e), metadata: { seguimientoId: seg.id },
+    }));
+}
 
-  // Obtener datos necesarios
+async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promise<void> {
+  const nivel = seg.nivel + 1;
+
   const [nombre, contactId] = await Promise.all([
     obtenerNombreLead(seg.lead_id),
     resolverContactoGHL(seg),
@@ -82,10 +86,9 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
   if (!contactId) {
     void logSistema({
       categoria: "cron", tipoAccion: "cron.seguimiento.enviar", fase: "warn", traceId,
-      resultado: "sin contactId GHL — omitido",
+      resultado: "sin contactId GHL — omitido (no se avanza nivel)",
       metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
     });
-    await avanzarNivel(seg);
     return;
   }
 
@@ -93,14 +96,12 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
   if (!convId) {
     void logSistema({
       categoria: "cron", tipoAccion: "cron.seguimiento.enviar", fase: "warn", traceId,
-      resultado: "sin convId GHL — omitido",
+      resultado: "sin convId GHL — omitido (no se avanza nivel)",
       metadata:  { seguimientoId: seg.id, contactId },
     });
-    await avanzarNivel(seg);
     return;
   }
 
-  // Generar copy del follow-up
   const horarioPrometido = seg.horario_prometido
     ? new Date(seg.horario_prometido).toLocaleTimeString("es-MX", {
         hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City",
@@ -108,29 +109,22 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     : null;
 
   const texto = await generarFollowupGHL(
-    {
-      nombre,
-      tipo:             seg.tipo,
-      nivel,
-      horarioPrometido: horarioPrometido,
-      gatilloSnapshot:  seg.gatillo_snapshot,
-    },
-    { leadId: seg.lead_id, traceId }
+    { nombre, tipo: seg.tipo, nivel, horarioPrometido, gatilloSnapshot: seg.gatillo_snapshot },
+    { leadId: seg.lead_id, traceId },
   );
 
   if (!texto) {
     void logSistema({
       categoria: "cron", tipoAccion: "cron.seguimiento.enviar", fase: "warn", traceId,
-      resultado: "IA no generó texto — omitido",
+      resultado: "IA no generó texto — omitido (no se avanza nivel)",
       metadata:  { seguimientoId: seg.id },
     });
-    await avanzarNivel(seg);
     return;
   }
 
-  // Encolar para aprobación — igual que respuestas SBC, no se envía directo
   const labelContexto = `Recordatorio ${seg.tipo} · nivel ${nivel}${seg.gatillo_snapshot ? ` · ${seg.gatillo_snapshot}` : ""}`;
 
+  // Encolar con seguimientoId para que avanzarNivel se dispare al aprobar/rechazar
   const itemId = await encolarMensajeGHL({
     campana:       seg.campana ?? CAMPANA_ACTIVA,
     ghlContactId:  contactId,
@@ -142,6 +136,7 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     contexto:      { tipo: seg.tipo, nivel, gatillo: seg.gatillo_snapshot },
     scoreIA:       0.75,
     razonScore:    `Recordatorio automático — ${labelContexto}`,
+    seguimientoId: seg.id,  // MPS-5: avanzarNivel se dispara al aprobar/rechazar este item
   }).catch(() => null);
 
   await notificarMensajePendienteGHL({
@@ -155,13 +150,14 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     urgencia:      1,
   }).catch(() => null);
 
+  // Registrar intento para aprendizaje bayesiano
+  void registrarIntento(seg);
+
   void logSistema({
     categoria: "cron", tipoAccion: "cron.seguimiento.encolar", fase: itemId ? "ok" : "error", traceId,
-    resultado: itemId ? `item:${itemId} encolado` : "encolar falló — notif directa enviada",
+    resultado: itemId ? `item:${itemId} encolado (avanzarNivel al aprobar)` : "encolar falló",
     metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, nivel, tipo: seg.tipo },
   });
-
-  await avanzarNivel(seg);
 }
 
 export async function GET(req: NextRequest) {
@@ -180,25 +176,31 @@ export async function GET(req: NextRequest) {
 
   void logSistema({
     categoria: "cron", tipoAccion: "cron.seguimiento", fase: "inicio", traceId,
-    resultado: "Iniciando cron de seguimiento",
+    resultado: "Iniciando cron de seguimiento adaptativo",
   });
 
   try {
-    // 1. Detectar silencios nuevos
     const deteccion = await detectarSilencios();
+    const vencidos  = await obtenerVencidos();
 
-    // 2. Procesar follow-ups vencidos
-    const vencidos = await obtenerVencidos();
-
-    let enviados = 0;
+    let enviados   = 0;
     let pospuestos = 0;
 
     for (const seg of vencidos) {
-      if (!dentroDeLaVentana()) {
-        // Fuera de horario — posponer al día siguiente a las 9am
+      // Leer ventana desde config (graceful: fallback a 9-22)
+      const config = await getFollowupConfig(seg.tipo).catch(() => null);
+      const horaInicio = config?.window_start ?? 9;
+      const horaFin    = config?.window_end   ?? 22;
+      const horaCDMX   = horaEnCDMX();
+
+      if (horaCDMX < horaInicio || horaCDMX >= horaFin) {
+        // Fuera de ventana: posponer al inicio del siguiente día hábil
+        const mañana = new Date();
+        mañana.setUTCDate(mañana.getUTCDate() + 1);
+        mañana.setUTCHours(horaInicio - CDMX_OFFSET, 0, 0, 0);
         await db()
           .from("seguimiento_lead")
-          .update({ proximo_at: proximoDia09().toISOString() })
+          .update({ proximo_at: mañana.toISOString() })
           .eq("id", seg.id);
         pospuestos++;
         continue;
@@ -208,18 +210,11 @@ export async function GET(req: NextRequest) {
       enviados++;
     }
 
-    const resultado = {
-      deteccion,
-      vencidos:   vencidos.length,
-      enviados,
-      pospuestos,
-      duracion_ms: Date.now() - inicio,
-    };
+    const resultado = { deteccion, vencidos: vencidos.length, enviados, pospuestos, duracion_ms: Date.now() - inicio };
 
     void logSistema({
       categoria: "cron", tipoAccion: "cron.seguimiento", fase: "ok", traceId,
-      resultado: JSON.stringify(resultado),
-      metadata:  resultado,
+      resultado: JSON.stringify(resultado), metadata: resultado,
     });
 
     return NextResponse.json({ ok: true, ...resultado });

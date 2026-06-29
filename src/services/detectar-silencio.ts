@@ -76,7 +76,7 @@ async function detectarSilencioGHL(): Promise<number> {
 
     const id = await crearSeguimiento({
       leadId:       lead.id,
-      tipo:         "silencio_ghl",
+      tipo:         "conversational",
       ghlContactId: log.ghl_contact_id,
       convId:       conv?.id ?? null,
       campana:      CAMPANA_ACTIVA,
@@ -116,7 +116,7 @@ async function detectarSilencioFunnel(): Promise<number> {
 
     const id = await crearSeguimiento({
       leadId:       lead.id,
-      tipo:         "silencio_funnel",
+      tipo:         "nurturing",
       ghlContactId: ghlContactId,
       convId:       convId,
       campana:      esGHL ? CAMPANA_ACTIVA : null,
@@ -189,5 +189,5 @@ export async function detectarSilencios(): Promise<{ silencio_ghl: number; silen
     metadata:  { silencio_ghl, silencio_funnel },
   });
 
-  return { silencio_ghl, silencio_funnel };
+  return { silencio_ghl: silencio_ghl, silencio_funnel: silencio_funnel };
 }

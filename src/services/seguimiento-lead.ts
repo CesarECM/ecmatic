@@ -1,11 +1,16 @@
-// GHL-9.3 — CRUD y scheduling del sistema de seguimientos automáticos.
-// Cubre pago_pendiente, silencio_ghl y silencio_funnel.
+// MPS-5 S39.3 — CRUD y scheduling del sistema de seguimientos automáticos.
+// Tipos actualizados: nurturing | conversational | payment
+// avanzarNivel usa backoff exponencial desde followup_config (Capa 1 + 2)
 import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 import { obtenerGatillosActivos } from "@/services/gatillos";
+import { getFollowupConfig, type TipoFollowup } from "@/services/followup-config";
+import { calcularProximoAt } from "@/lib/followup/timing-motor";
+import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
+import { obtenerOCrearConversacionWA, enviarMensajeGHL } from "@/lib/ghl/conversations-api";
 
-export type TipoSeguimiento = "pago_pendiente" | "silencio_ghl" | "silencio_funnel";
-export type EstadoSeguimiento = "activo" | "completado" | "cancelado";
+export type TipoSeguimiento = TipoFollowup;
+export type EstadoSeguimiento = "activo" | "completado" | "cancelado" | "escalado";
 
 export interface SeguimientoLead {
   id: string;
@@ -26,16 +31,6 @@ export interface SeguimientoLead {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createServiceClient() as any;
-
-// Máximo de follow-ups antes de cancelar (por tipo)
-const MAX_NIVEL: Record<TipoSeguimiento, number> = {
-  pago_pendiente: 3,
-  silencio_ghl:   2,
-  silencio_funnel: 2,
-};
-
-// Horas de espera entre niveles (en horas)
-const HORAS_ENTRE_NIVELES = 4;
 
 async function obtenerGatilloActivo(): Promise<string | null> {
   try {
@@ -60,7 +55,8 @@ export async function crearSeguimiento(params: {
   proximoAt?: Date;
 }): Promise<string | null> {
   const gatillo = await obtenerGatilloActivo();
-  const proximo = params.proximoAt ?? new Date(Date.now() + HORAS_ENTRE_NIVELES * 3600 * 1000);
+  // Primer intento: nivel 1 → delay = base_hours (no backoff aún)
+  const proximo = params.proximoAt ?? await calcularProximoAt({ leadId: params.leadId, tipo: params.tipo, nivel: 1 }).catch(() => new Date(Date.now() + 4 * 3_600_000));
 
   const { data, error } = await db()
     .from("seguimiento_lead")
@@ -80,7 +76,6 @@ export async function crearSeguimiento(params: {
     .single() as { data: { id: string } | null; error: unknown };
 
   if (error) {
-    // Conflicto de unique index = ya existe uno activo → no es error, simplemente ignorar
     const errObj = error as { code?: string; message?: string };
     const code = errObj?.code ?? "";
     const msg  = errObj?.message ?? JSON.stringify(error);
@@ -106,7 +101,7 @@ export async function crearSeguimiento(params: {
 // Actualiza la hora del próximo follow-up (cuando el lead dice "a las 7pm").
 export async function actualizarHorarioPrometido(
   seguimientoId: string,
-  horarioPrometido: Date
+  horarioPrometido: Date,
 ): Promise<void> {
   const { error } = await db()
     .from("seguimiento_lead")
@@ -125,7 +120,7 @@ export async function actualizarHorarioPrometido(
   }
 }
 
-// Marca el seguimiento como completado (lead envió comprobante o respondió).
+// Marca el seguimiento como completado (lead respondió / envió comprobante).
 export async function marcarCompletado(leadId: string): Promise<void> {
   const { error } = await db()
     .from("seguimiento_lead")
@@ -141,12 +136,31 @@ export async function marcarCompletado(leadId: string): Promise<void> {
   }
 }
 
-// Avanza al siguiente nivel y reprograma, o cancela si se alcanzó el máximo.
+// Avanza al siguiente nivel con timing adaptativo, o cancela/escala si se alcanzó el máximo.
+// NOTA: se llama al APROBAR el item en la cola, no al encolar — evita cascada prematura.
 export async function avanzarNivel(seg: SeguimientoLead): Promise<void> {
   const nextNivel = seg.nivel + 1;
-  const maxNivel  = MAX_NIVEL[seg.tipo];
+  const config = await getFollowupConfig(seg.tipo);
 
-  if (nextNivel > maxNivel) {
+  if (nextNivel > config.max_intentos) {
+    // Cola de pago: escalar a humano en lugar de cancelar silenciosamente
+    if (seg.tipo === "payment") {
+      await db()
+        .from("seguimiento_lead")
+        .update({ estado: "escalado" })
+        .eq("id", seg.id);
+
+      void logSistema({
+        categoria: "servicio", tipoAccion: "seguimiento.escalar", fase: "ok",
+        resultado: `payment max_intentos:${config.max_intentos} → escalado`,
+        metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
+      });
+
+      // Notificar al admin por WhatsApp vía GHL
+      void notificarEscalacionPago(seg);
+      return;
+    }
+
     await db()
       .from("seguimiento_lead")
       .update({ estado: "cancelado" })
@@ -154,13 +168,21 @@ export async function avanzarNivel(seg: SeguimientoLead): Promise<void> {
 
     void logSistema({
       categoria: "servicio", tipoAccion: "seguimiento.cancelar", fase: "ok",
-      resultado: `nivel_max:${maxNivel} — cancelado`,
+      resultado: `max_intentos:${config.max_intentos} — cancelado`,
       metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, tipo: seg.tipo },
     });
     return;
   }
 
-  const proximo = new Date(Date.now() + HORAS_ENTRE_NIVELES * 3600 * 1000);
+  // Calcular próximo timestamp con motor adaptativo (Capa 1 + 2)
+  const proximo = await calcularProximoAt({
+    leadId: seg.lead_id,
+    tipo:   seg.tipo,
+    nivel:  nextNivel,
+  }).catch(() => {
+    // Fallback seguro si el motor falla: usar base_hours
+    return new Date(Date.now() + config.base_hours * 3_600_000);
+  });
 
   await db()
     .from("seguimiento_lead")
@@ -169,7 +191,7 @@ export async function avanzarNivel(seg: SeguimientoLead): Promise<void> {
 
   void logSistema({
     categoria: "servicio", tipoAccion: "seguimiento.avanzar", fase: "ok",
-    resultado: `nivel:${seg.nivel}→${nextNivel}`,
+    resultado: `nivel:${seg.nivel}→${nextNivel} proximo:${proximo.toISOString()}`,
     metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, proximo_at: proximo.toISOString() },
   });
 }
@@ -203,4 +225,55 @@ export async function obtenerActivo(leadId: string): Promise<SeguimientoLead | n
     .eq("estado", "activo")
     .maybeSingle() as { data: SeguimientoLead | null };
   return data ?? null;
+}
+
+// Devuelve un seguimiento por ID (para avanzarNivel desde actions de aprobación).
+export async function obtenerPorId(seguimientoId: string): Promise<SeguimientoLead | null> {
+  const { data } = await db()
+    .from("seguimiento_lead")
+    .select("*")
+    .eq("id", seguimientoId)
+    .maybeSingle() as { data: SeguimientoLead | null };
+  return data ?? null;
+}
+
+// Notificación WA al admin cuando la cola de pago se agota sin respuesta.
+async function notificarEscalacionPago(seg: SeguimientoLead): Promise<void> {
+  const adminWa = process.env.ADMIN_WHATSAPP;
+  if (!adminWa) return;
+
+  const { data: lead } = await db()
+    .from("leads")
+    .select("nombre")
+    .eq("id", seg.lead_id)
+    .maybeSingle() as { data: { nombre: string | null } | null };
+
+  const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecmatic.vercel.app";
+  const fichaUrl = `${BASE_URL}/admin/leads/${seg.lead_id}`;
+  const nombre   = lead?.nombre ?? seg.lead_id.slice(-8);
+
+  const texto =
+    `🚨 *Escalación de pago — acción manual requerida*\n\n` +
+    `👤 ${nombre}\n` +
+    `📋 Agotó ${seg.nivel} recordatorios de pago sin responder.\n` +
+    `🔗 Ficha → ${fichaUrl}`;
+
+  try {
+    const adminContactId = await buscarOCrearContactoGHL(adminWa, "César Admin");
+    if (!adminContactId) return;
+    const adminConvId = await obtenerOCrearConversacionWA(adminContactId);
+    if (!adminConvId) return;
+    await enviarMensajeGHL(adminConvId, texto, adminContactId);
+    void logSistema({
+      categoria: "servicio", tipoAccion: "seguimiento.escalar.notif", fase: "ok",
+      resultado: `WA enviado a admin: ${adminWa}`,
+      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
+    });
+  } catch (err) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "seguimiento.escalar.notif", fase: "error",
+      resultado: String(err).slice(0, 200),
+      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
+    });
+  }
 }

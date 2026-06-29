@@ -76,6 +76,7 @@ export async function encolarMensajeGHL(params: {
   contexto?: Record<string, unknown>;
   scoreIA?: number;
   razonScore?: string;
+  seguimientoId?: string | null;  // MPS-5: para avanzarNivel al aprobar
 }): Promise<string | null> {
   const supabase = createServiceClient();
   const { data, error } = await (supabase as any)
@@ -91,6 +92,7 @@ export async function encolarMensajeGHL(params: {
       contexto:         params.contexto ?? null,
       score_ia:         params.scoreIA ?? null,
       razon_score:      params.razonScore ?? null,
+      seguimiento_id:   params.seguimientoId ?? null,
     })
     .select("id")
     .single() as { data: { id: string } | null; error: unknown };

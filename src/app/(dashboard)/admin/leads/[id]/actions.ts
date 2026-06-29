@@ -21,6 +21,7 @@ import {
   obtenerStatsAprobacion,
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
+import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -232,7 +233,7 @@ export const aprobarMensajeGHLAction = safeAction(async (
   // Registrar cierre en los recursos KB que generaron esta respuesta
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
-    .from("ghl_approval_queue").select("contexto").eq("id", itemId).maybeSingle();
+    .from("ghl_approval_queue").select("contexto, seguimiento_id").eq("id", itemId).maybeSingle();
   const recursosIds = (qItem?.contexto as Record<string, unknown> | null)?.recursosIds as string[] | undefined;
   if (recursosIds?.length) await registrarCierre(recursosIds).catch(() => null);
 
@@ -245,6 +246,13 @@ export const aprobarMensajeGHLAction = safeAction(async (
       `[Campaña ${campana}] Respuesta validada en conversación real\n\n${mensajeIA}`,
       "ia_sugerido"
     ).catch(() => null);
+  }
+
+  // MPS-5 S39.4: avanzarNivel al aprobar (no al encolar)
+  const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
+  if (seguimientoId) {
+    const seg = await obtenerPorId(seguimientoId).catch(() => null);
+    if (seg?.estado === "activo") await avanzarNivel(seg).catch(() => null);
   }
 
   void logSistema({
@@ -282,9 +290,16 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
   // Registrar cierre en los recursos KB que generaron esta respuesta
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
-    .from("ghl_approval_queue").select("contexto").eq("id", itemId).maybeSingle();
+    .from("ghl_approval_queue").select("contexto, seguimiento_id").eq("id", itemId).maybeSingle();
   const recursosIds = (qItem?.contexto as Record<string, unknown> | null)?.recursosIds as string[] | undefined;
   if (recursosIds?.length) await registrarCierre(recursosIds).catch(() => null);
+
+  // MPS-5 S39.4: avanzarNivel al editar/aprobar (no al encolar)
+  const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
+  if (seguimientoId) {
+    const seg = await obtenerPorId(seguimientoId).catch(() => null);
+    if (seg?.estado === "activo") await avanzarNivel(seg).catch(() => null);
+  }
 
   void logSistema({
     categoria: "ui", tipoAccion: "ghl_aprobacion.editar", fase: "ok",
@@ -301,8 +316,20 @@ export const rechazarMensajeGHLAction = safeAction(async (
   campana: string,
   leadId: string
 ) => {
+  // MPS-5 S39.4: leer seguimientoId antes de resolver
+  const supabase = createServiceClient();
+  const { data: qItem } = await (supabase as any)
+    .from("ghl_approval_queue").select("seguimiento_id").eq("id", itemId).maybeSingle();
+
   await resolverItemAprobacion({ id: itemId, estado: "rechazado" });
   await actualizarStatsAprobacion(campana, "rechazado");
+
+  // avanzarNivel también al rechazar: el recordatorio no se envió, pero el nivel pasa
+  const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
+  if (seguimientoId) {
+    const seg = await obtenerPorId(seguimientoId).catch(() => null);
+    if (seg?.estado === "activo") await avanzarNivel(seg).catch(() => null);
+  }
 
   void logSistema({
     categoria: "ui", tipoAccion: "ghl_aprobacion.rechazar", fase: "ok",
