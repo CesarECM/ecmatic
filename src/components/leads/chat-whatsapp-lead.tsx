@@ -189,9 +189,11 @@ export function ChatWhatsAppLead({
         </p>
       )}
 
-      {/* Banner aprobación GHL */}
+      {/* Banner aprobación GHL — max-h para que nunca aplaste el área de mensajes */}
       {pendienteGHL && (
-        <BannerAprobacionGHL item={pendienteGHL} leadId={leadId} />
+        <div className="shrink-0 overflow-y-auto max-h-[200px]">
+          <BannerAprobacionGHL item={pendienteGHL} leadId={leadId} />
+        </div>
       )}
 
       {/* Input */}

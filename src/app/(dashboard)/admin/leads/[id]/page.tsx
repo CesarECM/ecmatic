@@ -169,7 +169,7 @@ export default async function LeadPerfilPage({
       {/* Split panel */}
       <div className="flex flex-col md:flex-row flex-1 md:overflow-hidden">
         {/* Chat WhatsApp — arriba en mobile, izquierda en desktop (55%) */}
-        <div className="flex flex-col min-h-[55vh] md:min-h-0 md:overflow-hidden border-b md:border-b-0 md:border-r md:w-[55%]">
+        <div className="flex flex-col h-[55vh] overflow-hidden md:h-auto md:min-h-0 md:overflow-hidden border-b md:border-b-0 md:border-r md:w-[55%]">
           <ChatWhatsAppLead
             leadId={id}
             tieneTelefono={!!lead.telefono}
