@@ -168,10 +168,13 @@ export default async function GHLCampaignPage() {
       {/* ── Hoja de ruta ───────────────────────────────────────── */}
       <NivelesRoadmap
         nivelActual={nivel.nivel}
-        aprobadosConsecutivos={aprobacionStats?.aprobados_consecutivos ?? 0}
+        trustScore={aprobacionStats?.trust_score ?? 0}
+        decisionsWindow={aprobacionStats?.decisions_window ?? []}
+        windowSize={aprobacionStats?.window_size ?? 20}
+        lastDecisionAt={aprobacionStats?.last_decision_at ?? null}
+        automatizado={aprobacionStats?.automatizado ?? false}
         aprobadosTotal={aprobacionStats?.aprobados ?? 0}
         tasaLimpia={aprobacionStats?.tasa_limpia ?? 0}
-        automatizado={aprobacionStats?.automatizado ?? false}
       />
 
       {/* ── Estado de leads ─────────────────────────────────────── */}
