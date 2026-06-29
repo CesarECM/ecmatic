@@ -19,6 +19,8 @@ import {
   resolverItemAprobacion,
   actualizarStatsAprobacion,
   obtenerStatsAprobacion,
+  contarPendientes,
+  limpiarIntervaloDisparo,
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
@@ -229,6 +231,7 @@ export const aprobarMensajeGHLAction = safeAction(async (
 
   await resolverItemAprobacion({ id: itemId, estado: "aprobado", mensajeFinal: mensajeIA });
   await actualizarStatsAprobacion(campana, "aprobado");
+  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // Registrar cierre en los recursos KB que generaron esta respuesta
   const supabase = createServiceClient();
@@ -286,6 +289,7 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
     mensajeFinal: textoFinal, razonEdicion,
   });
   await actualizarStatsAprobacion(campana, "editado");
+  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // Registrar cierre en los recursos KB que generaron esta respuesta
   const supabase = createServiceClient();
@@ -323,6 +327,7 @@ export const rechazarMensajeGHLAction = safeAction(async (
 
   await resolverItemAprobacion({ id: itemId, estado: "rechazado" });
   await actualizarStatsAprobacion(campana, "rechazado");
+  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // avanzarNivel también al rechazar: el recordatorio no se envió, pero el nivel pasa
   const seguimientoId = qItem?.seguimiento_id as string | null | undefined;

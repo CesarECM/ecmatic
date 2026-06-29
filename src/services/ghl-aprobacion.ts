@@ -252,6 +252,17 @@ export async function registrarLoteAuto(campana: string): Promise<void> {
     .eq("campana_key", campana);
 }
 
+// Limpia el timer de intervalo al resolver el último pendiente.
+// Garantiza que el siguiente cron dispare sin esperar el intervalo mínimo,
+// compensando el tiempo perdido durante el bloqueo por pendientes.
+export async function limpiarIntervaloDisparo(campana: string): Promise<void> {
+  const supabase = createServiceClient();
+  await (supabase as any).from("ghl_approval_stats")
+    .update({ ultimo_lote_at: null })
+    .eq("campana_key", campana);
+  void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.intervalo_limpiado", fase: "ok", resultado: campana });
+}
+
 // Avanza (o reinicia) la página activa de la campaña.
 // nextPage === null significa que se llegó al final → resetea a 1.
 export async function actualizarPaginaCampana(
