@@ -20,7 +20,14 @@ INSERT INTO followup_config (tipo, base_hours, growth, cap_hours, max_intentos, 
 VALUES ('demo_agendado', 2, 1.5, 48, 3, 9, 22, 12)
 ON CONFLICT (tipo) DO NOTHING;
 
--- 4. Seed prior global: copia el patrón horario de conversational como punto de partida.
+-- 4. Extender constraint de followup_type en global_timing_prior
+--    (columna con CHECK inline — nombre auto-generado por PG)
+ALTER TABLE global_timing_prior DROP CONSTRAINT IF EXISTS global_timing_prior_followup_type_check;
+ALTER TABLE global_timing_prior
+  ADD CONSTRAINT global_timing_prior_followup_type_check
+  CHECK (followup_type IN ('nurturing', 'conversational', 'payment', 'demo_agendado'));
+
+-- 5. Seed prior global: copia el patrón horario de conversational como punto de partida.
 --    El posterior por-lead divergirá a medida que se acumulen datos reales.
 INSERT INTO global_timing_prior (day_of_week, hour_of_day, alpha, beta, followup_type)
 SELECT day_of_week, hour_of_day, alpha, beta, 'demo_agendado'
