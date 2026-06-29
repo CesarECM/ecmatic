@@ -14,9 +14,20 @@ interface Props {
 export function CampanaControls({ activa, pendientes }: Props) {
   const [pendingToggle, startToggle]     = useTransition();
   const [pendingReset,  startReset]      = useTransition();
-  const [autoRefresh,   setAutoRefresh]  = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("campana_auto_refresh") === "1";
+  });
   const router = useRouter();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function toggleAutoRefresh() {
+    setAutoRefresh((v) => {
+      const next = !v;
+      localStorage.setItem("campana_auto_refresh", next ? "1" : "0");
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (autoRefresh) {
@@ -36,7 +47,7 @@ export function CampanaControls({ activa, pendientes }: Props) {
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex items-center gap-2">
         <button
-          onClick={() => setAutoRefresh((v) => !v)}
+          onClick={toggleAutoRefresh}
           title={autoRefresh ? "Desactivar auto-actualización cada 15 s" : "Activar auto-actualización cada 15 s"}
           className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all cursor-pointer
             ${autoRefresh
