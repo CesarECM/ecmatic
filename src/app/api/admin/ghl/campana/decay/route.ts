@@ -13,12 +13,7 @@ const CAMPANA    = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 const MS_DIA     = 24 * 60 * 60 * 1000;
 const MS_GRACE   = DECAY_GRACE_DAYS * MS_DIA;
 
-export async function GET(req: Request) {
-  const secret = req.headers.get("x-cron-secret") ?? new URL(req.url).searchParams.get("secret");
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
+export async function GET() {
   const stats = await obtenerStatsAprobacion(CAMPANA);
   if (!stats) return NextResponse.json({ ok: true, motivo: "sin_stats" });
 
