@@ -14,6 +14,22 @@ export interface ContextoFollowup {
 }
 
 const INSTRUCCIONES: Record<TipoSeguimiento, Record<number, string>> = {
+  demo_agendado: {
+    1: `El lead acaba de terminar (o está a punto de terminar) su sesión de presentación del servicio.
+Escribe un mensaje cálido y breve preguntando cómo estuvo la reunión. Muestra interés genuino.
+Hazle una pregunta abierta que invite a responder: si quedó alguna duda, si le fue útil la información.
+NO menciones pago ni inscripción todavía. Solo abre la conversación post-reunión.`,
+
+    2: `El lead no respondió al primer mensaje post-reunión. Probablemente está evaluando la decisión.
+Escribe un mensaje empático y muy corto. Reconoce que la decisión toma tiempo.
+Ofrece resolver cualquier duda que haya quedado de la sesión sin presionar.
+Cierra con una pregunta simple de sí/no para reducir fricción ("¿te quedó alguna duda?").`,
+
+    3: `Tercer y último intento después de la reunión. El lead no ha respondido.
+Escribe un mensaje muy humano y sin presión. Deja la puerta completamente abierta.
+Si hay gatillo de urgencia activo, incorpóralo de forma suave al final.
+Máximo 2 oraciones. Tono: "aquí sigo cuando estés listo/a".`,
+  },
   payment: {
     1: `El lead prometió pagar a una hora específica. Ya llegó esa hora y no ha enviado el comprobante.
 Escribe un recordatorio cálido y breve. Menciona que estás esperando el comprobante.

@@ -136,6 +136,24 @@ export async function marcarCompletado(leadId: string): Promise<void> {
   }
 }
 
+// Cancela el seguimiento activo de un tipo específico para un lead.
+// Usado al transicionar entre tipos (ej. confirmar demo cancela nurturing/conversational).
+export async function cancelarPorTipo(leadId: string, tipo: TipoSeguimiento): Promise<void> {
+  const { error } = await db()
+    .from("seguimiento_lead")
+    .update({ estado: "cancelado" })
+    .eq("lead_id", leadId)
+    .eq("tipo", tipo)
+    .eq("estado", "activo");
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "seguimiento.cancelar_tipo", fase: "error",
+      resultado: String(error), metadata: { leadId, tipo },
+    });
+  }
+}
+
 // Avanza al siguiente nivel con timing adaptativo, o cancela/escala si se alcanzó el máximo.
 // NOTA: se llama al APROBAR el item en la cola, no al encolar — evita cascada prematura.
 export async function avanzarNivel(seg: SeguimientoLead): Promise<void> {
@@ -143,8 +161,8 @@ export async function avanzarNivel(seg: SeguimientoLead): Promise<void> {
   const config = await getFollowupConfig(seg.tipo);
 
   if (nextNivel > config.max_intentos) {
-    // Cola de pago: escalar a humano en lugar de cancelar silenciosamente
-    if (seg.tipo === "payment") {
+    // payment y demo_agendado: escalar a humano en lugar de cancelar silenciosamente
+    if (seg.tipo === "payment" || seg.tipo === "demo_agendado") {
       await db()
         .from("seguimiento_lead")
         .update({ estado: "escalado" })
@@ -152,12 +170,11 @@ export async function avanzarNivel(seg: SeguimientoLead): Promise<void> {
 
       void logSistema({
         categoria: "servicio", tipoAccion: "seguimiento.escalar", fase: "ok",
-        resultado: `payment max_intentos:${config.max_intentos} → escalado`,
+        resultado: `${seg.tipo} max_intentos:${config.max_intentos} → escalado`,
         metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
       });
 
-      // Notificar al admin por WhatsApp vía GHL
-      void notificarEscalacionPago(seg);
+      void notificarEscalacion(seg);
       return;
     }
 
@@ -237,26 +254,23 @@ export async function obtenerPorId(seguimientoId: string): Promise<SeguimientoLe
   return data ?? null;
 }
 
-// Notificación WA al admin cuando la cola de pago se agota sin respuesta.
-async function notificarEscalacionPago(seg: SeguimientoLead): Promise<void> {
+// Notificación WA al admin cuando payment o demo_agendado agotan intentos sin respuesta.
+async function notificarEscalacion(seg: SeguimientoLead): Promise<void> {
   const adminWa = process.env.ADMIN_WHATSAPP;
   if (!adminWa) return;
 
   const { data: lead } = await db()
-    .from("leads")
-    .select("nombre")
-    .eq("id", seg.lead_id)
-    .maybeSingle() as { data: { nombre: string | null } | null };
+    .from("leads").select("nombre").eq("id", seg.lead_id).maybeSingle() as { data: { nombre: string | null } | null };
 
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecmatic.vercel.app";
-  const fichaUrl = `${BASE_URL}/admin/leads/${seg.lead_id}`;
   const nombre   = lead?.nombre ?? seg.lead_id.slice(-8);
+  const fichaUrl = `${BASE_URL}/admin/leads/${seg.lead_id}`;
 
-  const texto =
-    `🚨 *Escalación de pago — acción manual requerida*\n\n` +
-    `👤 ${nombre}\n` +
-    `📋 Agotó ${seg.nivel} recordatorios de pago sin responder.\n` +
-    `🔗 Ficha → ${fichaUrl}`;
+  const [emoji, titulo, detalle] = seg.tipo === "payment"
+    ? ["🚨", "Escalación de pago — acción manual requerida", `Agotó ${seg.nivel} recordatorios de pago sin responder.`]
+    : ["📅", "Lead post-demo sin respuesta — revisión requerida", `Agotó ${seg.nivel} seguimientos post-reunión sin responder.`];
+
+  const texto = `${emoji} *${titulo}*\n\n👤 ${nombre}\n📋 ${detalle}\n🔗 Ficha → ${fichaUrl}`;
 
   try {
     const adminContactId = await buscarOCrearContactoGHL(adminWa, "César Admin");
@@ -266,14 +280,12 @@ async function notificarEscalacionPago(seg: SeguimientoLead): Promise<void> {
     await enviarMensajeGHL(adminConvId, texto, adminContactId);
     void logSistema({
       categoria: "servicio", tipoAccion: "seguimiento.escalar.notif", fase: "ok",
-      resultado: `WA enviado a admin: ${adminWa}`,
-      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
+      resultado: `WA admin: tipo=${seg.tipo}`, metadata: { seguimientoId: seg.id },
     });
   } catch (err) {
     void logSistema({
       categoria: "servicio", tipoAccion: "seguimiento.escalar.notif", fase: "error",
-      resultado: String(err).slice(0, 200),
-      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
+      resultado: String(err).slice(0, 200), metadata: { seguimientoId: seg.id },
     });
   }
 }

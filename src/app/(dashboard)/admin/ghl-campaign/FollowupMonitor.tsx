@@ -5,12 +5,14 @@ const TIPO_LABEL: Record<string, string> = {
   nurturing:      "Nurturing",
   conversational: "Conversacional",
   payment:        "Pago",
+  demo_agendado:  "Demo agendada",
 };
 
 const TIPO_COLOR: Record<string, string> = {
   nurturing:      "text-yellow-600 dark:text-yellow-400",
   conversational: "text-blue-600 dark:text-blue-400",
   payment:        "text-orange-600 dark:text-orange-400",
+  demo_agendado:  "text-purple-600 dark:text-purple-400",
 };
 
 function formatMs(ms: number): string {
@@ -163,6 +165,10 @@ export function FollowupMonitor({ kpis, atascados, proximos, escalados }: {
         <span>
           <span className="text-orange-600 dark:text-orange-400 font-bold">{kpis.por_tipo.payment}</span>
           <span className="text-muted-foreground ml-1">Pago</span>
+        </span>
+        <span>
+          <span className="text-purple-600 dark:text-purple-400 font-bold">{kpis.por_tipo.demo_agendado}</span>
+          <span className="text-muted-foreground ml-1">Demo agendada</span>
         </span>
       </div>
 

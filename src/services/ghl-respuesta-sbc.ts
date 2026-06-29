@@ -20,7 +20,7 @@ import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { actualizarTagsYPipeline } from "@/services/ghl-tagging-progresivo";
 import { dispararDemoSbc, confirmarSlotDemo } from "@/services/ghl-demo-sbc";
 import { detectarEstadoPago } from "@/lib/ai/detectar-estado-pago";
-import { crearSeguimiento, marcarCompletado, obtenerActivo } from "@/services/seguimiento-lead";
+import { crearSeguimiento, marcarCompletado, obtenerActivo, cancelarPorTipo } from "@/services/seguimiento-lead";
 
 const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
@@ -135,7 +135,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   if (!resultado) return;
 
-  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds, nuevoModo } = resultado;
+  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds, nuevoModo, citaFin } = resultado;
 
   // GHL-9: si el lead tiene seguimiento de pago activo, detectar si está enviando comprobante
   void (async () => {
@@ -200,7 +200,17 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   // compra_inmediata = "¿cómo pago?", "quiero inscribirme" — el motor envía el link en esa respuesta.
   // NO usar modo_revelacion: revelar el servicio no equivale a querer pagar.
   if (intencion === "compra_inmediata") {
+    void cancelarPorTipo(leadId, "demo_agendado"); // si tenía demo, ya decidió pagar
     void crearSeguimiento({ leadId, tipo: "payment", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA });
+  }
+
+  // Cuando el lead confirmó un slot, programar el primer follow-up para 2h después del fin
+  // de la reunión — no inmediatamente, sino cuando la sesión ya debió haber terminado.
+  if (citaFin) {
+    const proximoAt = new Date(citaFin.getTime() + 2 * 3_600_000);
+    void cancelarPorTipo(leadId, "nurturing");
+    void cancelarPorTipo(leadId, "conversational");
+    void crearSeguimiento({ leadId, tipo: "demo_agendado", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA, proximoAt });
   }
 }
 
@@ -256,6 +266,7 @@ interface ResultadoMotor {
   nombre: string | null;
   recursosIds: string[];
   nuevoModo: ModoRevelacion;
+  citaFin?: Date; // presente solo cuando el lead confirmó un slot en este turno
 }
 
 async function generarRespuestaMotorCompleto(
@@ -339,8 +350,11 @@ async function generarRespuestaMotorCompleto(
   // Demo automática SBC: slots para nuevo turno o meetLink para confirmación
   let slotsDemo: import("@/services/citas").SlotDisponible[] | undefined;
   let meetLinkDemo: string | null | undefined;
+  let citaFin: Date | undefined;
   if (intencion === "confirmando_slot") {
-    meetLinkDemo = await confirmarSlotDemo(lead.id, cuerpo).catch(() => null);
+    const demoResult = await confirmarSlotDemo(lead.id, cuerpo).catch(() => null);
+    meetLinkDemo = demoResult?.meetLink ?? null;
+    citaFin = demoResult?.citaFin;
   } else {
     const slots = await dispararDemoSbc(lead.id, intencion, historial, nuevoModo).catch(() => null);
     if (slots?.length) slotsDemo = slots;
@@ -398,5 +412,5 @@ async function generarRespuestaMotorCompleto(
   });
 
   // El mensaje saliente se guarda solo cuando se aprueba/envía, no aquí
-  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds, nuevoModo };
+  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds, nuevoModo, citaFin };
 }

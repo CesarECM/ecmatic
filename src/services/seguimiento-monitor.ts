@@ -6,7 +6,7 @@ export interface SeguimientoKPIs {
   atascados: number;      // activo + proximo_at ya venció → cron falla en estos
   escalados: number;      // payment que agotó intentos sin respuesta
   intentos_24h: number;
-  por_tipo: { nurturing: number; conversational: number; payment: number };
+  por_tipo: { nurturing: number; conversational: number; payment: number; demo_agendado: number };
 }
 
 export interface SeguimientoRow {
@@ -53,6 +53,7 @@ export async function obtenerKPIsMonitor(): Promise<SeguimientoKPIs> {
     { count: nurturing },
     { count: conversational },
     { count: payment },
+    { count: demoAgendado },
   ] = await Promise.all([
     db().from("seguimiento_lead").select("id", { count: "exact", head: true }).eq("estado", "activo"),
     db().from("seguimiento_lead").select("id", { count: "exact", head: true }).eq("estado", "activo").lte("proximo_at", ahora),
@@ -61,6 +62,7 @@ export async function obtenerKPIsMonitor(): Promise<SeguimientoKPIs> {
     db().from("seguimiento_lead").select("id", { count: "exact", head: true }).eq("estado", "activo").eq("tipo", "nurturing"),
     db().from("seguimiento_lead").select("id", { count: "exact", head: true }).eq("estado", "activo").eq("tipo", "conversational"),
     db().from("seguimiento_lead").select("id", { count: "exact", head: true }).eq("estado", "activo").eq("tipo", "payment"),
+    db().from("seguimiento_lead").select("id", { count: "exact", head: true }).eq("estado", "activo").eq("tipo", "demo_agendado"),
   ]);
 
   return {
@@ -72,6 +74,7 @@ export async function obtenerKPIsMonitor(): Promise<SeguimientoKPIs> {
       nurturing:      nurturing      ?? 0,
       conversational: conversational ?? 0,
       payment:        payment        ?? 0,
+      demo_agendado:  demoAgendado   ?? 0,
     },
   };
 }

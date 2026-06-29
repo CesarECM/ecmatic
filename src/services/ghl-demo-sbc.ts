@@ -63,7 +63,11 @@ export async function dispararDemoSbc(
 }
 
 // Cuando el lead confirma un slot: crea la cita con Meet y limpia demo_pendiente.
-export async function confirmarSlotDemo(leadId: string, cuerpo: string): Promise<string | null> {
+// Devuelve meetLink + citaFin para que el llamador programe el follow-up post-reunión.
+export async function confirmarSlotDemo(
+  leadId: string,
+  cuerpo: string,
+): Promise<{ meetLink: string; citaFin: Date } | null> {
   const supabase = createServiceClient();
   const { data: lead } = await supabase.from("leads").select("metadata").eq("id", leadId).single();
   const meta = (lead?.metadata as Record<string, unknown>) ?? {};
@@ -89,15 +93,17 @@ export async function confirmarSlotDemo(leadId: string, cuerpo: string): Promise
     notasPrevias: "Demo SmartBuilderEC — agendada desde campaña GHL",
   }).catch(() => ({ citaId: "", meetLink: null }));
 
+  if (!meetLink) return null;
+
   const metaSinDemo = { ...meta };
   delete metaSinDemo.demo_pendiente;
   await supabase.from("leads").update({ metadata: metaSinDemo }).eq("id", leadId);
 
   void logSistema({
-    categoria: "ia", tipoAccion: "ghl_demo.confirmar", fase: meetLink ? "ok" : "warn",
-    leadId, resultado: meetLink ?? "sin meetLink",
+    categoria: "ia", tipoAccion: "ghl_demo.confirmar", fase: "ok",
+    leadId, resultado: meetLink,
     metadata: { vendedorId: demoPendiente.demo_vendedor_id, inicio: slotElegido.inicio.toISOString() },
   });
 
-  return meetLink;
+  return { meetLink, citaFin: slotElegido.fin };
 }

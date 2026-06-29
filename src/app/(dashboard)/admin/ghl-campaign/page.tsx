@@ -41,7 +41,7 @@ export default async function GHLCampaignPage() {
   const db   = createServiceClient() as any;
   const hora = horaCDMX();
 
-  const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0 } };
+  const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0, demo_agendado: 0 } };
 
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
     monitorKPIs, atascados, proximos, escalados] =
