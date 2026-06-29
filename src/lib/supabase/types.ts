@@ -1281,6 +1281,15 @@ export interface Database {
         Args: { umbral?: number };
         Returns: { id_a: string; id_b: string; similitud: number }[];
       };
+      ghl_buffer_upsert: {
+        Args: {
+          p_contact_id:      string;
+          p_conversation_id: string | null;
+          p_campana:         string;
+          p_mensaje:         { cuerpo: string; received_at: string };
+        };
+        Returns: void;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

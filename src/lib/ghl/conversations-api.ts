@@ -66,6 +66,59 @@ export async function enviarMensajeGHL(conversationId: string, mensaje: string, 
   });
 }
 
+// ── Envío fragmentado para respuestas largas ──────────────────────────────
+// Divide el texto en fragmentos que se envían por separado con un delay de
+// 1 segundo entre ellos, simulando la escritura humana en WhatsApp.
+// La interfaz ECMatic sigue guardando el texto completo como un solo mensaje.
+
+const MAX_FRAGMENT_LEN    = 500; // chars: párrafo máximo antes de cortar por oración
+const MIN_TOTAL_PARA_SPLIT = 200; // no fragmentar si el texto es corto
+const DELAY_ENTRE_FRAGMENTOS = 1_000; // ms
+
+function fragmentarPorOraciones(texto: string, maxLen: number): string[] {
+  const partes = texto.split(/(?<=[.!?])\s+/);
+  const fragmentos: string[] = [];
+  let acumulado = "";
+
+  for (const parte of partes) {
+    const candidato = acumulado ? `${acumulado} ${parte}` : parte;
+    if (candidato.length <= maxLen || !acumulado) {
+      acumulado = candidato;
+    } else {
+      fragmentos.push(acumulado.trim());
+      acumulado = parte;
+    }
+  }
+  if (acumulado.trim()) fragmentos.push(acumulado.trim());
+  return fragmentos.length ? fragmentos : [texto];
+}
+
+export function fragmentarMensajeGHL(texto: string): string[] {
+  if (texto.length <= MIN_TOTAL_PARA_SPLIT) return [texto];
+
+  const parrafos = texto.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+
+  if (parrafos.length <= 1) {
+    return fragmentarPorOraciones(texto, MAX_FRAGMENT_LEN);
+  }
+
+  return parrafos.flatMap((p) =>
+    p.length > MAX_FRAGMENT_LEN ? fragmentarPorOraciones(p, MAX_FRAGMENT_LEN) : [p],
+  );
+}
+
+export async function enviarMensajeGHLFragmentado(
+  conversationId: string,
+  mensaje:        string,
+  contactId?:     string,
+): Promise<void> {
+  const fragmentos = fragmentarMensajeGHL(mensaje);
+  for (let i = 0; i < fragmentos.length; i++) {
+    if (i > 0) await new Promise<void>((r) => setTimeout(r, DELAY_ENTRE_FRAGMENTOS));
+    await enviarMensajeGHL(conversationId, fragmentos[i], contactId);
+  }
+}
+
 // Sprint 38 — Elimina una conversación completa en GHL (reset usuario prueba)
 export async function eliminarConversacion(conversationId: string): Promise<void> {
   try {

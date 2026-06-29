@@ -66,7 +66,8 @@ src/
 │           └── seed-conocimiento/  # Carga inicial de KB (one-shot)
 │           └── ghl/
 │               ├── seguimiento/    # Cron 30min: ejecuta follow-ups vencidos + detecta silencios
-│               └── followup-learning/ # Cron 1h: cierra ventanas bayesianas, actualiza α/β
+│               ├── followup-learning/ # Cron 1h: cierra ventanas bayesianas, actualiza α/β
+│               └── procesar-buffer/   # Cron 1min: drena ghl_message_buffer (debounce 15s)
 ├── components/
 │   ├── ui/                         # shadcn/ui — no modificar directamente
 │   ├── auth/                       # LoginForm
@@ -77,7 +78,8 @@ src/
 ├── services/                       # Lógica de negocio — solo servidor
 │   ├── followup-config.ts          # Parámetros de backoff por tipo (lee BD, fallback a defaults)
 │   ├── leads.ts                    # obtenerOCrearLead, inferirDISC, inferirEtapa
-│   ├── mensajes.ts                 # procesarMensajeEntrante, buffer 8s
+│   ├── mensajes.ts                 # procesarMensajeEntrante, buffer 8s (canal Meta WA)
+│   ├── ghl-message-buffer.ts       # resolverCuerpoGHL, encolarEnBuffer, obtenerYMarcarPendientes
 │   ├── pipeline.ts                 # listarLeads, moverLead, historial
 │   ├── conocimiento.ts             # CRUD KB + embeddings + score confianza
 │   ├── nurturing.ts                # Secuencias + obtenerLeadsParaNurturing

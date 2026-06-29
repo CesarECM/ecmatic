@@ -13,7 +13,7 @@ import { headers } from "next/headers";
 import { logSistema } from "@/services/log-sistema";
 import { diffObjects } from "@/lib/diff";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
-import { enviarMensajeGHL } from "@/lib/ghl/conversations-api";
+import { enviarMensajeGHLFragmentado } from "@/lib/ghl/conversations-api";
 import { guardarMensaje } from "@/services/mensajes";
 import {
   resolverItemAprobacion,
@@ -224,7 +224,7 @@ export const aprobarMensajeGHLAction = safeAction(async (
   campana: string,
   leadId: string
 ) => {
-  await enviarMensajeGHL(convId, mensajeIA, ghlContactId);
+  await enviarMensajeGHLFragmentado(convId, mensajeIA, ghlContactId);
 
   if (leadEcmaticId) {
     await guardarMensaje({ leadId: leadEcmaticId, contenido: mensajeIA, direccion: "saliente" });
@@ -279,7 +279,7 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
   campana: string,
   leadId: string
 ) => {
-  await enviarMensajeGHL(convId, textoFinal, ghlContactId);
+  await enviarMensajeGHLFragmentado(convId, textoFinal, ghlContactId);
 
   if (leadEcmaticId) {
     await guardarMensaje({ leadId: leadEcmaticId, contenido: textoFinal, direccion: "saliente" });

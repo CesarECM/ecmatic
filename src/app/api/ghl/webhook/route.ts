@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { procesarContactoGHL, type GHLWebhookPayload } from "@/services/ghl";
-import { procesarMensajeEntranteSBC } from "@/services/ghl-respuesta-sbc";
+import { resolverCuerpoGHL, encolarEnBuffer } from "@/services/ghl-message-buffer";
 import { logSistema } from "@/services/log-sistema";
 
 const GHL_SECRET = process.env.GHL_WEBHOOK_SECRET;
@@ -78,15 +78,18 @@ export async function POST(request: NextRequest) {
     });
 
     after(async () => {
+      const contactId      = (payload.contactId ?? "") as string;
+      const conversationId = (payload.conversationId ?? undefined) as string | undefined;
       try {
-        await procesarMensajeEntranteSBC(payload);
+        const cuerpo = await resolverCuerpoGHL(payload, contactId, conversationId);
+        await encolarEnBuffer({ contactId, conversationId, cuerpo });
       } catch (err) {
         void logSistema({
           categoria:  "webhook",
           tipoAccion: "webhook.ghl.mensaje",
           fase:       "error",
           resultado:  err instanceof Error ? err.message.slice(0, 200) : "Error",
-          metadata:   { contact_id: payload.contactId ?? null },
+          metadata:   { contact_id: contactId },
         });
       }
     });

@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 import { agregarTagsContacto, obtenerContacto } from "@/lib/ghl/contacts-api";
-import { buscarConversacionWA, obtenerMensajes, enviarMensajeGHL } from "@/lib/ghl/conversations-api";
+import { buscarConversacionWA, obtenerMensajes, enviarMensajeGHLFragmentado } from "@/lib/ghl/conversations-api";
 import { registrarRespuestaGHL } from "@/services/ab-workflows-ghl";
 import { generarRespuesta } from "@/lib/ai/motor-respuesta";
 import { guardarMensaje, obtenerHistorial } from "@/services/mensajes";
@@ -180,7 +180,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     // Score suficiente — intentar enviar directo sin revisión humana
     let enviado = false;
     try {
-      await enviarMensajeGHL(convId, texto, contactId);
+      await enviarMensajeGHLFragmentado(convId, texto, contactId);
       enviado = true;
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `auto conv:${convId}` });
     } catch (e) {
