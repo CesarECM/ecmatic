@@ -18,7 +18,7 @@ export const revalidate = 0;
 
 const CAMPANA    = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 const TAG_FUENTE = process.env.GHL_TAG_FUENTE     ?? "ecm_b_caliente";
-const CAP_DIA    = 1_000;
+const CAP_DIA    = 10_000;
 
 // CDMX = UTC-6 permanente desde 2022 (sin DST)
 function horaCDMX(): number {
