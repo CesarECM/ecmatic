@@ -170,7 +170,109 @@ ${alertas.map((a) => `- ${a.titulo}: ${a.descripcion}`).join("\n")}` }],
   });
 }
 
-// Orquestador: ejecuta el ciclo completo de calidad KB (S15.6–S15.13)
+// MPS-9 S45.4 — Analiza patrones sistémicos en ediciones recientes de campaña GHL.
+// Agrupa edits por recurso KB y detecta recursos con problemas recurrentes.
+// Diseñado para correr diariamente con early-exit si no hay edits nuevas.
+export async function analizarPatronesEdicion(desde?: Date): Promise<{ procesados: number }> {
+  const supabase = createServiceClient();
+  const ventanaDesde = (desde ?? new Date(Date.now() - 7 * 86400000)).toISOString();
+
+  // Early-exit: si no hay edits procesadas en la ventana, no hay nada que analizar
+  const { count: totalEdits } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("id", { count: "exact", head: true })
+    .eq("estado", "editado")
+    .eq("feedback_procesado", true)
+    .gte("revisado_at", ventanaDesde) as { count: number | null };
+
+  if (!totalEdits || totalEdits < 2) return { procesados: 0 };
+
+  // Leer edits con contexto y razón
+  const { data: edits } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("id, mensaje_ia, mensaje_final, razon_edicion, contexto, campana")
+    .eq("estado", "editado")
+    .eq("feedback_procesado", true)
+    .gte("revisado_at", ventanaDesde)
+    .order("revisado_at", { ascending: false })
+    .limit(50) as {
+      data: {
+        id: string; mensaje_ia: string; mensaje_final: string | null;
+        razon_edicion: string | null; contexto: Record<string, unknown> | null; campana: string;
+      }[] | null;
+    };
+
+  if (!edits?.length) return { procesados: 0 };
+
+  // Agrupar por recurso KB: mapa recursoId → lista de razones de edición
+  const mapa = new Map<string, string[]>();
+  const sinRecurso: string[] = [];
+
+  for (const edit of edits) {
+    const ids = (edit.contexto?.recursosIds as string[] | undefined) ?? [];
+    if (!ids.length) {
+      if (edit.razon_edicion) sinRecurso.push(edit.razon_edicion);
+      continue;
+    }
+    for (const rid of ids) {
+      const prev = mapa.get(rid) ?? [];
+      if (edit.razon_edicion) prev.push(edit.razon_edicion);
+      mapa.set(rid, prev);
+    }
+  }
+
+  // Recursos con 3+ edits → análisis profundo con Claude
+  const recursosConProblemas = [...mapa.entries()].filter(([, razones]) => razones.length >= 2);
+
+  if (!recursosConProblemas.length && !sinRecurso.length) return { procesados: edits.length };
+
+  // Leer títulos de recursos problemáticos
+  const idsProblematicos = recursosConProblemas.map(([id]) => id);
+  const { data: recursos } = await (supabase as any)
+    .from("recursos_conocimiento")
+    .select("id, titulo")
+    .in("id", idsProblematicos) as { data: { id: string; titulo: string }[] | null };
+
+  const mapaRecursos = Object.fromEntries((recursos ?? []).map((r) => [r.id, r.titulo]));
+
+  const resumenEdits = [
+    ...recursosConProblemas.map(([id, razones]) =>
+      `Recurso "${mapaRecursos[id] ?? id}" (${razones.length} edits): ${razones.slice(0, 3).join(" / ")}`
+    ),
+    ...(sinRecurso.length >= 2
+      ? [`Sin recurso KB identificado (${sinRecurso.length} edits): ${sinRecurso.slice(0, 3).join(" / ")}`]
+      : []),
+  ].join("\n");
+
+  const res = await callClaudeIA("ANALISIS", {
+    max_tokens: 400,
+    messages: [{ role: "user", content: `Eres auditor de KB de un CRM de certificaciones CONOCER México.
+Analiza estos patrones de edición de respuestas de IA en la última semana.
+Identifica máx 2 problemas sistémicos que requieren cambios en la KB.
+
+Edits agrupadas por recurso:
+${resumenEdits}
+
+JSON: {"problemas": [{"titulo": "...", "descripcion": "...", "prioridad": "urgente|importante|puede_esperar", "que_cambiar": "..."}]}` }],
+  });
+
+  const raw  = (res.content[0] as { text: string }).text;
+  const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
+    problemas?: { titulo: string; descripcion: string; prioridad: "urgente" | "importante" | "puede_esperar"; que_cambiar: string }[]
+  };
+
+  for (const p of json.problemas ?? []) {
+    await crearAlertaKB(p.titulo, p.descripcion, p.prioridad, {
+      source: "ghl_patron_semanal",
+      recursos_analizados: idsProblematicos,
+      que_cambiar: p.que_cambiar,
+    });
+  }
+
+  return { procesados: edits.length };
+}
+
+// Orquestador: ejecuta el ciclo completo de calidad KB (S15.6–S15.13 + MPS-9)
 export async function ejecutarCicloCalidadKB(): Promise<{ ok: boolean; errores: string[] }> {
   const errores: string[] = [];
   const tareas: [string, () => Promise<void>][] = [
@@ -182,6 +284,7 @@ export async function ejecutarCicloCalidadKB(): Promise<{ ok: boolean; errores: 
     ["sesgo_tono",             detectarSesgoYDerivaTono],
     ["canibalizacion",         detectarCanibalización],
     ["sugerir_categoria",      sugerirCategoriaSuciedad],
+    ["patrones_edicion",       () => analizarPatronesEdicion().then(() => undefined)],
   ];
 
   for (const [nombre, fn] of tareas) {

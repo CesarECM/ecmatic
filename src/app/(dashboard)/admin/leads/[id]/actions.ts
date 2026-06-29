@@ -24,6 +24,7 @@ import {
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
+import { procesarFeedbackEdicion } from "@/services/ghl-feedback-edicion";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -291,12 +292,16 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
   await actualizarStatsAprobacion(campana, "editado");
   void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
-  // Registrar cierre en los recursos KB que generaron esta respuesta
+  // MPS-9 S45.3: procesar retroalimentación de edición → genera sugerencia_ia en KB.
+  // No se llama registrarCierre aquí: una respuesta editada no debe inflar score_confianza de los recursos KB.
+  void procesarFeedbackEdicion(itemId).catch((e) => void logSistema({
+    categoria: "ia", tipoAccion: "ghl_feedback.procesar_edicion", fase: "error",
+    resultado: e instanceof Error ? e.message : String(e), metadata: { itemId },
+  }));
+
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
     .from("ghl_approval_queue").select("contexto, seguimiento_id").eq("id", itemId).maybeSingle();
-  const recursosIds = (qItem?.contexto as Record<string, unknown> | null)?.recursosIds as string[] | undefined;
-  if (recursosIds?.length) await registrarCierre(recursosIds).catch(() => null);
 
   // MPS-5 S39.4: avanzarNivel al editar/aprobar (no al encolar)
   const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
