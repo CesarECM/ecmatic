@@ -48,17 +48,12 @@ export function NivelesRoadmap({ nivelActual, aprobadosConsecutivos, aprobadosTo
             const esPasado    = cfg.nivel < nivelActual;
             const esSiguiente = cfg.nivel === siguienteNivel;
 
-            let cumpleObjetivos = esPasado;
             let progreso: { aprobadosOk: boolean; tasaOk: boolean } | null = null;
 
-            if (cfg.condicion === "manual") {
-              cumpleObjetivos = automatizado;
-            } else if (cfg.condicion && (esSiguiente || esActual)) {
-              // Usa la racha (aprobadosConsecutivos) como métrica de progresión
+            if (cfg.condicion !== "manual" && cfg.condicion && (esSiguiente || esActual)) {
               const aprobadosOk = aprobadosConsecutivos >= cfg.condicion.aprobados;
               const tasaOk      = tasaLimpia >= cfg.condicion.tasa;
-              cumpleObjetivos   = aprobadosOk && tasaOk;
-              if (esSiguiente) progreso = { aprobadosOk, tasaOk };
+              progreso = { aprobadosOk, tasaOk };
             }
 
             return (
@@ -145,13 +140,7 @@ export function NivelesRoadmap({ nivelActual, aprobadosConsecutivos, aprobadosTo
 }
 
 function RachaBadge({ consecutivos, nivelActual }: { consecutivos: number; nivelActual: number }) {
-  if (consecutivos === 0) {
-    return (
-      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-        Racha: 0
-      </span>
-    );
-  }
+  if (consecutivos === 0) return null;
   const color =
     nivelActual >= 3 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
     nivelActual >= 2 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
