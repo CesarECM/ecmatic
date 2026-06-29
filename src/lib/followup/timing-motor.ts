@@ -20,13 +20,6 @@ export function calcularDelayMs(nivel: number, config: Pick<FollowupConfig, "bas
 
 // ── Capa 2: timing bayesiano ─────────────────────────────────────────────────
 
-interface SlotScore {
-  timestamp: Date;
-  dayOfWeek: number;
-  hourOfDay: number;
-  score: number;
-}
-
 interface SlotRow {
   day_of_week: number;
   hour_of_day: number;
@@ -79,12 +72,53 @@ function generarSlots(floor: Date, windowEnd: Date, config: FollowupConfig): Arr
   return result;
 }
 
-// Devuelve score medio de la Beta: α/(α+β)
+// ── Thompson Sampling — muestreo de Beta(α, β) ──────────────────────────────
+// Implementación sin dependencias externas.
+// Algoritmo: Beta(α,β) = Gamma(α) / (Gamma(α)+Gamma(β))
+// Gamma por Marsaglia-Tsang (2000); Normal por Box-Muller.
+
+function normalRandom(): number {
+  // Box-Muller — devuelve una muestra N(0,1)
+  let u: number, v: number;
+  do { u = Math.random(); } while (u === 0);
+  do { v = Math.random(); } while (v === 0);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function sampleGamma(shape: number): number {
+  // Marsaglia-Tsang para shape ≥ 1
+  if (shape < 1) {
+    // Relación: Gamma(k) = Gamma(k+1) × U^(1/k)
+    return sampleGamma(shape + 1) * Math.pow(Math.random(), 1 / shape);
+  }
+  const d = shape - 1 / 3;
+  const c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    const x = normalRandom();
+    const v = Math.pow(1 + c * x, 3);
+    if (v > 0) {
+      const u = Math.random();
+      if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+    }
+  }
+}
+
+// Thompson Sampling: muestrea un valor de Beta(α, β).
+// Con pocos datos la muestra es ruidosa → explora slots desconocidos.
+// Con muchos datos converge al slot con mayor tasa real de respuesta → explota.
+function sampleBeta(alpha: number, beta: number): number {
+  const x = sampleGamma(Math.max(alpha, 0.1));
+  const y = sampleGamma(Math.max(beta,  0.1));
+  const sum = x + y;
+  return sum === 0 ? 0.5 : x / sum;
+}
+
+// Selecciona score del slot usando Thompson Sampling (no la media α/(α+β))
 function scoreSlot(dow: number, hod: number, posterior: Map<string, SlotRow>, prior: Map<string, SlotRow>): number {
   const key = `${dow}:${hod}`;
   const row = posterior.get(key) ?? prior.get(key);
-  if (!row) return 0.4; // neutro si no hay datos
-  return row.alpha / (row.alpha + row.beta);
+  if (!row) return sampleBeta(2, 3); // neutro con algo de ruido si no hay datos
+  return sampleBeta(row.alpha, row.beta);
 }
 
 // Desplaza el timestamp al inicio de la ventana del día siguiente si no hay slots válidos
