@@ -7,6 +7,7 @@ export interface DatosPrecioServicio {
   precio_descuento_centavos: number | null;
   precio_apartado_centavos: number | null;
   modo_venta: "directo" | "meet";
+  url_landing_propia?: string | null;
 }
 
 export interface LinkPago {
@@ -60,16 +61,20 @@ export function generarBloqueEstrategiaPrecio(
     lineas.push(`OBJETIVO EN ESTE TURNO: Cerrar la venta. Si no → ofrecer apartado. Si tampoco → agendar videollamada.`);
     lineas.push(`Termina con: "¿Te comparto el link para inscribirte?" o "¿Apartamos tu lugar con ${svc.precio_apartado_centavos ? fmt(svc.precio_apartado_centavos) : 'un adelanto'}?"`);
   } else {
-    lineas.push(`Modo: VIDEOLLAMADA CON ASESOR. No reveles el precio completo por mensaje; invita a una sesión de diagnóstico donde el equipo lo explica todo.`);
-    if (svc.precio_apartado_centavos) {
-      const montoApartado = fmt(svc.precio_apartado_centavos);
-      if (linkApartado) {
-        lineas.push(`Si el lead quiere comprometerse antes de la videollamada: puede apartar con ${montoApartado} → ${linkApartado.url}`);
-      } else {
-        lineas.push(`Si el lead quiere comprometerse antes de la videollamada: puede apartar con ${montoApartado}`);
-      }
+    lineas.push(`Modo: VIDEOLLAMADA CON ASESOR.`);
+    lineas.push(`- Responde con naturalidad TODAS las preguntas (precio, estándar, duración, entregables, requisitos). No ocultes información.`);
+    lineas.push(`- NO presiones la venta directa. En la sesión con su asesor asignado el lead podrá cerrar el trato si así lo decide.`);
+    lineas.push(`- SOLO comparte el link de pago si el lead EXPLÍCITAMENTE: (a) dice que quiere pagar antes de la sesión, o (b) menciona querer agilizar o prepararse con anticipación.`);
+    const linkParaMeet = linkPago ?? (svc.url_landing_propia ? { url: svc.url_landing_propia } : null);
+    if (linkParaMeet) {
+      lineas.push(`  → Link para esos casos únicamente: ${linkParaMeet.url}`);
     }
-    lineas.push(`OBJETIVO EN ESTE TURNO: Que el lead confirme una videollamada HOY. Si no agenda → ofrecer apartado. Termina con "¿Cuándo tienes 30 minutos disponibles esta semana?"`);
+    if (svc.precio_apartado_centavos && linkApartado) {
+      lineas.push(`  → Alternativa: apartar lugar con ${fmt(svc.precio_apartado_centavos)} → ${linkApartado.url}`);
+    } else if (svc.precio_apartado_centavos) {
+      lineas.push(`  → Alternativa: apartar lugar con ${fmt(svc.precio_apartado_centavos)} (coordinar con el equipo)`);
+    }
+    lineas.push(`- En cualquier otro caso, termina con: "¿Cuándo tienes 30 minutos disponibles esta semana para una videollamada con nuestro equipo?"`);
   }
 
   return lineas.join("\n");

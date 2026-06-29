@@ -46,7 +46,7 @@ export async function obtenerContextoPipeline(
   if (servicioId) {
     const { data: svc } = await db()
       .from("servicios")
-      .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es")
+      .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es, estandar_conocer, nivel_estandar, modalidad, duracion_horas, requisitos_previos, entregables, garantia, sector_industria, ocupacion_objetivo, url_landing_propia, slug, modo_venta")
       .eq("id", servicioId)
       .eq("activo", true)
       .maybeSingle();

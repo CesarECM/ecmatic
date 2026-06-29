@@ -114,7 +114,7 @@ export async function generarRespuesta(
           const [pago, svcRow, todosLinks] = await Promise.all([
             seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
             supabase.from("servicios" as "recursos_conocimiento")
-              .select("precio_centavos, precio_descuento_centavos, precio_apartado_centavos, modo_venta")
+              .select("precio_centavos, precio_descuento_centavos, precio_apartado_centavos, modo_venta, url_landing_propia")
               .eq("id", s.id).single()
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               .then((r: any) => r.data ?? null, () => null),

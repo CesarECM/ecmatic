@@ -8,6 +8,19 @@ export interface RecursoKB {
   id: string; tipo: string; titulo: string; contenido: string;
   caracteristicas?: string | null; beneficios?: string | null;
   ventajas?: string | null; para_quien_es?: string | null; para_quien_no_es?: string | null;
+  // Ficha completa — disponible cuando viene de buscar_servicios o contexto-pipeline
+  estandar_conocer?: string | null;
+  nivel_estandar?: number | null;
+  modalidad?: string | null;
+  duracion_horas?: number | null;
+  requisitos_previos?: string | null;
+  entregables?: string[] | null;
+  garantia?: string | null;
+  sector_industria?: string[] | null;
+  ocupacion_objetivo?: string | null;
+  url_landing_propia?: string | null;
+  slug?: string | null;
+  modo_venta?: string | null;
 }
 
 // Pools independientes: servicios y KB nunca compiten por el mismo límite.
@@ -16,15 +29,23 @@ export interface ResultadosBusqueda {
   kb: RecursoKB[];
 }
 
-// S22.5 — Formato enriquecido para recursos tipo servicio
 export function formatearRecursoKB(r: RecursoKB): string {
   if (r.tipo !== "servicio") return `[${r.tipo.toUpperCase()}] ${r.titulo}:\n${r.contenido}`;
   const partes = [`[SERVICIO] ${r.titulo}:\n${r.contenido}`];
-  if (r.caracteristicas) partes.push(`Características: ${r.caracteristicas}`);
-  if (r.beneficios)      partes.push(`Beneficios: ${r.beneficios}`);
-  if (r.ventajas)        partes.push(`Ventajas: ${r.ventajas}`);
-  if (r.para_quien_es)   partes.push(`Ideal para: ${r.para_quien_es}`);
-  if (r.para_quien_no_es) partes.push(`NO recomendado para: ${r.para_quien_no_es}`);
+  if (r.caracteristicas)    partes.push(`Características: ${r.caracteristicas}`);
+  if (r.beneficios)         partes.push(`Beneficios: ${r.beneficios}`);
+  if (r.ventajas)           partes.push(`Ventajas: ${r.ventajas}`);
+  if (r.para_quien_es)      partes.push(`Ideal para: ${r.para_quien_es}`);
+  if (r.para_quien_no_es)   partes.push(`NO recomendado para: ${r.para_quien_no_es}`);
+  if (r.estandar_conocer)   partes.push(`Estándar CONOCER: ${r.estandar_conocer}${r.nivel_estandar ? ` (Nivel ${r.nivel_estandar})` : ""}`);
+  if (r.modalidad)          partes.push(`Modalidad: ${r.modalidad.replace("_", " ")}`);
+  if (r.duracion_horas)     partes.push(`Duración: ${r.duracion_horas} horas`);
+  if (r.requisitos_previos) partes.push(`Requisitos previos: ${r.requisitos_previos}`);
+  if (r.entregables?.length) partes.push(`Entregables: ${r.entregables.join(", ")}`);
+  if (r.garantia)           partes.push(`Garantía: ${r.garantia}`);
+  if (r.sector_industria?.length) partes.push(`Sectores objetivo: ${r.sector_industria.join(", ")}`);
+  if (r.ocupacion_objetivo) partes.push(`Ocupación objetivo: ${r.ocupacion_objetivo}`);
+  if (r.url_landing_propia) partes.push(`URL del servicio: ${r.url_landing_propia}`);
   return partes.join("\n");
 }
 
@@ -52,7 +73,7 @@ export async function buscarRecursos(query: string, limitePorPool = 3): Promise<
       ).join(",");
       const { data: textData } = await supabase
         .from("servicios")
-        .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es")
+        .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es, estandar_conocer, nivel_estandar, modalidad, duracion_horas, requisitos_previos, entregables, garantia, sector_industria, ocupacion_objetivo, url_landing_propia, slug, modo_venta")
         .eq("activo", true).eq("aprobado", true)
         .or(orClause)
         .limit(limitePorPool);
