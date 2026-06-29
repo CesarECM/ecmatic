@@ -54,7 +54,7 @@ export default async function GHLCampaignPage() {
     .order("updated_at", { ascending: false })
     .limit(50) as { data: LogRow[] | null };
 
-  const nivel        = calcularNivel(aprobacionStats ?? { aprobados_consecutivos: 0, tasa_limpia: 0, automatizado: false });
+  const nivel        = calcularNivel(aprobacionStats ?? { trust_score: 0, automatizado: false });
   const totalGHL     = ghlResult.total;
   const paginaActual = aprobacionStats?.pagina_campana ?? 1;
   const totalPaginas = totalGHL > 0 ? Math.ceil(totalGHL / nivel.tamanoLote) : 0;

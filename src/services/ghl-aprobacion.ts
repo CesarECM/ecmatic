@@ -1,5 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
+import {
+  calcularTrustScore, updateDecisionsWindow, parametrosDesdeScore,
+  UMBRAL_AUTO_FIJO, TRUST_NIVEL4,
+} from "@/lib/ghl/trust-score";
 
 export interface ItemAprobacionGHL {
   id: string;
@@ -30,13 +34,19 @@ export interface StatsAprobacionGHL {
   editados: number;
   rechazados: number;
   tasa_limpia: number;
-  aprobados_consecutivos: number;
+  aprobados_consecutivos: number;  // legacy — ya no controla el nivel
   automatizado: boolean;
   activa: boolean;
-  umbral_auto: number;
+  umbral_auto: number;             // fijo en UMBRAL_AUTO_FIJO (0.92)
   pagina_campana: number;
   ultimo_lote_at: string | null;
   ultima_notif_pausa_at: string | null;
+  // MPS-6 — Trust Score Bayesiano
+  decisions_window: number[];      // últimas N decisiones (1=aprobado, 0=editado, -1=phantom)
+  trust_score: number;             // Wilson lower bound de Beta sobre decisions_window
+  window_size: number;             // tamaño máximo de decisions_window (default 20)
+  last_decision_at: string | null; // timestamp de la última decisión humana (para decay)
+  last_phantom_at: string | null;  // timestamp de la última inyección de phantom (anti-doble)
 }
 
 export interface NivelCampana {
@@ -47,21 +57,12 @@ export interface NivelCampana {
   descripcion: string;
 }
 
-// La progresión de niveles usa aprobados_consecutivos (racha), no el total histórico.
-// Un mensaje editado resetea la racha a 0, lo que baja el nivel inmediatamente.
-// tasa_limpia sigue siendo histórica (aprobados_totales / total) como métrica de calidad.
+// MPS-6: nivel y parámetros de velocidad se derivan del trust_score bayesiano.
+// umbral_auto es fijo (UMBRAL_AUTO_FIJO = 0.92) — no varía con el nivel.
 export function calcularNivel(
-  stats: Pick<StatsAprobacionGHL, "aprobados_consecutivos" | "tasa_limpia" | "automatizado">,
+  stats: Pick<StatsAprobacionGHL, "trust_score" | "automatizado">,
 ): NivelCampana {
-  if (stats.automatizado)
-    return { nivel: 4, tamanoLote: 100, intervaloMin: 10, umbral: 0.75, descripcion: "Plena confianza — solo mensajes malos llegan a revisión" };
-  if (stats.aprobados_consecutivos >= 50 && stats.tasa_limpia >= 0.90)
-    return { nivel: 3, tamanoLote: 50,  intervaloMin: 15, umbral: 0.85, descripcion: "Alta confianza — mensajes dudosos van a revisión" };
-  if (stats.aprobados_consecutivos >= 25 && stats.tasa_limpia >= 0.80)
-    return { nivel: 2, tamanoLote: 30,  intervaloMin: 20, umbral: 0.90, descripcion: "Confianza media — los mejores salen solos" };
-  if (stats.aprobados_consecutivos >= 10 && stats.tasa_limpia >= 0.70)
-    return { nivel: 1, tamanoLote: 20,  intervaloMin: 30, umbral: 0.95, descripcion: "Rodaje — casi todo va a revisión" };
-  return   { nivel: 0, tamanoLote: 10,  intervaloMin: 60, umbral: 1.0,  descripcion: "Inicio — todos los mensajes requieren aprobación manual" };
+  return parametrosDesdeScore(stats.trust_score, stats.automatizado);
 }
 
 // Inserta un mensaje en la cola de aprobación
@@ -177,9 +178,9 @@ export async function resolverItemAprobacion(params: {
 }
 
 // Actualiza contadores globales de la campaña.
-// aprobados_consecutivos (racha) sube con aprobado y vuelve a 0 con editado.
-// tasa_limpia es columna GENERATED en DB (aprobados / total); se recalcula localmente
-// solo para determinar debeAutomatizar y umbral antes del UPDATE, nunca se escribe directo.
+// MPS-6: actualiza la ventana bayesiana y recalcula trust_score.
+// Los contadores históricos (total, aprobados, editados, rechazados) se mantienen para analítica.
+// aprobados_consecutivos se preserva como dato legacy pero ya no controla el nivel.
 export async function actualizarStatsAprobacion(
   campana: string,
   decision: "aprobado" | "editado" | "rechazado"
@@ -188,42 +189,41 @@ export async function actualizarStatsAprobacion(
   const stats = await obtenerStatsAprobacion(campana);
   if (!stats) return;
 
-  const consecutivosActuales = stats.aprobados_consecutivos ?? 0;
-  const nuevosConsecutivos =
-    decision === "aprobado" ? consecutivosActuales + 1 :
-    decision === "editado"  ? 0 :
-    consecutivosActuales; // rechazado no interrumpe la racha
-
-  const nuevos = {
-    total:                   stats.total + 1,
-    aprobados:               stats.aprobados  + (decision === "aprobado"  ? 1 : 0),
-    editados:                stats.editados   + (decision === "editado"   ? 1 : 0),
-    rechazados:              stats.rechazados + (decision === "rechazado" ? 1 : 0),
-    aprobados_consecutivos:  nuevosConsecutivos,
-    updated_at:              new Date().toISOString(),
+  // Contadores históricos (analítica)
+  const contadores = {
+    total:                  stats.total + 1,
+    aprobados:              stats.aprobados  + (decision === "aprobado"  ? 1 : 0),
+    editados:               stats.editados   + (decision === "editado"   ? 1 : 0),
+    rechazados:             stats.rechazados + (decision === "rechazado" ? 1 : 0),
+    aprobados_consecutivos: decision === "aprobado" ? (stats.aprobados_consecutivos ?? 0) + 1
+                          : decision === "editado"  ? 0
+                          : (stats.aprobados_consecutivos ?? 0),
+    updated_at:             new Date().toISOString(),
   };
 
-  const nuevaTasaHistorica = nuevos.total > 0 ? nuevos.aprobados / nuevos.total : 0;
+  // Ventana bayesiana (rechazados no entran)
+  const windowActual  = Array.isArray(stats.decisions_window) ? stats.decisions_window : [];
+  const windowSize    = stats.window_size ?? 20;
+  const nuevaVentana  = updateDecisionsWindow(windowActual, decision, windowSize);
+  const nuevoScore    = calcularTrustScore(nuevaVentana);
 
+  // Auto-activación nivel 4: trust_score alto + ventana llena
   const debeAutomatizar =
     !stats.automatizado &&
-    nuevaTasaHistorica >= 0.95 &&
-    nuevosConsecutivos >= 50;
+    nuevoScore >= TRUST_NIVEL4 &&
+    nuevaVentana.length >= windowSize;
 
-  const statsActualizadas: StatsAprobacionGHL = {
-    ...(stats as StatsAprobacionGHL),
-    ...nuevos,
-    tasa_limpia: nuevaTasaHistorica,
-    automatizado: debeAutomatizar ? true : stats.automatizado,
-  };
-  const { umbral } = calcularNivel(statsActualizadas);
+  const ahora = new Date().toISOString();
 
   await (supabase as any)
     .from("ghl_approval_stats")
     .update({
-      ...nuevos,
-      umbral_auto: umbral,
-      ...(debeAutomatizar && { automatizado: true }),
+      ...contadores,
+      decisions_window: nuevaVentana,
+      trust_score:      nuevoScore,
+      umbral_auto:      UMBRAL_AUTO_FIJO,
+      ...(decision !== "rechazado" && { last_decision_at: ahora }),
+      ...(debeAutomatizar          && { automatizado: true }),
     })
     .eq("campana_key", campana);
 }
@@ -239,17 +239,9 @@ export async function desactivarCampana(campana: string): Promise<void> {
   await (supabase as any).from("ghl_approval_stats").update({ activa: false }).eq("campana_key", campana);
 }
 
-// Umbral actual — si no está en DB, retorna el del nivel 0 (conservador)
-export async function obtenerUmbralAuto(campana: string): Promise<number> {
-  const stats = await obtenerStatsAprobacion(campana);
-  return stats?.umbral_auto ?? 0.92;
-}
-
-// Recalcula el umbral basado en el nivel y lo persiste
-export async function recalcularYGuardarUmbral(campana: string, stats: StatsAprobacionGHL): Promise<void> {
-  const supabase = createServiceClient();
-  const { umbral } = calcularNivel(stats);
-  await (supabase as any).from("ghl_approval_stats").update({ umbral_auto: umbral }).eq("campana_key", campana);
+// MPS-6: umbral_auto es fijo (UMBRAL_AUTO_FIJO). Se conserva la función por compatibilidad.
+export async function obtenerUmbralAuto(_campana: string): Promise<number> {
+  return UMBRAL_AUTO_FIJO;
 }
 
 // Registra que se disparó un lote automático
@@ -393,8 +385,7 @@ export async function obtenerEstadosLeadsCampana(campana: string): Promise<Estad
   return resultado;
 }
 
-// Reinicia todos los contadores de confianza a cero.
-// Úsalo cuando hay cambios importantes en el servicio o mensajes que invalidan las aprobaciones previas.
+// Reinicia todos los contadores y la ventana bayesiana a cero.
 export async function reiniciarNivelesCampana(campana: string): Promise<void> {
   const supabase = createServiceClient();
   await (supabase as any)
@@ -406,7 +397,10 @@ export async function reiniciarNivelesCampana(campana: string): Promise<void> {
       rechazados:             0,
       aprobados_consecutivos: 0,
       automatizado:           false,
-      umbral_auto:            1.0,
+      umbral_auto:            UMBRAL_AUTO_FIJO,
+      decisions_window:       [],
+      trust_score:            0,
+      last_decision_at:       null,
       updated_at:             new Date().toISOString(),
     })
     .eq("campana_key", campana);
