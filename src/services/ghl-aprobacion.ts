@@ -178,7 +178,8 @@ export async function resolverItemAprobacion(params: {
 
 // Actualiza contadores globales de la campaña.
 // aprobados_consecutivos (racha) sube con aprobado y vuelve a 0 con editado.
-// tasa_limpia es generada en DB (aprobados_históricos / total), no se toca aquí.
+// tasa_limpia es columna GENERATED en DB (aprobados / total); se recalcula localmente
+// solo para determinar debeAutomatizar y umbral antes del UPDATE, nunca se escribe directo.
 export async function actualizarStatsAprobacion(
   campana: string,
   decision: "aprobado" | "editado" | "rechazado"
