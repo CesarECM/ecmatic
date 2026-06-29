@@ -6,8 +6,13 @@ import {
   obtenerEstadosLeadsCampana, contarLogsCampana,
 } from "@/services/ghl-aprobacion";
 import { buscarContactosPorTag } from "@/lib/ghl/contacts-api";
+import {
+  obtenerKPIsMonitor, obtenerAtascados,
+  obtenerProximosSeguimientos, obtenerEscalados,
+} from "@/services/seguimiento-monitor";
 import { CampanaControls } from "./CampanaControls";
 import { EstadosChart } from "./EstadosChart";
+import { FollowupMonitor } from "./FollowupMonitor";
 import { LogTable, type LogRow } from "./LogTable";
 import { NivelesRoadmap } from "./NivelesRoadmap";
 
@@ -36,7 +41,10 @@ export default async function GHLCampaignPage() {
   const db   = createServiceClient() as any;
   const hora = horaCDMX();
 
-  const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult] =
+  const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0 } };
+
+  const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
+    monitorKPIs, atascados, proximos, escalados] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
       obtenerStatsAprobacion(CAMPANA),
@@ -45,6 +53,10 @@ export default async function GHLCampaignPage() {
       obtenerEstadosLeadsCampana(CAMPANA),
       contarLogsCampana(CAMPANA),
       buscarContactosPorTag(TAG_FUENTE, 1, 1).catch(() => ({ contacts: [], total: 0 })),
+      obtenerKPIsMonitor().catch(() => KPIS_FALLBACK),
+      obtenerAtascados().catch(() => []),
+      obtenerProximosSeguimientos().catch(() => []),
+      obtenerEscalados().catch(() => []),
     ]);
 
   const { data: logs } = await db
@@ -205,6 +217,9 @@ export default async function GHLCampaignPage() {
           ))}
         </div>
       )}
+
+      {/* ── Monitor de seguimientos ─────────────────────────────── */}
+      <FollowupMonitor kpis={monitorKPIs} atascados={atascados} proximos={proximos} escalados={escalados} />
 
       {/* ── Log ────────────────────────────────────────────────── */}
       <LogTable logs={logs ?? []} />
