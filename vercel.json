@@ -36,6 +36,7 @@
     { "path": "/api/admin/ghl/followup-learning",        "schedule": "0 * * * *" },
     { "path": "/api/admin/ghl/campana/decay",           "schedule": "0 8 * * *" },
     { "path": "/api/admin/ghl/kb-feedback-scan",        "schedule": "0 10 * * *" },
-    { "path": "/api/admin/ghl/procesar-buffer",         "schedule": "*/1 * * * *" }
+    { "path": "/api/admin/ghl/procesar-buffer",         "schedule": "*/1 * * * *" },
+    { "path": "/api/admin/ghl/prior-global",           "schedule": "0 12 * * 1" }
   ]
 }
