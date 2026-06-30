@@ -52,11 +52,12 @@ export async function crearSeguimiento(params: {
   convId?: string | null;
   campana?: string | null;
   horarioprometido?: Date | null;
-  proximoAt?: Date;
+  proximoAt?: Date;       // bypass total — usa solo cuando el timestamp es fijo y no debe pasar por el motor
+  floorOverride?: Date;   // piso de negocio — pasa por el motor bayesiano respetando este mínimo
 }): Promise<string | null> {
   const gatillo = await obtenerGatilloActivo();
   // Primer intento: nivel 1 → delay = base_hours (no backoff aún)
-  const proximo = params.proximoAt ?? await calcularProximoAt({ leadId: params.leadId, tipo: params.tipo, nivel: 1 }).catch(() => new Date(Date.now() + 4 * 3_600_000));
+  const proximo = params.proximoAt ?? await calcularProximoAt({ leadId: params.leadId, tipo: params.tipo, nivel: 1, floorOverride: params.floorOverride }).catch(() => new Date(Date.now() + 4 * 3_600_000));
 
   const { data, error } = await db()
     .from("seguimiento_lead")

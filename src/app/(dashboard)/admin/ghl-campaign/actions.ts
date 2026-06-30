@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { activarCampana, desactivarCampana, reiniciarNivelesCampana } from "@/services/ghl-aprobacion";
 import { logSistema } from "@/services/log-sistema";
+import { reclasificarCobertura } from "@/services/reclasificar-cobertura";
 
 const CAMPANA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
@@ -29,6 +30,17 @@ export async function reiniciarNivelesAction(): Promise<void> {
     resultado: CAMPANA,
   });
   revalidatePath("/admin/ghl-campaign");
+}
+
+export async function auditarCoberturaAction(): Promise<{ creados: number; procesados: number }> {
+  const resultado = await reclasificarCobertura(200);
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_campana.auditar_cobertura", fase: "ok",
+    resultado: `procesados:${resultado.procesados} creados:${resultado.creados}`,
+    metadata:  resultado as unknown as Record<string, unknown>,
+  });
+  revalidatePath("/admin/ghl-campaign");
+  return { creados: resultado.creados, procesados: resultado.procesados };
 }
 
 export async function toggleCampanaAction(activa: boolean): Promise<void> {

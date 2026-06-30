@@ -204,13 +204,12 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     void crearSeguimiento({ leadId, tipo: "payment", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA });
   }
 
-  // Cuando el lead confirmó un slot, programar el primer follow-up para 2h después del fin
-  // de la reunión — no inmediatamente, sino cuando la sesión ya debió haber terminado.
+  // Cuando el lead confirmó un slot, programar el primer follow-up a partir del fin de la reunión.
+  // floorOverride=citaFin garantiza que el motor bayesiano no programe antes de que la sesión termine.
   if (citaFin) {
-    const proximoAt = new Date(citaFin.getTime() + 2 * 3_600_000);
     void cancelarPorTipo(leadId, "nurturing");
     void cancelarPorTipo(leadId, "conversational");
-    void crearSeguimiento({ leadId, tipo: "demo_agendado", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA, proximoAt });
+    void crearSeguimiento({ leadId, tipo: "demo_agendado", ghlContactId: contactId, convId, campana: CAMPANA_ACTIVA, floorOverride: citaFin });
   }
 }
 

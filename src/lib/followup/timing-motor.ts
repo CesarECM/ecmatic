@@ -136,11 +136,15 @@ export async function calcularProximoAt(params: {
   leadId: string;
   tipo: TipoFollowup;
   nivel: number;  // 1-indexed — el nivel que se va a enviar AHORA (acaba de terminar nivel-1)
+  floorOverride?: Date; // piso mínimo de negocio (ej. fin de reunión); prevalece sobre backoff si es posterior
 }): Promise<Date> {
   const config = await getFollowupConfig(params.tipo);
 
-  // Capa 1: floor
-  const floorMs = Date.now() + calcularDelayMs(params.nivel, config);
+  // Capa 1: floor = max(backoff normal, piso de negocio si existe)
+  const backoffMs = Date.now() + calcularDelayMs(params.nivel, config);
+  const floorMs = params.floorOverride
+    ? Math.max(params.floorOverride.getTime(), backoffMs)
+    : backoffMs;
   const floor = new Date(floorMs);
 
   // Capa 2: intentar mejorar el timing con el modelo bayesiano

@@ -2,7 +2,7 @@
 
 import { useTransition, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { toggleCampanaAction, reiniciarNivelesAction } from "./actions";
+import { toggleCampanaAction, reiniciarNivelesAction, auditarCoberturaAction } from "./actions";
 
 const REFRESH_INTERVAL_MS = 15_000;
 
@@ -12,8 +12,10 @@ interface Props {
 }
 
 export function CampanaControls({ activa, pendientes }: Props) {
-  const [pendingToggle, startToggle]     = useTransition();
-  const [pendingReset,  startReset]      = useTransition();
+  const [pendingToggle,  startToggle]   = useTransition();
+  const [pendingReset,   startReset]    = useTransition();
+  const [pendingAudit,   startAudit]    = useTransition();
+  const [auditMsg,       setAuditMsg]   = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("campana_auto_refresh") === "1";
@@ -43,6 +45,14 @@ export function CampanaControls({ activa, pendientes }: Props) {
     startReset(() => void reiniciarNivelesAction());
   }
 
+  function handleAuditarCobertura() {
+    setAuditMsg(null);
+    startAudit(async () => {
+      const r = await auditarCoberturaAction();
+      setAuditMsg(`${r.creados} seguimientos creados de ${r.procesados} leads revisados`);
+    });
+  }
+
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex items-center gap-2">
@@ -58,8 +68,17 @@ export function CampanaControls({ activa, pendientes }: Props) {
           {autoRefresh ? "Auto 15 s" : "Auto-actualizar"}
         </button>
         <button
+          onClick={handleAuditarCobertura}
+          disabled={pendingAudit || pendingToggle || pendingReset}
+          title="Detecta leads con actividad reciente sin seguimiento activo y asigna el tipo correcto con IA."
+          className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-all
+            ${pendingAudit ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          {pendingAudit ? "Auditando…" : "Auditar cobertura"}
+        </button>
+        <button
           onClick={handleReinicio}
-          disabled={pendingReset || pendingToggle}
+          disabled={pendingReset || pendingToggle || pendingAudit}
           title="Reinicia racha y contadores a 0. Útil tras cambios importantes en el servicio."
           className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-all
             ${pendingReset ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
@@ -77,6 +96,9 @@ export function CampanaControls({ activa, pendientes }: Props) {
           {pendingToggle ? "Guardando…" : activa ? "Campaña ACTIVA" : "Campaña INACTIVA"}
         </button>
       </div>
+      {auditMsg && (
+        <p className="text-xs text-green-600 dark:text-green-400">{auditMsg}</p>
+      )}
       {pendientes > 0 && (
         <p className="text-xs text-yellow-600 dark:text-yellow-400">
           ⏸ {pendientes} pendiente{pendientes > 1 ? "s" : ""} ·{" "}
