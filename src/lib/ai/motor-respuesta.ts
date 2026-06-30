@@ -16,6 +16,7 @@ import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
 import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
 import { obtenerRelacionesParaPrompt } from "@/services/servicio-relaciones";
 import { obtenerHintCalidadLead } from "@/services/calidad-conversacional";
+import { obtenerVariantePrompt } from "@/services/prompt-experimentos";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
 import type { EstadoSetter } from "./setter-protocol";
@@ -99,7 +100,7 @@ export async function generarRespuesta(
     ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
   };
 
-  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad] = await Promise.all([
+  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt] = await Promise.all([
     buscarRecursos(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
@@ -107,6 +108,12 @@ export async function generarRespuesta(
     obtenerContextoPipeline(contexto.pipelineRuta as string | undefined, contexto.pipelineStage)
       .catch(() => ({ servicio: null, etapa: null })),
     contexto.leadId ? obtenerHintCalidadLead(contexto.leadId).catch(() => null) : Promise.resolve(null),
+    contexto.leadId
+      ? obtenerVariantePrompt(contexto.leadId, {
+          pipeline_stage: contexto.pipelineStage,
+          temperamento: contexto.temperamento,
+        }).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const { servicios: serviciosSemánticos, kb } = resultadosBusqueda;
@@ -282,6 +289,8 @@ export async function generarRespuesta(
     ? `\nHINT DE CALIDAD HISTÓRICA (basado en conversaciones previas con este lead):\n${hintCalidad}` : "";
   const memoriaLinea = contexto.memoriaIA
     ? `\nMEMORIA DE SESIONES ANTERIORES CON ESTE LEAD:\n${contexto.memoriaIA}` : "";
+  const varianteLinea = variantePrompt
+    ? `\nINSTRUCCIÓN ADICIONAL (experimento activo — variante ${variantePrompt.variante.toUpperCase()}):\n${variantePrompt.texto}` : "";
 
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
@@ -291,7 +300,7 @@ export async function generarRespuesta(
     : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${relacionesLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}${hintCalidadLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${relacionesLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}${hintCalidadLinea}${varianteLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}

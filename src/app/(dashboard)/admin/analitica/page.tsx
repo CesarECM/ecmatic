@@ -1,8 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { listarExperimentos } from "@/services/experimentos";
+import { listarExperimentosPrompt } from "@/services/prompt-experimentos";
 import { ReporteKB } from "./components/ReporteKB";
 import { PipelineAbDashboard } from "./components/PipelineAbDashboard";
-import { crearExperimentoAction, declararGanadorAction } from "./actions";
+import { crearExperimentoAction, declararGanadorAction, crearExperimentoPromptAction, declararGanadorPromptAction } from "./actions";
 
 export const metadata = { title: "Analítica · ECMatic" };
 export const revalidate = 0;
@@ -14,8 +15,9 @@ export default async function AnaliticaPage() {
   const supabase = createServiceClient();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [experimentos, { data: competidores }, { data: calidades }, { data: testsAB }] = await Promise.all([
+  const [experimentos, experimentosPrompt, { data: competidores }, { data: calidades }, { data: testsAB }] = await Promise.all([
     listarExperimentos(),
+    listarExperimentosPrompt().catch(() => []),
     supabase.from("competidores").select("*").order("menciones", { ascending: false }).limit(10),
     supabase.from("calidad_conversacional")
       .select("score_total, ganada, created_at, vendedores(nombre)")
@@ -163,6 +165,68 @@ export default async function AnaliticaPage() {
       <section className="space-y-3">
         <p className="text-sm font-medium">Tests A/B de pipeline — Thompson Sampling</p>
         <PipelineAbDashboard tests={testsAB ?? []} />
+      </section>
+
+      {/* S64 — Prompt A/B testing */}
+      <section className="space-y-3">
+        <p className="text-sm font-medium">Experimentos de prompt A/B</p>
+        {experimentosPrompt.length === 0 && (
+          <p className="text-xs text-muted-foreground">Sin experimentos de prompt activos.</p>
+        )}
+        {experimentosPrompt.map((e) => {
+          const tasaA = e.asignaciones_a > 0 ? (e.conversiones_a / e.asignaciones_a * 100).toFixed(1) : "0";
+          const tasaB = e.asignaciones_b > 0 ? (e.conversiones_b / e.asignaciones_b * 100).toFixed(1) : "0";
+          return (
+            <div key={e.id} className="rounded border p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="font-medium text-sm">{e.nombre}</p>
+                <span className={`text-xs rounded px-2 py-0.5 ${e.activo ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>
+                  {e.ganador ? `Ganador: ${e.ganador.toUpperCase()}` : e.activo ? "Activo" : "Terminado"}
+                </span>
+              </div>
+              {e.segmento && (
+                <p className="text-xs text-muted-foreground">
+                  Segmento: {Object.entries(e.segmento).map(([k, v]) => `${k}=${v}`).join(", ")}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className={`rounded p-2 border ${e.ganador === "a" ? "border-green-400 bg-green-50" : ""}`}>
+                  <p className="font-medium text-xs mb-1">Grupo A</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{e.variante_a}</p>
+                  <p className="text-xs mt-1">{e.asignaciones_a} asignados · {e.conversiones_a} conv. · {tasaA}%</p>
+                </div>
+                <div className={`rounded p-2 border ${e.ganador === "b" ? "border-green-400 bg-green-50" : ""}`}>
+                  <p className="font-medium text-xs mb-1">Grupo B</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{e.variante_b}</p>
+                  <p className="text-xs mt-1">{e.asignaciones_b} asignados · {e.conversiones_b} conv. · {tasaB}%</p>
+                </div>
+              </div>
+              {e.activo && !e.ganador && (
+                <div className="flex gap-2">
+                  <form action={declararGanadorPromptAction.bind(null, e.id, "a")}>
+                    <button type="submit" className="text-xs rounded border px-2 py-1 hover:bg-gray-50">Declarar A ganador</button>
+                  </form>
+                  <form action={declararGanadorPromptAction.bind(null, e.id, "b")}>
+                    <button type="submit" className="text-xs rounded border px-2 py-1 hover:bg-gray-50">Declarar B ganador</button>
+                  </form>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <details className="rounded border p-3">
+          <summary className="text-xs text-purple-600 cursor-pointer">+ Crear experimento de prompt</summary>
+          <form action={crearExperimentoPromptAction} className="mt-3 space-y-2">
+            <input name="nombre" required placeholder="Nombre (ej. Tono formal vs cálido)" className="w-full rounded border px-2 py-1 text-sm" />
+            <textarea name="variante_a" required placeholder="Instrucción variante A (añade al prompt)" className="w-full rounded border px-2 py-1 text-sm min-h-[60px] resize-y" />
+            <textarea name="variante_b" required placeholder="Instrucción variante B (añade al prompt)" className="w-full rounded border px-2 py-1 text-sm min-h-[60px] resize-y" />
+            <div className="grid grid-cols-2 gap-2">
+              <input name="pipeline_stage" placeholder="Etapa (opcional, ej. Propuesta)" className="rounded border px-2 py-1 text-xs" />
+              <input name="temperamento" placeholder="Temperamento (opcional, ej. D)" className="rounded border px-2 py-1 text-xs" />
+            </div>
+            <button type="submit" className="rounded bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700">Crear</button>
+          </form>
+        </details>
       </section>
 
       {/* S11.7 — Reporte KB */}
