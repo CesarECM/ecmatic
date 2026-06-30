@@ -37,6 +37,31 @@ function horaTexto(): string {
 }
 
 
+type EstadoClaudeAPI = "operativa" | "sin_creditos" | "error" | "timeout" | "sin_datos";
+
+async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAPI; hace: string | null }> {
+  const { data } = await db
+    .from("log_sistema")
+    .select("fase, resultado, created_at")
+    .eq("categoria", "ia")
+    .in("fase", ["respuesta", "error", "timeout"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { fase: string; resultado: string | null; created_at: string } | null };
+
+  if (!data) return { estado: "sin_datos", hace: null };
+
+  const hace = new Date(data.created_at).toLocaleTimeString("es-MX", {
+    timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+
+  if (data.fase === "respuesta") return { estado: "operativa", hace };
+  if (data.fase === "timeout")   return { estado: "timeout",   hace };
+  if (data.fase === "error" && data.resultado?.includes("credit balance"))
+    return { estado: "sin_creditos", hace };
+  return { estado: "error", hace };
+}
+
 export default async function GHLCampaignPage() {
   const db   = createServiceClient() as any;
   const hora = horaCDMX();
@@ -44,7 +69,7 @@ export default async function GHLCampaignPage() {
   const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0, demo_agendado: 0 } };
 
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
-    monitorKPIs, atascados, proximos, escalados] =
+    monitorKPIs, atascados, proximos, escalados, claudeEstado] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
       obtenerStatsAprobacion(CAMPANA),
@@ -57,6 +82,7 @@ export default async function GHLCampaignPage() {
       obtenerAtascados().catch(() => []),
       obtenerProximosSeguimientos().catch(() => []),
       obtenerEscalados().catch(() => []),
+      obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null })),
     ]);
 
   const { data: logs } = await db
@@ -110,7 +136,10 @@ export default async function GHLCampaignPage() {
             {" · "}Hora CDMX: <strong>{horaTexto()}</strong>
           </p>
         </div>
-        <CampanaControls activa={activa} pendientes={pendientes} />
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          <ClaudeBadge estado={claudeEstado.estado} hace={claudeEstado.hace} />
+          <CampanaControls activa={activa} pendientes={pendientes} />
+        </div>
       </div>
 
       {/* ── Pool GHL ───────────────────────────────────────────── */}
@@ -253,6 +282,27 @@ function NivelBadge({ nivel }: { nivel: 0 | 1 | 2 | 3 | 4 }) {
     "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"];
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors[nivel]}`}>{labels[nivel]}</span>;
+}
+
+function ClaudeBadge({ estado, hace }: { estado: EstadoClaudeAPI; hace: string | null }) {
+  const cfg: Record<EstadoClaudeAPI, { label: string; color: string; dot: string; href?: string }> = {
+    operativa:    { label: "IA operativa",   color: "bg-green-500/15 text-green-700 dark:text-green-400  border border-green-500/30", dot: "bg-green-500" },
+    sin_creditos: { label: "Sin créditos",   color: "bg-red-500/15   text-red-700   dark:text-red-400    border border-red-500/30",   dot: "bg-red-500",   href: "https://console.anthropic.com/settings/billing" },
+    error:        { label: "Error en IA",    color: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/30", dot: "bg-orange-500" },
+    timeout:      { label: "IA lenta",       color: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30", dot: "bg-yellow-500" },
+    sin_datos:    { label: "IA sin datos",   color: "bg-muted text-muted-foreground border border-border",  dot: "bg-muted-foreground" },
+  };
+  const { label, color, dot, href } = cfg[estado];
+  const inner = (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot} ${estado === "operativa" ? "animate-pulse" : ""}`} />
+      {label}
+      {hace && <span className="font-normal opacity-70">· {hace}</span>}
+    </span>
+  );
+  return href
+    ? <a href={href} target="_blank" rel="noopener noreferrer" title="Ir a Anthropic Billing">{inner}</a>
+    : inner;
 }
 
 function VentanaCard({ titulo, ventana, activa, motivos, sub }: {

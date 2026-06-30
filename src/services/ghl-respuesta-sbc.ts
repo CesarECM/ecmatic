@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 import { agregarTagsContacto, obtenerContacto } from "@/lib/ghl/contacts-api";
-import { buscarConversacionWA, obtenerMensajes, enviarMensajeGHLFragmentado } from "@/lib/ghl/conversations-api";
+import { buscarConversacionWA, obtenerOCrearConversacionWA, obtenerMensajes, enviarMensajeGHLFragmentado } from "@/lib/ghl/conversations-api";
 import { registrarRespuestaGHL } from "@/services/ab-workflows-ghl";
 import { generarRespuesta } from "@/lib/ai/motor-respuesta";
 import { guardarMensaje, obtenerHistorial } from "@/services/mensajes";
@@ -89,7 +89,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     return;
   }
 
-  const convId = conversationId || (await buscarConversacionWA(contactId).catch(() => null))?.id;
+  const convId = conversationId || await obtenerOCrearConversacionWA(contactId).catch(() => null);
 
   void logSistema({
     categoria: "webhook", tipoAccion: "ghl_sbc.convid", fase: convId ? "ok" : "warn",
@@ -112,8 +112,17 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
   if (!convId) {
     void logSistema({
       categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error",
-      resultado: "sin convId — mensaje perdido (ni enviado ni encolado)",
+      resultado: "sin convId tras obtenerOCrear — notificando admin para revisión manual",
       metadata:  { contactId, conversationId_en_payload: conversationId ?? null },
+    });
+    void notificarMensajePendienteGHL({
+      itemId:      "sin-conv",
+      convId:      contactId,
+      contactId,
+      nombre:      null,
+      mensajeLead: cuerpo.slice(0, 200),
+      scoreIA:     0,
+      urgencia:    3,
     });
     return;
   }
