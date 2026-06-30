@@ -6,7 +6,7 @@ import type { TipoSeguimiento } from "@/services/seguimiento-lead";
 export interface ContextoFollowup {
   nombre: string | null;
   tipo: TipoSeguimiento;
-  nivel: number;          // 1=primer recordatorio, 2=empático, 3=social proof (payment)
+  nivel: number;          // 1-indexed — el nivel del mensaje a enviar
   horarioPrometido?: string | null;  // texto legible, ej. "7pm" o "las 3 de la tarde"
   gatilloSnapshot?: string | null;   // ej. "Precio especial: $1,799 hasta el 30 jun"
   linkPago?: string | null;          // URL de pago total (landing o pasarela)
@@ -56,9 +56,26 @@ Sin presión, cierre empático.`,
 Escribe un follow-up suave para retomar la conversación. Muestra interés genuino.
 Recuérdale en qué punto estaban sin repetir todo. Hazle una pregunta abierta al final.`,
 
-    2: `El lead no respondió al primer follow-up. Este es el último intento.
-Escribe un mensaje breve. Reconoce que está ocupado. Deja la puerta completamente abierta.
-Ofrece continuar cuando sea buen momento para él/ella. Sin presión.`,
+    2: `El lead no respondió al primer follow-up. Probablemente está ocupado.
+Escribe un mensaje breve y empático. Reconoce que el momento puede no ser el indicado.
+Ofrece continuar cuando sea buen momento para él/ella. Sin presión. Una sola pregunta al final.`,
+
+    3: `El lead lleva varios días sin contestar. Cambia el ángulo completamente.
+En lugar de retomar la conversación previa, comparte un dato concreto y útil sobre el proceso
+de certificación CONOCER (duración, documentos, beneficios laborales) que pueda interesarle.
+Cierra con una pregunta relacionada con su situación personal.
+Tono: informativo y genuinamente útil, sin referencia a mensajes anteriores.`,
+
+    4: `El lead lleva mucho tiempo sin responder. Reduce la fricción al mínimo.
+Escribe un mensaje muy corto reconociendo que quizás el momento no es el adecuado.
+Ofrece una alternativa diferente: una llamada rápida de 5 minutos en lugar de chat.
+Tono: sin expectativa, dejando que él/ella decida. Sin referencia a mensajes previos.`,
+
+    5: `Último intento automático. No hay más mensajes después de este.
+Escribe el mensaje más corto y humano del ciclo. Máximo dos oraciones.
+Deja la puerta completamente abierta para cuando decida retomar el contacto.
+No menciones cuántas veces has escrito. No repitas información.
+Tono: respetuoso, sin presión, cierra el ciclo con calidez.`,
   },
   nurturing: {
     1: `El lead llegó al funnel (puede ser por campaña o WhatsApp directo) pero se quedó en silencio.
@@ -72,6 +89,24 @@ Ofrece ser flexible con los tiempos. Cierra con una pregunta simple de sí/no pa
 
     3: `Tercer intento. Usa la escasez de cupos o una historia de éxito de otro candidato.
 Recuérdales el beneficio concreto de certificarse. Máximo 2 oraciones + una pregunta.`,
+
+    4: `El lead lleva semanas en silencio. Prueba un ángulo completamente distinto: una historia breve.
+Menciona en términos generales a alguien en una situación similar que ya se certificó y el resultado
+concreto que obtuvo (ingresos, reconocimiento, ascenso). Sin nombres reales, solo el resultado.
+Cierra con una pregunta directa: ¿algo así te interesaría?
+Máximo 2-3 oraciones. Tono: inspirador, sin sonar a anuncio.`,
+
+    5: `El lead sigue sin responder. Cambia completamente de ritmo y tono.
+Escribe un mensaje muy breve que solo pregunte si el momento ha cambiado para él/ella.
+Nada de información nueva. Solo abre la puerta de forma simple y sin rodeos.
+Máximo 1-2 oraciones. Ejemplo de enfoque: "¿Sigues interesado/a o te llamo en otro momento?"`,
+
+    6: `Último mensaje automático del ciclo de nurturing.
+Escribe el mensaje más humano y sin expectativas de todo el ciclo.
+Reconoce que ha pasado tiempo y que probablemente las circunstancias cambiaron.
+Deja claro que puede regresar cuando quiera, sin explicaciones ni presión.
+No cierres una venta — preserva la relación para un contacto futuro.
+Máximo 2 oraciones.`,
   },
 };
 
