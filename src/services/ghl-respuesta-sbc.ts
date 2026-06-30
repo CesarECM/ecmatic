@@ -401,6 +401,7 @@ async function generarRespuestaMotorCompleto(
       protocoloObjecion,
       rolesDinamicos,
       modoRevelacion: nuevoModo,
+      leadId:        lead.id,
       ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
       ...(meetLinkDemo && { meetLink: meetLinkDemo }),
     }));

@@ -15,6 +15,7 @@ import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/
 import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
 import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
 import { obtenerRelacionesParaPrompt } from "@/services/servicio-relaciones";
+import { obtenerHintCalidadLead } from "@/services/calidad-conversacional";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
 import type { EstadoSetter } from "./setter-protocol";
@@ -72,6 +73,8 @@ interface ContextoLead {
   rolesDinamicos?: RolPorServicio[];
   // Revelación de producto
   modoRevelacion?: ModoRevelacion;
+  // S62 — Hint de calidad conversacional histórica
+  leadId?: string;
 }
 
 export interface RespuestaIA {
@@ -94,13 +97,14 @@ export async function generarRespuesta(
     ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
   };
 
-  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline] = await Promise.all([
+  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad] = await Promise.all([
     buscarRecursos(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
     obtenerIdentidad().catch(() => null),
     obtenerContextoPipeline(contexto.pipelineRuta as string | undefined, contexto.pipelineStage)
       .catch(() => ({ servicio: null, etapa: null })),
+    contexto.leadId ? obtenerHintCalidadLead(contexto.leadId).catch(() => null) : Promise.resolve(null),
   ]);
 
   const { servicios: serviciosSemánticos, kb } = resultadosBusqueda;
@@ -272,6 +276,9 @@ export async function generarRespuesta(
       ].join("\n")
     : ""; // revelado → el bloqueEstrategia ya contiene las instrucciones de cierre
 
+  const hintCalidadLinea = hintCalidad
+    ? `\nHINT DE CALIDAD HISTÓRICA (basado en conversaciones previas con este lead):\n${hintCalidad}` : "";
+
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
     ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
@@ -280,7 +287,7 @@ export async function generarRespuesta(
     : "";
 
   const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${relacionesLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${relacionesLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}${hintCalidadLinea}
 
 CONTEXTO DEL LEAD:
 - Nombre: ${contexto.nombre ?? "desconocido"}

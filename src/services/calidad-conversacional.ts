@@ -74,6 +74,30 @@ Responde en JSON:
   }
 }
 
+// S62 — Lee las últimas 3 evaluaciones del lead; si ≥2 tienen una dimensión baja,
+// devuelve un hint para inyectar en el system prompt del motor de respuesta.
+export async function obtenerHintCalidadLead(leadId: string): Promise<string | null> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("calidad_conversacional")
+    .select("coherencia, cobertura_objeciones, personalizacion")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false })
+    .limit(3);
+  if (!data || data.length < 2) return null;
+  const umbral = 12, minDebil = 2;
+  type Fila = { coherencia: number; cobertura_objeciones: number; personalizacion: number };
+  const debil = (col: keyof Fila) =>
+    (data as Fila[]).filter((r) => r[col] < umbral).length >= minDebil;
+  const hints: string[] = [];
+  if (debil("cobertura_objeciones")) hints.push("priorizar el manejo de objeciones del lead");
+  if (debil("personalizacion"))      hints.push("usar el nombre y contexto personal del lead en la respuesta");
+  if (debil("coherencia"))           hints.push("mantener el hilo de la conversación, no cambiar de tema abruptamente");
+  return hints.length > 0
+    ? `Área(s) débil(es) en conversaciones anteriores con este lead: ${hints.join("; ")}.`
+    : null;
+}
+
 // S11.3 — Detecta la objeción dominante que pierde más leads para un vendedor
 export async function objecionDominanteVendedor(vendedorId: string): Promise<{
   objecion: string; frecuencia: number; impacto: string;

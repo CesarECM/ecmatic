@@ -233,6 +233,7 @@ export async function procesarConversacion(
     protocoloObjecion,
     rolesDinamicos,
     modoRevelacion: nuevoModoRevelacion,
+    leadId: lead.id,
   });
 
   // Compra inmediata: adjuntar link Stripe
