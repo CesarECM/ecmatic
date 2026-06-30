@@ -94,12 +94,15 @@ export async function resetLeadECMatic(
 ): Promise<{ borrado: boolean }> {
   const db = createServiceClient();
 
-  const { data: lead } = await db
-    .from("leads")
-    .select("id")
-    .eq("telefono", telefono)
-    .maybeSingle();
+  // Buscar por teléfono real O por formato 'ghl_CONTACT_ID' (leads creados desde agregarACampanaAction)
+  const [{ data: leadPorTel }, { data: leadPorGhl }] = await Promise.all([
+    db.from("leads").select("id").eq("telefono", telefono).maybeSingle(),
+    ghlContactId
+      ? db.from("leads").select("id").eq("telefono", `ghl_${ghlContactId}`).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
+  const lead = leadPorTel ?? leadPorGhl;
   if (!lead) return { borrado: false };
 
   await db.from("pagos").delete().eq("lead_id", lead.id);
