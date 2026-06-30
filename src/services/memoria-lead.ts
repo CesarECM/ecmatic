@@ -43,7 +43,7 @@ Responde en texto plano, sin JSON, sin bullet points, en español.`,
   const memoria = (res.content[0] as { text: string }).text.trim();
   if (!memoria) return;
 
-  await (supabase as any).from("leads").update({ memoria_ia: memoria }).eq("id", leadId);
+  await supabase.from("leads").update({ memoria_ia: memoria }).eq("id", leadId);
 
   void logSistema({
     categoria: "ia", tipoAccion: "memoria_lead.generar", fase: "ok",

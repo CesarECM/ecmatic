@@ -104,9 +104,8 @@ export async function procesarConversacion(
       .single(),
     obtenerFaseLead(lead.id).catch(() => null),
     obtenerEtiquetasLead(lead.id).catch(() => []),
-    // S63 — Migration 076: as any hasta que los tipos regeneren
-    (supabase as any).from("leads").select("memoria_ia").eq("id", lead.id).single()
-      .then((r: any) => (r.data?.memoria_ia as string | null) ?? null, () => null),
+    supabase.from("leads").select("memoria_ia").eq("id", lead.id).single()
+      .then((r) => r.data?.memoria_ia ?? null, () => null),
   ]);
 
   void logDebugIA("CONVERSACION", `[CAGC] fase=${estadoCagc?.fase_numero ?? "?"} etapa=${leadActualizado?.pipeline_stage}`, { pipeline_ruta: leadActualizado?.pipeline_ruta }, "debug", traceId);

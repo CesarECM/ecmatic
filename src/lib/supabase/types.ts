@@ -189,6 +189,8 @@ export interface Database {
           setter_calificado: boolean | null;
           setter_razon_descalificacion: string | null;
           modo_revelacion: "oculto" | "preguntando" | "revelado";
+          // Migration 076 — S63
+          memoria_ia: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -212,6 +214,7 @@ export interface Database {
           privacidad_fecha?: string | null;
           archivado?: boolean;
           archivado_razon?: string | null;
+          memoria_ia?: string | null;
           contexto?: string | null;
           contexto_historial?: EntradaContexto[];
           contexto_updated_at?: string | null;
@@ -1294,4 +1297,31 @@ export interface Database {
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
+}
+
+// ─── Tipos para tablas nuevas (Migration 077 — S64) ────────────────────────
+
+export interface PromptExperimento {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  variante_a: string;
+  variante_b: string;
+  segmento: { pipeline_stage?: string; temperamento?: string } | null;
+  activo: boolean;
+  ganador: string | null;
+  asignaciones_a: number;
+  conversiones_a: number;
+  asignaciones_b: number;
+  conversiones_b: number;
+  created_at: string;
+}
+
+export interface PromptAsignacion {
+  id: string;
+  lead_id: string;
+  experimento_id: string;
+  variante: string;
+  convertido: boolean;
+  created_at: string;
 }

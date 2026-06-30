@@ -338,9 +338,8 @@ async function generarRespuestaMotorCompleto(
     modoRevelacionActual !== "revelado"
       ? detectarRevelacion([cuerpo], historial, modoRevelacionActual, { leadId: lead.id }).catch(() => null)
       : Promise.resolve(null),
-    // S63 — Migration 076: as any hasta que los tipos regeneren
-    (supabase as any).from("leads").select("memoria_ia").eq("id", lead.id).single()
-      .then((r: any) => (r.data?.memoria_ia as string | null) ?? null, () => null),
+    supabase.from("leads").select("memoria_ia").eq("id", lead.id).single()
+      .then((r) => r.data?.memoria_ia ?? null, () => null),
   ]);
 
   const nuevoModo = calcularNuevoModo(modoRevelacionActual, señalRevelacion);
