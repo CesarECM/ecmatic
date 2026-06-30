@@ -272,8 +272,9 @@ export async function GET(req: NextRequest) {
       categoria: "cron", tipoAccion: "cron.seguimiento.vencidos", fase: "debug", traceId,
       resultado: `${vencidos.length} vencidos encontrados`,
       metadata: {
-        ids:   vencidos.map((s) => s.id.slice(-8)),
-        tipos: vencidos.map((s) => s.tipo),
+        ids:       vencidos.map((s) => s.id.slice(-8)),
+        tipos:     vencidos.map((s) => s.tipo),
+        niveles:   vencidos.map((s) => s.nivel),
         tiene_ghl: vencidos.map((s) => !!s.ghl_contact_id),
       },
     });

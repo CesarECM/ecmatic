@@ -79,7 +79,17 @@ export async function generarFollowupGHL(
   ctx: ContextoFollowup,
   meta?: { leadId?: string; traceId?: string }
 ): Promise<string> {
-  const instruccion = INSTRUCCIONES[ctx.tipo]?.[ctx.nivel];
+  const instruccionesParaTipo = INSTRUCCIONES[ctx.tipo];
+  if (!instruccionesParaTipo) return "";
+
+  // Si nivel > último nivel definido, reusar el último disponible.
+  // Ocurre cuando max_intentos en followup_config supera el nº de instrucciones definidas.
+  const nivelesDisponibles = Object.keys(instruccionesParaTipo).map(Number);
+  const nivelEfectivo = nivelesDisponibles.includes(ctx.nivel)
+    ? ctx.nivel
+    : Math.max(...nivelesDisponibles);
+
+  const instruccion = instruccionesParaTipo[nivelEfectivo];
   if (!instruccion) return "";
 
   const partes: string[] = [];
