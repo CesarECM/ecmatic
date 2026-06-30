@@ -106,6 +106,7 @@ src/
 │   ├── postventa.ts                # referidos, upsell, reseñas
 │   ├── experimentos.ts             # A/B precio — asignación, tracking, ganador
 │   ├── calidad-conversacional.ts   # score 0-100 en 4 dimensiones
+│   ├── arco-emocional.ts           # MPS-17 S66: estado emocional del lead (hot/frustrado → ticket + cola)
 │   ├── temporada.ts                # verificarTemporadaAlta
 │   ├── alertas-ia.ts               # registrarUsoIA, alertas umbral
 │   ├── log-ia.ts                   # log_ia — acciones de IA auditables
@@ -125,7 +126,9 @@ src/
     │   ├── model-router.ts         # modeloPorTarea() — configurable por env var
     │   ├── clasificador.ts         # 7 intenciones + árbol de respuesta
     │   ├── motor-respuesta.ts      # búsqueda semántica + generación de respuesta
-    │   └── clasificar-cobertura.ts # MPS-13: Haiku clasifica tipo de seguimiento para leads sin cobertura
+    │   ├── clasificar-cobertura.ts # MPS-13: Haiku clasifica tipo de seguimiento para leads sin cobertura
+    │   ├── kb-search.ts            # búsqueda semántica + re-ranking Haiku (MPS-17 S65)
+    │   └── guardrails-precio.ts    # MPS-17 S67: detecta descuentos no autorizados e inyección (función pura)
     ├── whatsapp/                   # sendTextMessage, sendTextMessageWithRetry, parseWebhook
     ├── email/                      # resend.ts, brevo.ts, transaccional.ts, campanas.ts
     ├── stripe/                     # createCheckoutSession, client
@@ -275,3 +278,6 @@ export async function moverLeadDesdePerfilAction(formData: FormData) {
 | S12 | Integraciones Pendientes y Escala | 🔄 En progreso |
 | MPS-5 | Motor de Seguimiento Adaptativo v1 | ✅ Completo |
 | MPS-14 | Ciclo KB Activo — Sugerencias → Mejora real del KB | ✅ Completo |
+| MPS-17 S65 | Re-ranking semántico KB (cross-encoder Haiku) | ✅ Completo |
+| MPS-17 S66 | Arco emocional del lead + HITL hot/frustrado | ✅ Completo |
+| MPS-17 S67 | Guardrails de precio (descuento/inyección → cola) | ✅ Completo |

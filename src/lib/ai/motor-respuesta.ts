@@ -78,6 +78,8 @@ interface ContextoLead {
   leadId?: string;
   // S63 — Resumen comprimido de conversaciones anteriores
   memoriaIA?: string | null;
+  // Auto-reply de WA Business: el lead tiene un saludo automático, no es una consulta real
+  esAutoReply?: boolean;
 }
 
 export interface RespuestaIA {
@@ -291,6 +293,9 @@ export async function generarRespuesta(
     ? `\nMEMORIA DE SESIONES ANTERIORES CON ESTE LEAD:\n${contexto.memoriaIA}` : "";
   const varianteLinea = variantePrompt
     ? `\nINSTRUCCIÓN ADICIONAL (experimento activo — variante ${variantePrompt.variante.toUpperCase()}):\n${variantePrompt.texto}` : "";
+  const autoReplyLinea = contexto.esAutoReply
+    ? "\n- CONTEXTO CLAVE: El mensaje recibido es una respuesta automática de WhatsApp Business del lead (saludo o bienvenida automática, no una consulta real). NOSOTROS lo contactamos a él — él NO nos contactó. NUNCA preguntes '¿En qué puedo ayudarte?' ni '¿Para qué nos contactaste?'. Retoma el hilo de prospección explicando brevemente el motivo de nuestro contacto y abre con una pregunta de descubrimiento sobre su situación."
+    : "";
 
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
@@ -327,7 +332,7 @@ INSTRUCCIONES:
 - Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
-${instruccionCanal}
+${instruccionCanal}${autoReplyLinea}
 ${instruccionVenta}
 ${instruccionReglaOroCierre()}`;
 

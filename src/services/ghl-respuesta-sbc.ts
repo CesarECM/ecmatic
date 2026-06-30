@@ -24,6 +24,22 @@ import { crearSeguimiento, marcarCompletado, obtenerActivo, cancelarPorTipo } fr
 
 const CAMPANA_ACTIVA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
+// Patrones de auto-respuesta de WhatsApp Business.
+// Cuando el lead tiene WA Business, su primer mensaje suele ser un saludo automático,
+// no una consulta real. La IA debe retomar el hilo de prospección sin preguntar "¿en qué te ayudo?"
+const WA_BUSINESS_REPLY_PATTERNS = [
+  /bienvenid[oa]/i,
+  /en qu[eé]\s+(puedo|podemos)\s+ayudarte/i,
+  /gracias por\s+(contactar|escribir|comunicar)/i,
+  /estamos\s+fuera/i,
+  /mensaje\s+autom[aá]tico/i,
+  /¿c[oó]mo\s+(puedo|podemos)\s+ayudarte\?/i,
+];
+
+function detectarAutoReplyWABusiness(texto: string): boolean {
+  return WA_BUSINESS_REPLY_PATTERNS.some((p) => p.test(texto));
+}
+
 const TEXTOS_NEGATIVOS = [
   "ya no me interesa", "no me interesa", "no quiero",
   "cancelar", "dar de baja", "stop", "no gracias",
@@ -405,6 +421,7 @@ async function generarRespuestaMotorCompleto(
       modoRevelacion: nuevoModo,
       leadId:        lead.id,
       memoriaIA,
+      esAutoReply:   detectarAutoReplyWABusiness(cuerpo),
       ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
       ...(meetLinkDemo && { meetLink: meetLinkDemo }),
     }));

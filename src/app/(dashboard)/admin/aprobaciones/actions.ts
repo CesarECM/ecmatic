@@ -113,6 +113,16 @@ export const aprobarSugerenciaKBAction = safeAction(
   }
 );
 
+// Genera vista previa del cambio propuesto al KB sin aplicarlo — usado por el modal de ficha.
+export const previsualizarCambioKBAction = safeAction(
+  async (id: string): Promise<{ titulo: string; contenido: string }> => {
+    const { previsualizarCambioKB } = await import("@/services/aplicar-sugerencia-kb");
+    const resultado = await previsualizarCambioKB(id);
+    if (!resultado) throw new Error("No se pudo generar la vista previa (sin recurso o instrucción)");
+    return resultado;
+  }
+);
+
 // MPS-16 S57 — Elimina permanentemente una sugerencia; feedback obligatorio desde la UI.
 export const eliminarSugerenciaAction = safeAction(async (id: string, feedback: string) => {
   const supabase = createServiceClient();

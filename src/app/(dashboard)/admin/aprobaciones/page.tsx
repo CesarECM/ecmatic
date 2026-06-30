@@ -16,6 +16,7 @@ import {
   aprobarEtiquetaAction, archivarEtiquetaAction,
   aprobarComprobanteAction, rechazarComprobanteAction,
   aprobarSugerenciaKBAction, eliminarSugerenciaAction,
+  previsualizarCambioKBAction,
 } from "./actions";
 
 export const metadata = { title: "Cola de Aprobaciones · ECMatic" };
@@ -175,12 +176,13 @@ export default async function AprobacionesPage() {
 
       <ColaMensajesSeccion items={mensajesPendientes} />
 
-      {/* MPS-14 S52 — Sugerencias kb_calidad con aplicación directa al KB */}
+      {/* MPS-14 S52 — Sugerencias kb_calidad con ficha modal + vista previa antes/después */}
       <ColaSugerenciasKBSeccion
         items={sugerenciasKB.map((s) => ({ ...s, metadata: (s.metadata ?? {}) as Record<string, unknown> }))}
         recursosKB={mapaKB}
         aplicarAction={aprobarSugerenciaKBAction}
         eliminarAction={eliminarSugerenciaAction}
+        previsualizarAction={previsualizarCambioKBAction}
       />
 
       {/* S33.5 + S33.9 — Sugerencias generales con Brief de Diseño y vista por Clusters */}

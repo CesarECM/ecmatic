@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { agendarLlamadaAdmin, eliminarLlamada, type ObjetivoLlamada } from "@/services/llamadas";
 import { moverLead, asignarVendedor } from "@/services/pipeline";
 import { moverLeadEnPipeline } from "@/services/pipeline-multi";
@@ -293,11 +294,12 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
   void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // MPS-9 S45.3: procesar retroalimentación de edición → genera sugerencia_ia en KB.
+  // after() garantiza que el trabajo sobreviva en Vercel tras retornar el Server Action.
   // No se llama registrarCierre aquí: una respuesta editada no debe inflar score_confianza de los recursos KB.
-  void procesarFeedbackEdicion(itemId).catch((e) => void logSistema({
+  after(procesarFeedbackEdicion(itemId).catch((e) => void logSistema({
     categoria: "ia", tipoAccion: "ghl_feedback.procesar_edicion", fase: "error",
     resultado: e instanceof Error ? e.message : String(e), metadata: { itemId },
-  }));
+  })));
 
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)

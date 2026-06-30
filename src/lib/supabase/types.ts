@@ -191,6 +191,10 @@ export interface Database {
           modo_revelacion: "oculto" | "preguntando" | "revelado";
           // Migration 076 — S63
           memoria_ia: string | null;
+          // Migration 078 — MPS-17 S66
+          arco_emocional: string | null;
+          arco_emocional_score: number | null;
+          arco_emocional_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -215,6 +219,9 @@ export interface Database {
           archivado?: boolean;
           archivado_razon?: string | null;
           memoria_ia?: string | null;
+          arco_emocional?: string | null;
+          arco_emocional_score?: number | null;
+          arco_emocional_at?: string | null;
           contexto?: string | null;
           contexto_historial?: EntradaContexto[];
           contexto_updated_at?: string | null;

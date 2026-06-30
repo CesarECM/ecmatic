@@ -1,7 +1,7 @@
 // Búsqueda semántica en la base de conocimiento y utilidades de formateo/scoring.
 // Extraído de motor-respuesta.ts para respetar el límite de 300 líneas por archivo.
 
-import { generarEmbedding } from "./client";
+import { generarEmbedding, callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export interface RecursoKB {
@@ -49,16 +49,48 @@ export function formatearRecursoKB(r: RecursoKB): string {
   return partes.join("\n");
 }
 
+// Re-ordena un pool de resultados KB usando Haiku como cross-encoder.
+// Solo actúa cuando hay más resultados que el límite pedido; de lo contrario retorna sin costo.
+async function rerankarPool(query: string, resultados: RecursoKB[], limite: number): Promise<RecursoKB[]> {
+  if (resultados.length <= limite) return resultados;
+
+  const lista = resultados
+    .map((r, i) => `${i}: ${r.titulo} — ${r.contenido.slice(0, 80)}`)
+    .join("\n");
+
+  try {
+    const resp = await callClaudeIA("RERANKING", {
+      max_tokens: 50,
+      system: `Clasificador de relevancia. Devuelve ÚNICAMENTE un JSON array con los ${limite} índices más relevantes para el query dado, en orden descendente. Sin texto adicional. Ejemplo: [2,0,4]`,
+      messages: [{ role: "user", content: `Query: "${query}"\n\nRecursos:\n${lista}` }],
+    });
+    const raw = (resp.content[0] as { text: string }).text.trim();
+    const match = raw.match(/\[[\d,\s]+\]/);
+    if (!match) return resultados.slice(0, limite);
+    const indices: number[] = JSON.parse(match[0]);
+    const validos = [...new Set(indices)].filter(i => Number.isInteger(i) && i >= 0 && i < resultados.length);
+    const reordenados = validos.map(i => resultados[i]);
+    for (const r of resultados) {
+      if (reordenados.length >= limite) break;
+      if (!reordenados.includes(r)) reordenados.push(r);
+    }
+    return reordenados.slice(0, limite);
+  } catch {
+    return resultados.slice(0, limite);
+  }
+}
+
 // Pools independientes: cada uno obtiene hasta limitePorPool resultados propios.
-// Servicios y FAQs ya no compiten — ambos siempre están representados.
+// El pool KB se amplía y re-rankea con Haiku; servicios mantiene su límite directo.
 export async function buscarRecursos(query: string, limitePorPool = 3): Promise<ResultadosBusqueda> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServiceClient() as any;
   const embedding = await generarEmbedding(query);
+  const limiteKB = Math.max(limitePorPool * 2 + 2, 8);
 
   const [kbRes, svcRes] = await Promise.all([
-    supabase.rpc("buscar_recursos",   { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
-    supabase.rpc("buscar_servicios",  { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
+    supabase.rpc("buscar_recursos",  { query_embedding: embedding, limite: limiteKB,      umbral: 0.65 }),
+    supabase.rpc("buscar_servicios", { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
   ]);
 
   let servicios = (svcRes.data ?? []) as RecursoKB[];
@@ -84,10 +116,10 @@ export async function buscarRecursos(query: string, limitePorPool = 3): Promise<
     }
   }
 
-  return {
-    servicios,
-    kb: (kbRes.data ?? []) as RecursoKB[],
-  };
+  const kbRaw = (kbRes.data ?? []) as RecursoKB[];
+  const kb = await rerankarPool(query, kbRaw, limitePorPool);
+
+  return { servicios, kb };
 }
 
 // Score heurístico de confianza: recursos KB y matriz elevan; frases de incertidumbre bajan.

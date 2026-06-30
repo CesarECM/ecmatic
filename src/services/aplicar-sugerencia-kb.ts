@@ -215,3 +215,22 @@ export async function aplicarSugerenciaKB(
 
   return resultado;
 }
+
+// Genera una vista previa del cambio propuesto sin aplicarlo al KB.
+// Útil para mostrar "antes / después" en el modal de revisión.
+export async function previsualizarCambioKB(
+  sugerenciaId: string,
+): Promise<{ titulo: string; contenido: string } | null> {
+  const { data: s } = await db()
+    .from("sugerencias_ia")
+    .select("metadata")
+    .eq("id", sugerenciaId)
+    .maybeSingle() as { data: { metadata: MetaSugerencia } | null };
+  if (!s) return null;
+  const meta = s.metadata ?? {};
+  const recursoId = meta.recurso_ids?.[0] ?? meta.recurso_id;
+  if (!recursoId || !meta.que_cambiar) return null;
+  const recurso = await leerRecurso(recursoId);
+  if (!recurso) return null;
+  return redactarConKB(recurso, meta.que_cambiar).catch(() => null);
+}

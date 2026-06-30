@@ -27,6 +27,9 @@ import { filtrarResistencia } from "@/lib/ai/filtro-objecion";
 import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
 import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
 import { obtenerRolDinamico } from "./rol-dinamico";
+import { procesarArcoEmocional } from "./arco-emocional";
+import { detectarViolacion } from "@/lib/ai/guardrails-precio";
+import { logSistema } from "./log-sistema";
 
 export async function procesarConversacion(
   telefono: string,
@@ -219,25 +222,29 @@ export async function procesarConversacion(
     protocoloObjecion = construirProtocoloObjecion(filtroResult.tipo, desconfianza?.tipo ?? null, /\$[\d,.]+|[\d,.]+\s*(MXN|pesos)/i.test(historial));
   }
 
-  const { texto: respuesta, scoreConfianza } = await generarRespuesta(mensajes, {
-    nombre: leadActualizado?.nombre ?? null,
-    temperamento: leadActualizado?.temperamento_inferido ?? null,
-    pipelineStage: leadActualizado?.pipeline_stage ?? "Nuevo",
-    compraPreviaa: leadActualizado?.compra_previa ?? false,
-    historial,
-    pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
-    faseCAGC: estadoCagc?.fase_numero,
-    etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
-    slotsDisponibles: slotsParaAI,
-    meetLink: meetLinkParaAI,
-    canal_origen: leadActualizado?.canal_origen ?? null,
-    setterEstado,
-    protocoloObjecion,
-    rolesDinamicos,
-    modoRevelacion: nuevoModoRevelacion,
-    leadId: lead.id,
-    memoriaIA,
-  });
+  const [respuestaIA, arcoResult] = await Promise.all([
+    generarRespuesta(mensajes, {
+      nombre: leadActualizado?.nombre ?? null,
+      temperamento: leadActualizado?.temperamento_inferido ?? null,
+      pipelineStage: leadActualizado?.pipeline_stage ?? "Nuevo",
+      compraPreviaa: leadActualizado?.compra_previa ?? false,
+      historial,
+      pipelineRuta: leadActualizado?.pipeline_ruta ?? "tripwire",
+      faseCAGC: estadoCagc?.fase_numero,
+      etiquetas: etiquetasLead.map((e) => `${e.categoria}:${e.nombre}`),
+      slotsDisponibles: slotsParaAI,
+      meetLink: meetLinkParaAI,
+      canal_origen: leadActualizado?.canal_origen ?? null,
+      setterEstado,
+      protocoloObjecion,
+      rolesDinamicos,
+      modoRevelacion: nuevoModoRevelacion,
+      leadId: lead.id,
+      memoriaIA,
+    }),
+    procesarArcoEmocional(lead.id, mensajes, historial).catch(() => ({ triggerHandoff: false })),
+  ]);
+  const { texto: respuesta, scoreConfianza } = respuestaIA;
 
   // Compra inmediata: adjuntar link Stripe
   if (intencion === "compra_inmediata" || intencion === "compra") {
@@ -256,6 +263,22 @@ export async function procesarConversacion(
 
   const bloques = dividirRespuesta(respuesta);
   const config = await obtenerConfig().catch(() => ({ modo_operacion: "automatico" as const, umbral_confianza: 0.80 }));
+
+  // S67 — Guardrail precio: descuento no autorizado o inyección → cola de aprobación
+  const violacion = detectarViolacion(respuesta, textoEntrada);
+  if (violacion) {
+    await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques, scoreConfianza });
+    await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
+    void logSistema({ categoria: "ia", tipoAccion: "guardrail.precio", fase: "warn", leadId: lead.id, metadata: { ...violacion } });
+    return;
+  }
+
+  // S66 — Arco emocional: ticket ya creado en procesarArcoEmocional → encolar respuesta
+  if (arcoResult.triggerHandoff) {
+    await encolarRespuesta({ leadId: lead.id, telefono, respuesta, bloques, scoreConfianza });
+    await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente" });
+    return;
+  }
 
   if (config.modo_operacion === "depuracion") {
     const msgSaliente = await guardarMensaje({ leadId: lead.id, contenido: respuesta, direccion: "saliente", interceptado: true });
