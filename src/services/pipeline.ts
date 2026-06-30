@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { generarEmbedding } from "@/lib/ai/client";
-import { registrarCierre } from "@/services/conocimiento";
+import { registrarCierre, registrarFalloRecursos } from "@/services/conocimiento";
 import { actualizarListasAlMoverEtapa, excluirDeNurturing } from "@/lib/email/campanas";
 import { actualizarScoreMatriz } from "@/services/matriz";
 import { clasificarLead } from "@/services/avatares";
@@ -119,6 +119,12 @@ export async function moverLead(
   // S3.6 — Acredita recursos KB cuando el lead compra
   if (nuevaEtapa === "Comprado") void acreditarRecursosAlCerrar(leadId);
 
+  // MPS-16 S58 — Señales de conversación sobre score KB
+  if (nuevaEtapa === "Perdido") void registrarFalloConversacion(leadId);
+  if (nuevaEtapa !== "Comprado" && nuevaEtapa !== "Perdido") {
+    void registrarAvancePipeline(leadId);
+  }
+
   // S4.3 — Sincroniza listas de Brevo al mover etapa
   void actualizarListasAlMoverEtapa(
     lead.email ?? null,
@@ -188,11 +194,11 @@ async function actualizarDimensionesAlCerrar(leadId: string, cerrado: boolean): 
   }
 }
 
-// S3.6 — Busca semánticamente los recursos usados en la conversación y los acredita
+// S3.6 — Busca semánticamente los recursos KB relevantes y los acredita con señal fuerte (+2).
+// Usa mensajes entrantes (preguntas del lead) para encontrar los recursos más relevantes.
 async function acreditarRecursosAlCerrar(leadId: string): Promise<void> {
   try {
     const supabase = createServiceClient();
-
     const { data: mensajes } = await supabase
       .from("mensajes")
       .select("contenido")
@@ -200,22 +206,67 @@ async function acreditarRecursosAlCerrar(leadId: string): Promise<void> {
       .eq("direccion", "entrante")
       .order("created_at", { ascending: false })
       .limit(10);
-
     if (!mensajes?.length) return;
-
     const query = mensajes.map((m) => m.contenido).join(" ");
     const embedding = await generarEmbedding(query);
-
     const { data: recursos } = await supabase.rpc("buscar_recursos", {
-      query_embedding: embedding,
-      limite: 5,
-      umbral: 0.65,
+      query_embedding: embedding, limite: 5, umbral: 0.65,
     });
-
     const ids = (recursos ?? []).map((r: { id: string }) => r.id);
-    await registrarCierre(ids);
+    // incremento=2: conversión vale el doble que un avance intermedio
+    await registrarCierre(ids, 2);
   } catch {
-    // No bloquear el flujo principal si falla la acreditación
+    // No bloquear el flujo principal
+  }
+}
+
+// MPS-16 S58 — Señal leve (+1) al avanzar etapa: top 2 recursos más relevantes.
+// Usa mensajes salientes (respuestas de la IA) para reflejar qué recursos se usaron.
+async function registrarAvancePipeline(leadId: string): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+    const { data: mensajes } = await supabase
+      .from("mensajes")
+      .select("contenido")
+      .eq("lead_id", leadId)
+      .eq("direccion", "saliente")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (!mensajes?.length) return;
+    const query = mensajes.map((m) => m.contenido).join(" ");
+    const embedding = await generarEmbedding(query);
+    const { data: recursos } = await supabase.rpc("buscar_recursos", {
+      query_embedding: embedding, limite: 2, umbral: 0.65,
+    });
+    const ids = (recursos ?? []).map((r: { id: string }) => r.id);
+    await registrarCierre(ids, 1);
+  } catch {
+    // No bloquear el flujo principal
+  }
+}
+
+// MPS-16 S58 — Señal negativa leve cuando el lead se pierde.
+// Penaliza ligeramente los recursos usados en los últimos mensajes de la IA.
+async function registrarFalloConversacion(leadId: string): Promise<void> {
+  try {
+    const supabase = createServiceClient();
+    const { data: mensajes } = await supabase
+      .from("mensajes")
+      .select("contenido")
+      .eq("lead_id", leadId)
+      .eq("direccion", "saliente")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (!mensajes?.length) return;
+    const query = mensajes.map((m) => m.contenido).join(" ");
+    const embedding = await generarEmbedding(query);
+    const { data: recursos } = await supabase.rpc("buscar_recursos", {
+      query_embedding: embedding, limite: 3, umbral: 0.65,
+    });
+    const ids = (recursos ?? []).map((r: { id: string }) => r.id);
+    await registrarFalloRecursos(ids);
+  } catch {
+    // No bloquear el flujo principal
   }
 }
 

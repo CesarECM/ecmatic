@@ -299,8 +299,9 @@ export async function registrarFalloSugerencia(recursoId: string): Promise<void>
     .eq("id", recursoId);
 }
 
-// S2.3 — Registra que los recursos contribuyeron a un cierre de venta (llamar desde Sprint 3)
-export async function registrarCierre(ids: string[]): Promise<void> {
+// S2.3 — Registra que los recursos contribuyeron a un cierre o avance de pipeline.
+// incremento=1 para avances intermedios, incremento=2 para conversión final (Comprado).
+export async function registrarCierre(ids: string[], incremento = 1): Promise<void> {
   if (ids.length === 0) return;
   const supabase = createServiceClient();
 
@@ -313,13 +314,33 @@ export async function registrarCierre(ids: string[]): Promise<void> {
 
     if (!data) continue;
 
-    const nuevoCierre = data.score_cierre + 1;
+    const nuevoCierre = data.score_cierre + incremento;
     await supabase
       .from("recursos_conocimiento")
       .update({
         score_cierre: nuevoCierre,
         score_confianza: calcularScoreConfianza(data.score_uso, nuevoCierre),
       })
+      .eq("id", id);
+  }
+}
+
+// MPS-16 S58 — Señal negativa leve cuando el lead se pierde.
+// Reduce score_confianza directamente (-0.03 por recurso, floor en 0) sin tocar score_cierre.
+export async function registrarFalloRecursos(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const supabase = createServiceClient();
+  for (const id of ids) {
+    const { data } = await supabase
+      .from("recursos_conocimiento")
+      .select("score_confianza")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) continue;
+    const nuevoScore = Math.max(0, parseFloat((data.score_confianza - 0.03).toFixed(2)));
+    await supabase
+      .from("recursos_conocimiento")
+      .update({ score_confianza: nuevoScore })
       .eq("id", id);
   }
 }
