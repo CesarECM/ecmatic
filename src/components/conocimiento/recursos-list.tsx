@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { crearRecursoAction } from "@/app/(dashboard)/admin/conocimiento/actions";
 import { RecursoCard, type RecursoRow } from "./RecursoCard";
 
+const TEMPERAMENTOS_DISC = ["D", "I", "S", "C"] as const;
+const ETAPAS_VENTA_FORM  = ["Interés", "Calificado", "Propuesta", "Negociación", "Cierre"] as const;
+
 export type { RecursoRow };
 
 // S32.7 — "servicio" eliminado: los servicios se gestionan desde /admin/servicios
@@ -102,6 +105,36 @@ export function RecursosList({ recursos }: { recursos: RecursoRow[] }) {
                       <Textarea name={campo} rows={2} placeholder={`${campo.replace(/_/g, " ")}…`} />
                     </div>
                   ))}
+                </div>
+              )}
+              {tipoForm === "practica_venta" && (
+                <div className="space-y-2 border-t pt-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Contextos de aplicación
+                    <span className="ml-1 font-normal normal-case text-muted-foreground/70">(vacío = universal)</span>
+                  </p>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium">Temperamento DISC</p>
+                    <div className="flex gap-3 flex-wrap">
+                      {TEMPERAMENTOS_DISC.map((t) => (
+                        <label key={t} className="flex items-center gap-1 text-xs cursor-pointer">
+                          <input type="checkbox" name="ctx_temperamento" value={t} />
+                          {t}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium">Etapa del pipeline</p>
+                    <div className="flex gap-3 flex-wrap">
+                      {ETAPAS_VENTA_FORM.map((e) => (
+                        <label key={e} className="flex items-center gap-1 text-xs cursor-pointer">
+                          <input type="checkbox" name="ctx_pipeline_stage" value={e} />
+                          {e}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
               <Button type="submit" size="sm">Crear y aprobar</Button>

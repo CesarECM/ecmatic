@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { crearRecurso, aprobarRecurso, actualizarRecurso, procesarFuenteExterna } from "@/services/conocimiento";
-import type { FichaServicio } from "@/services/conocimiento";
+import type { FichaServicio, ContextosAplica } from "@/services/conocimiento";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { TipoRecurso } from "@/lib/supabase/types";
 import { logSistema } from "@/services/log-sistema";
@@ -18,6 +18,18 @@ function extraerFicha(formData: FormData): FichaServicio {
   };
 }
 
+// MPS-16 S60 — Extrae contextos_aplica del FormData para practica_venta.
+// Los checkboxes envían múltiples valores bajo la misma clave.
+function extraerContextos(formData: FormData): ContextosAplica | null {
+  const temperamentos = formData.getAll("ctx_temperamento") as string[];
+  const etapas       = formData.getAll("ctx_pipeline_stage") as string[];
+  if (!temperamentos.length && !etapas.length) return null;
+  const ctx: ContextosAplica = {};
+  if (temperamentos.length) ctx.temperamento = temperamentos;
+  if (etapas.length)        ctx.pipeline_stage = etapas;
+  return ctx;
+}
+
 export async function crearRecursoAction(formData: FormData) {
   const tipo = formData.get("tipo") as TipoRecurso;
   const titulo = formData.get("titulo") as string;
@@ -27,6 +39,13 @@ export async function crearRecursoAction(formData: FormData) {
   const ficha = tipo === "servicio" ? extraerFicha(formData) : undefined;
   const recurso = await crearRecurso(tipo, titulo.trim(), contenido.trim(), "interno", ficha);
   await aprobarRecurso(recurso.id);
+
+  // MPS-16 S60 — Guardar contextos de aplicación para practica_venta
+  if (tipo === "practica_venta") {
+    const ctx = extraerContextos(formData);
+    if (ctx) await actualizarRecurso(recurso.id, { contextos_aplica: ctx });
+  }
+
   void logSistema({ categoria: "ui", tipoAccion: "conocimiento.crear", fase: "ok", resultado: titulo.trim(), metadata: { tipo, kb_id: recurso.id } });
   revalidatePath("/admin/conocimiento");
 }
@@ -55,7 +74,10 @@ export async function editarRecursoAction(formData: FormData) {
   if (!id || !titulo || !contenido) return;
   // S22.4 — Incluir ficha de servicio si vienen los campos
   const ficha = formData.has("caracteristicas") ? extraerFicha(formData) : {};
-  await actualizarRecurso(id, { titulo, contenido, ...ficha });
+  // MPS-16 S60 — Incluir contextos de aplicación para practica_venta
+  const tipo = formData.get("tipo") as string | null;
+  const contextos = tipo === "practica_venta" ? { contextos_aplica: extraerContextos(formData) } : {};
+  await actualizarRecurso(id, { titulo, contenido, ...ficha, ...contextos });
   void logSistema({ categoria: "ui", tipoAccion: "conocimiento.editar", fase: "ok", resultado: titulo, metadata: { kb_id: id } });
   revalidatePath("/admin/conocimiento");
 }

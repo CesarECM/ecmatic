@@ -47,9 +47,11 @@ export async function crearRecurso(
 }
 
 // S2.2 + S2.4 — Actualiza un recurso; guarda versión previa y regenera embedding si cambia el contenido
+export type ContextosAplica = { temperamento?: string[]; pipeline_stage?: string[] };
+
 export async function actualizarRecurso(
   id: string,
-  campos: { titulo?: string; contenido?: string; aprobado?: boolean; activo?: boolean } & Partial<FichaServicio>
+  campos: { titulo?: string; contenido?: string; aprobado?: boolean; activo?: boolean; contextos_aplica?: ContextosAplica | null } & Partial<FichaServicio>
 ) {
   const supabase = createServiceClient();
 

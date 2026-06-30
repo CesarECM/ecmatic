@@ -37,6 +37,8 @@ export type RecursoRow = {
   ventajas?: string | null;
   para_quien_es?: string | null;
   para_quien_no_es?: string | null;
+  // MPS-16 S60 — Contextos de aplicación para practica_venta
+  contextos_aplica?: { temperamento?: string[]; pipeline_stage?: string[] } | null;
 };
 
 const TIPOS = [
@@ -56,6 +58,52 @@ const TIPO_COLORS: Record<string, string> = {
   template_email: "bg-pink-100 text-pink-800",
   practica_venta: "bg-yellow-100 text-yellow-800",
 };
+
+const TEMPERAMENTOS = ["D", "I", "S", "C"] as const;
+const ETAPAS_VENTA  = ["Interés", "Calificado", "Propuesta", "Negociación", "Cierre"] as const;
+
+function ContextosSelector({ ctx }: { ctx?: { temperamento?: string[]; pipeline_stage?: string[] } | null }) {
+  return (
+    <div className="space-y-2 border-t pt-2">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        Contextos de aplicación
+        <span className="ml-1 font-normal normal-case text-muted-foreground/70">(vacío = universal)</span>
+      </p>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium">Temperamento DISC</p>
+        <div className="flex gap-3 flex-wrap">
+          {TEMPERAMENTOS.map((t) => (
+            <label key={t} className="flex items-center gap-1 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                name="ctx_temperamento"
+                value={t}
+                defaultChecked={ctx?.temperamento?.includes(t) ?? false}
+              />
+              {t}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium">Etapa del pipeline</p>
+        <div className="flex gap-3 flex-wrap">
+          {ETAPAS_VENTA.map((e) => (
+            <label key={e} className="flex items-center gap-1 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                name="ctx_pipeline_stage"
+                value={e}
+                defaultChecked={ctx?.pipeline_stage?.includes(e) ?? false}
+              />
+              {e}
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function HistorialVersiones({ id, versiones }: { id: string; versiones: Version[] }) {
   const [abierto, setAbierto] = useState(false);
@@ -177,6 +225,7 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
               className="space-y-2"
             >
               <input type="hidden" name="id" value={r.id} />
+              <input type="hidden" name="tipo" value={r.tipo} />
               <div className="space-y-1">
                 <Label htmlFor={`titulo-${r.id}`} className="text-xs">Título</Label>
                 <Input id={`titulo-${r.id}`} name="titulo" defaultValue={r.titulo} required />
@@ -195,6 +244,9 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
                     </div>
                   ))}
                 </div>
+              )}
+              {r.tipo === "practica_venta" && (
+                <ContextosSelector ctx={r.contextos_aplica} />
               )}
               <div className="flex gap-2">
                 <Button type="submit" size="sm">Guardar versión</Button>

@@ -22,6 +22,28 @@ import type { ProtocoloObjecion } from "./protocolo-objecion";
 
 export { necesitaHandoff } from "./handoff";
 
+// MPS-16 S60 — Selecciona las prácticas de venta más relevantes para el contexto actual.
+// Prioridad: match de temperamento (+2) + match de etapa (+1) > universales (0).
+// Dentro de la misma prioridad, respeta el orden por score_confianza del query.
+function seleccionarPracticasContextuales(
+  practicas: { contenido: string; contextos_aplica: { temperamento?: string[]; pipeline_stage?: string[] } | null }[],
+  temperamento: string | null,
+  pipelineStage: string,
+  limite = 3
+): { contenido: string }[] {
+  const scored = practicas.map((p, idx) => {
+    const ctx = p.contextos_aplica;
+    let match = 0;
+    if (ctx) {
+      if (temperamento && ctx.temperamento?.includes(temperamento)) match += 2;
+      if (ctx.pipeline_stage?.includes(pipelineStage)) match += 1;
+    }
+    return { p, match, idx };
+  });
+  scored.sort((a, b) => b.match - a.match || a.idx - b.idx);
+  return scored.slice(0, limite).map(({ p }) => ({ contenido: p.contenido }));
+}
+
 function normalizarRespuesta(texto: string): string {
   return texto
     .replace(/^[—–] /gm, "")      // viñeta con raya al inicio de línea → quitar
@@ -175,10 +197,18 @@ export async function generarRespuesta(
   // Protocolo y plantillas de la etapa actual del pipeline
   const pipelineContextoLinea = formatearContextoPipelineParaPrompt(contextoPipeline, contexto.pipelineStage);
 
-  const { data: practicas } = await createServiceClient()
-    .from("recursos_conocimiento").select("contenido")
+  // MPS-16 S60 — Prácticas contextuales: filtra por temperamento y etapa del lead.
+  // Carga hasta 20, selecciona top-3 con mayor relevancia contextual + score_confianza.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: todasPracticas } = await (createServiceClient() as any)
+    .from("recursos_conocimiento")
+    .select("contenido, contextos_aplica")
     .eq("tipo", "practica_venta").eq("aprobado", true).eq("activo", true)
-    .order("score_confianza", { ascending: false }).limit(3);
+    .order("score_confianza", { ascending: false })
+    .limit(20);
+  const practicas = seleccionarPracticasContextuales(
+    todasPracticas ?? [], contexto.temperamento, contexto.pipelineStage
+  );
 
   // KB: solo FAQs y recursos genéricos — los servicios ya están en anclaLinea
   const recursosTexto = kb.length > 0
