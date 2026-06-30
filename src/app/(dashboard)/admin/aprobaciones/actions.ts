@@ -8,6 +8,7 @@ import { aprobarComprobante, rechazarComprobante } from "@/services/comprobantes
 import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 import { logSistema } from "@/services/log-sistema";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
+import { aplicarSugerenciaKB, type ResultadoAplicacion } from "@/services/aplicar-sugerencia-kb";
 
 const PATH = "/admin/aprobaciones";
 
@@ -76,6 +77,27 @@ export async function rechazarSugerenciaAction(id: string) {
   void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-sugerencia", fase: "ok", metadata: { sugerencia_id: id } });
   revalidatePath(PATH);
 }
+
+// MPS-14 S52 — Aprueba una sugerencia kb_calidad aplicando el cambio real al KB.
+export const aprobarSugerenciaKBAction = safeAction(
+  async (id: string, override?: { titulo: string; contenido: string }): Promise<ResultadoAplicacion> => {
+    const resultado = await aplicarSugerenciaKB(id, override);
+    void logSistema({
+      categoria: "ui", tipoAccion: "aprobaciones.aplicar-kb", fase: "ok",
+      metadata: { sugerencia_id: id, accion: resultado.accion, recurso_id: resultado.recursoId },
+    });
+    revalidatePath(PATH);
+    return resultado;
+  }
+);
+
+// MPS-14 S52 — Elimina permanentemente una sugerencia (hard delete).
+export const eliminarSugerenciaAction = safeAction(async (id: string) => {
+  const supabase = createServiceClient();
+  await supabase.from("sugerencias_ia").delete().eq("id", id);
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.eliminar-sugerencia", fase: "ok", metadata: { sugerencia_id: id } });
+  revalidatePath(PATH);
+});
 
 // S33.9 — Acciones de cluster: operan sobre todas las sugerencias del grupo
 export async function aprobarClusterAction(clusterId: string) {

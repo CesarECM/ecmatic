@@ -67,7 +67,10 @@ src/
 │           └── ghl/
 │               ├── seguimiento/    # Cron 30min: ejecuta follow-ups vencidos + detecta silencios
 │               ├── followup-learning/ # Cron 1h: cierra ventanas bayesianas, actualiza α/β
-│               └── procesar-buffer/   # Cron 1min: drena ghl_message_buffer (debounce 15s)
+│               ├── procesar-buffer/   # Cron 1min: drena ghl_message_buffer (debounce 15s)
+│               └── reclasificar-cobertura/ # Manual/cron: leads sin seguimiento activo → Haiku asigna tipo
+├── services/
+│   ├── aplicar-sugerencia-kb.ts    # MPS-14: aplica sugerencias kb_calidad al KB real (actualizar/crear/desactivar)
 ├── components/
 │   ├── ui/                         # shadcn/ui — no modificar directamente
 │   ├── auth/                       # LoginForm
@@ -121,7 +124,8 @@ src/
     │   ├── client.ts               # anthropic + openai singletons
     │   ├── model-router.ts         # modeloPorTarea() — configurable por env var
     │   ├── clasificador.ts         # 7 intenciones + árbol de respuesta
-    │   └── motor-respuesta.ts      # búsqueda semántica + generación de respuesta
+    │   ├── motor-respuesta.ts      # búsqueda semántica + generación de respuesta
+    │   └── clasificar-cobertura.ts # MPS-13: Haiku clasifica tipo de seguimiento para leads sin cobertura
     ├── whatsapp/                   # sendTextMessage, sendTextMessageWithRetry, parseWebhook
     ├── email/                      # resend.ts, brevo.ts, transaccional.ts, campanas.ts
     ├── stripe/                     # createCheckoutSession, client
@@ -270,3 +274,4 @@ export async function moverLeadDesdePerfilAction(formData: FormData) {
 | S11 | Analítica Avanzada | ✅ Completo |
 | S12 | Integraciones Pendientes y Escala | 🔄 En progreso |
 | MPS-5 | Motor de Seguimiento Adaptativo v1 | ✅ Completo |
+| MPS-14 | Ciclo KB Activo — Sugerencias → Mejora real del KB | ✅ Completo |

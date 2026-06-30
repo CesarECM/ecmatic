@@ -7,12 +7,15 @@ import { ColaKBSeccion } from "./ColaKBSeccion";
 import { ColaMatrizSeccion } from "./ColaMatrizSeccion";
 import { ColaMensajesSeccion } from "./ColaMensajesSeccion";
 import { ColaSugerenciasSeccion } from "./ColaSugerenciasSeccion";
+import { ColaSugerenciasKBSeccion } from "./ColaSugerenciasKBSeccion";
 import { ColaGHLSeccion } from "./ColaGHLSeccion";
+import type { RecursoKBResumen } from "./SugerenciaKBCard";
 import {
   aprobarSugerenciaAction, rechazarSugerenciaAction,
   aprobarClusterAction, rechazarClusterAction,
   aprobarEtiquetaAction, archivarEtiquetaAction,
   aprobarComprobanteAction, rechazarComprobanteAction,
+  aprobarSugerenciaKBAction, eliminarSugerenciaAction,
 } from "./actions";
 
 export const metadata = { title: "Cola de Aprobaciones · ECMatic" };
@@ -51,6 +54,33 @@ export default async function AprobacionesPage() {
     listarComprobantesPendientes(),
     listarPendientesGHL().catch(() => []),
   ]);
+
+  // MPS-14 S52 — Separar sugerencias KB de las generales y hacer batch-fetch de recursos referenciados
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const todasSugerencias = (sugerencias ?? []) as any[];
+  const sugerenciasKB    = todasSugerencias.filter((s) => s.tipo === "kb_calidad");
+  const sugerenciasOtras = todasSugerencias.filter((s) => s.tipo !== "kb_calidad");
+
+  // Recopilar todos los IDs de recursos KB referenciados en el metadata
+  const kbIds = new Set<string>();
+  for (const s of sugerenciasKB) {
+    const meta = (s.metadata ?? {}) as Record<string, unknown>;
+    if (typeof meta.recurso_id === "string") kbIds.add(meta.recurso_id);
+    if (Array.isArray(meta.recurso_ids)) (meta.recurso_ids as string[]).forEach((id) => kbIds.add(id));
+    if (typeof meta.id_a === "string") kbIds.add(meta.id_a);
+    if (typeof meta.id_b === "string") kbIds.add(meta.id_b);
+  }
+
+  const mapaKB: Record<string, RecursoKBResumen> = {};
+  if (kbIds.size > 0) {
+    const { data: recursosKB } = await supabase
+      .from("recursos_conocimiento")
+      .select("id, tipo, titulo, contenido")
+      .in("id", Array.from(kbIds));
+    for (const r of (recursosKB ?? []) as RecursoKBResumen[]) {
+      mapaKB[r.id] = r;
+    }
+  }
 
   const totalPendientes =
     (kb?.length ?? 0) + (matriz?.length ?? 0) + (sugerencias?.length ?? 0) +
@@ -145,9 +175,17 @@ export default async function AprobacionesPage() {
 
       <ColaMensajesSeccion items={mensajesPendientes} />
 
-      {/* S33.5 + S33.9 — Sugerencias con Brief de Diseño y vista por Clusters */}
+      {/* MPS-14 S52 — Sugerencias kb_calidad con aplicación directa al KB */}
+      <ColaSugerenciasKBSeccion
+        items={sugerenciasKB.map((s) => ({ ...s, metadata: (s.metadata ?? {}) as Record<string, unknown> }))}
+        recursosKB={mapaKB}
+        aplicarAction={aprobarSugerenciaKBAction}
+        eliminarAction={eliminarSugerenciaAction}
+      />
+
+      {/* S33.5 + S33.9 — Sugerencias generales con Brief de Diseño y vista por Clusters */}
       <ColaSugerenciasSeccion
-        items={(sugerencias ?? []).map((s: Record<string, unknown>) => ({
+        items={sugerenciasOtras.map((s) => ({
           ...s,
           metadata: (s.metadata ?? {}) as Record<string, unknown>,
         }))}
