@@ -5,6 +5,7 @@ import { actualizarListasAlMoverEtapa, excluirDeNurturing } from "@/lib/email/ca
 import { actualizarScoreMatriz } from "@/services/matriz";
 import { clasificarLead } from "@/services/avatares";
 import { calcularCalidadConversacion } from "@/services/calidad-conversacional";
+import { generarMemoriaLead } from "@/services/memoria-lead";
 import { registrarConversionExperimento } from "@/services/experimentos";
 import { obtenerFaseLead } from "@/services/cagc";
 import { inscribirEnPipeline } from "@/services/pipeline-multi";
@@ -145,6 +146,7 @@ export async function moverLead(
   // S11.2 — Calcula calidad conversacional al cerrar
   if (nuevaEtapa === "Comprado" || nuevaEtapa === "Perdido") {
     void calcularCalidadConversacion(leadId, nuevaEtapa === "Comprado").catch(console.error);
+    void generarMemoriaLead(leadId).catch(console.error);
   }
 
   // S11.4 — Registra conversión en experimento de precio si aplica

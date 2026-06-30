@@ -327,7 +327,7 @@ async function generarRespuestaMotorCompleto(
   const esObjecion           = intencion === "objecion_precio" || intencion === "objecion_confianza";
   const setterActivo         = setterCalificado === null;
 
-  const [estadoCagc, etiquetasLead, setterEstado, filtroResult, rolesDinamicos, señalRevelacion] = await Promise.all([
+  const [estadoCagc, etiquetasLead, setterEstado, filtroResult, rolesDinamicos, señalRevelacion, memoriaIA] = await Promise.all([
     obtenerFaseLead(lead.id).catch(() => null),
     obtenerEtiquetasLead(lead.id).catch(() => [] as Array<{ categoria: string; nombre: string }>),
     setterActivo && historial
@@ -338,6 +338,9 @@ async function generarRespuestaMotorCompleto(
     modoRevelacionActual !== "revelado"
       ? detectarRevelacion([cuerpo], historial, modoRevelacionActual, { leadId: lead.id }).catch(() => null)
       : Promise.resolve(null),
+    // S63 — Migration 076: as any hasta que los tipos regeneren
+    (supabase as any).from("leads").select("memoria_ia").eq("id", lead.id).single()
+      .then((r: any) => (r.data?.memoria_ia as string | null) ?? null, () => null),
   ]);
 
   const nuevoModo = calcularNuevoModo(modoRevelacionActual, señalRevelacion);
@@ -402,6 +405,7 @@ async function generarRespuestaMotorCompleto(
       rolesDinamicos,
       modoRevelacion: nuevoModo,
       leadId:        lead.id,
+      memoriaIA,
       ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
       ...(meetLinkDemo && { meetLink: meetLinkDemo }),
     }));

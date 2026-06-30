@@ -96,7 +96,7 @@ export async function procesarConversacion(
   inferirTemperamento(lead.id, mensajes).catch(console.error);
 
   const supabase = createServiceClient();
-  const [{ data: leadActualizado }, estadoCagc, etiquetasLead] = await Promise.all([
+  const [{ data: leadActualizado }, estadoCagc, etiquetasLead, memoriaIA] = await Promise.all([
     supabase
       .from("leads")
       .select("nombre, email, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, canal_origen, setter_fase_actual, setter_calificado, modo_revelacion")
@@ -104,6 +104,9 @@ export async function procesarConversacion(
       .single(),
     obtenerFaseLead(lead.id).catch(() => null),
     obtenerEtiquetasLead(lead.id).catch(() => []),
+    // S63 — Migration 076: as any hasta que los tipos regeneren
+    (supabase as any).from("leads").select("memoria_ia").eq("id", lead.id).single()
+      .then((r: any) => (r.data?.memoria_ia as string | null) ?? null, () => null),
   ]);
 
   void logDebugIA("CONVERSACION", `[CAGC] fase=${estadoCagc?.fase_numero ?? "?"} etapa=${leadActualizado?.pipeline_stage}`, { pipeline_ruta: leadActualizado?.pipeline_ruta }, "debug", traceId);
@@ -234,6 +237,7 @@ export async function procesarConversacion(
     rolesDinamicos,
     modoRevelacion: nuevoModoRevelacion,
     leadId: lead.id,
+    memoriaIA,
   });
 
   // Compra inmediata: adjuntar link Stripe

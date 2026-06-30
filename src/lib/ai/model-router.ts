@@ -32,7 +32,8 @@ export type TareaIA =
   | "GENERAR_FOLLOWUP_GHL"          // GHL-9.4: genera copy del mensaje de seguimiento por nivel
   | "GENERAR_FOLLOWUP_GHL_EXTENDED" // MPS-15 S56: segunda llamada con historial extendido vía tool use
   | "CLASIFICAR_COBERTURA"          // MPS-13 S51: asigna tipo de seguimiento a lead sin cobertura activa
-  | "APLICAR_KB";                   // MPS-14 S52: redacta/crea contenido KB a partir de sugerencia de mejora
+  | "APLICAR_KB"                    // MPS-14 S52: redacta/crea contenido KB a partir de sugerencia de mejora
+  | "MEMORIA_LEAD";                 // MPS-16 S63: resume conversaciones anteriores por lead en 3-5 frases
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -74,6 +75,7 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   GENERAR_FOLLOWUP_GHL_EXTENDED: "haiku",
   CLASIFICAR_COBERTURA:          "haiku",
   APLICAR_KB:             "haiku",
+  MEMORIA_LEAD:           "haiku",
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.

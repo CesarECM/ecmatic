@@ -75,6 +75,8 @@ interface ContextoLead {
   modoRevelacion?: ModoRevelacion;
   // S62 — Hint de calidad conversacional histórica
   leadId?: string;
+  // S63 — Resumen comprimido de conversaciones anteriores
+  memoriaIA?: string | null;
 }
 
 export interface RespuestaIA {
@@ -278,6 +280,8 @@ export async function generarRespuesta(
 
   const hintCalidadLinea = hintCalidad
     ? `\nHINT DE CALIDAD HISTÓRICA (basado en conversaciones previas con este lead):\n${hintCalidad}` : "";
+  const memoriaLinea = contexto.memoriaIA
+    ? `\nMEMORIA DE SESIONES ANTERIORES CON ESTE LEAD:\n${contexto.memoriaIA}` : "";
 
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
@@ -298,7 +302,7 @@ ${faseCagcLinea}
 ${etiquetasLinea}
 
 HISTORIAL RECIENTE:
-${contexto.historial || "(primera interacción)"}
+${contexto.historial || "(primera interacción)"}${memoriaLinea}
 
 BASE DE CONOCIMIENTO — FAQs y recursos adicionales:
 ${recursosTexto}
