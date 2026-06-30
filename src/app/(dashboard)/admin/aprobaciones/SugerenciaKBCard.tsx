@@ -5,6 +5,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { EditorInline } from "./EditorInline";
 import type { ActionResult } from "@/lib/safe-action";
 import type { ResultadoAplicacion } from "@/services/aplicar-sugerencia-kb";
 import type { SugerenciaItem } from "./ColaSugerenciasSeccion";
@@ -64,52 +65,6 @@ function EtiquetaTipo({ meta }: { meta: MetaKB }) {
   if (meta.categoria_suciedad === "Duplicado semántico")
     return <span className="text-xs rounded border px-1.5 py-0.5 bg-amber-100 text-amber-700 border-amber-200">Duplicado</span>;
   return <span className="text-xs rounded border px-1.5 py-0.5 bg-blue-100 text-blue-700 border-blue-200">KB</span>;
-}
-
-function EditorInline({ titulo: t0, contenido: c0, onConfirmar, onCancelar, pending }: {
-  titulo: string; contenido: string;
-  onConfirmar: (t: string, c: string, razon: string) => void;
-  onCancelar: () => void;
-  pending: boolean;
-}) {
-  const [titulo, setTitulo] = useState(t0);
-  const [contenido, setContenido] = useState(c0);
-  const [razon, setRazon] = useState("");
-  const valido = titulo.trim() && contenido.trim() && razon.trim();
-  return (
-    <div className="space-y-2 mt-2 p-3 rounded bg-gray-50 border">
-      <input
-        className="w-full rounded border px-2 py-1 text-sm"
-        placeholder="Título del recurso"
-        value={titulo}
-        onChange={(e) => setTitulo(e.target.value)}
-      />
-      <textarea
-        className="w-full rounded border px-2 py-1 text-sm min-h-[90px] resize-y"
-        placeholder="Contenido"
-        value={contenido}
-        onChange={(e) => setContenido(e.target.value)}
-      />
-      <textarea
-        className="w-full rounded border px-2 py-1 text-xs min-h-[48px] resize-none bg-yellow-50 border-yellow-300"
-        placeholder="¿Por qué editaste esto? (obligatorio)"
-        value={razon}
-        onChange={(e) => setRazon(e.target.value)}
-      />
-      <div className="flex gap-1">
-        <button
-          onClick={() => onConfirmar(titulo, contenido, razon)}
-          disabled={pending || !valido}
-          className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
-        >
-          Guardar → Aplicar al KB
-        </button>
-        <button onClick={onCancelar} className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300">
-          Cancelar
-        </button>
-      </div>
-    </div>
-  );
 }
 
 export function SugerenciaKBCard({ item, recursosKB, onAplicar, onEliminar }: Props) {

@@ -35,6 +35,32 @@ interface MetaSugerencia {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createServiceClient() as any;
 
+async function crearSugerenciaEdicionManual(
+  recursoId: string,
+  tituloOriginal: string,
+  contenidoOriginal: string,
+  tituloNuevo: string,
+  contenidoNuevo: string,
+  razonEdicion: string,
+) {
+  const delta = `Antes: ${contenidoOriginal.slice(0, 300)}\nDespués: ${contenidoNuevo.slice(0, 300)}`;
+  await db().from("sugerencias_ia").insert({
+    tipo: "kb_calidad",
+    prioridad: "importante",
+    titulo: `Delta admin: ${tituloOriginal.slice(0, 55)}`,
+    descripcion: `Admin modificó "${tituloOriginal}" → "${tituloNuevo}". Razón: "${razonEdicion}". Revisar si otros recursos del KB tienen el mismo problema.`,
+    metadata: {
+      source: "ghl_edicion_manual",
+      recurso_id: recursoId,
+      razon_edicion: razonEdicion,
+      titulo_original: tituloOriginal,
+      titulo_nuevo: tituloNuevo,
+      delta,
+    },
+    aprobado: null,
+  });
+}
+
 async function leerRecurso(id: string) {
   const { data } = await db()
     .from("recursos_conocimiento")
@@ -91,7 +117,7 @@ Usa [PRECIO], [FECHA], [REQUISITO] como marcadores para datos específicos que n
 
 export async function aplicarSugerenciaKB(
   sugerenciaId: string,
-  override?: { titulo: string; contenido: string },
+  override?: { titulo: string; contenido: string; razon_edicion?: string },
 ): Promise<ResultadoAplicacion> {
   const traceId = crypto.randomUUID();
   void logSistema({
@@ -109,6 +135,7 @@ export async function aplicarSugerenciaKB(
 
   const meta = s.metadata ?? {};
   let resultado: ResultadoAplicacion = { accion: "sin_accion" };
+  let recursoAntes: { id: string; titulo: string; contenido: string } | null = null;
 
   try {
     // Caso 1: edición GHL → redactar con IA usando instrucción "que_cambiar"
@@ -117,6 +144,7 @@ export async function aplicarSugerenciaKB(
       if (recursoId) {
         const recurso = await leerRecurso(recursoId);
         if (recurso) {
+          if (override?.razon_edicion) recursoAntes = recurso;
           const nuevo = override ?? await redactarConKB(recurso, meta.que_cambiar);
           await actualizarRecurso(recursoId, { titulo: nuevo.titulo, contenido: nuevo.contenido });
           resultado = { accion: "recurso_actualizado", recursoId, titulo: nuevo.titulo };
@@ -132,6 +160,10 @@ export async function aplicarSugerenciaKB(
     }
     // Caso 3: obsolescencia → requiere contenido del admin (override obligatorio)
     else if (meta.categoria_suciedad === "Obsolescencia parcial" && meta.recurso_id && override) {
+      if (override.razon_edicion) {
+        const orig = await leerRecurso(meta.recurso_id);
+        if (orig) recursoAntes = orig;
+      }
       await actualizarRecurso(meta.recurso_id, { titulo: override.titulo, contenido: override.contenido });
       resultado = { accion: "recurso_actualizado", recursoId: meta.recurso_id, titulo: override.titulo };
     }
@@ -144,12 +176,28 @@ export async function aplicarSugerenciaKB(
     else if (override) {
       const recursoId = meta.recurso_id ?? meta.recurso_ids?.[0];
       if (recursoId) {
+        if (override.razon_edicion) {
+          const orig = await leerRecurso(recursoId);
+          if (orig) recursoAntes = orig;
+        }
         await actualizarRecurso(recursoId, { titulo: override.titulo, contenido: override.contenido });
         resultado = { accion: "recurso_actualizado", recursoId, titulo: override.titulo };
       }
     }
 
     await db().from("sugerencias_ia").update({ aprobado: true }).eq("id", sugerenciaId);
+
+    // S61 — señal reforzada: delta de edición manual alimenta el KB
+    if (override?.razon_edicion && recursoAntes) {
+      void crearSugerenciaEdicionManual(
+        recursoAntes.id,
+        recursoAntes.titulo,
+        recursoAntes.contenido,
+        override.titulo,
+        override.contenido,
+        override.razon_edicion,
+      ).catch(() => {});
+    }
 
     void logSistema({
       categoria: "ia", tipoAccion: "kb_activo.aplicar", fase: "ok",
