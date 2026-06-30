@@ -7,6 +7,7 @@ import { logSistema } from "@/services/log-sistema";
 import { obtenerVencidos, type SeguimientoLead } from "@/services/seguimiento-lead";
 import { detectarSilencios } from "@/services/detectar-silencio";
 import { generarFollowupGHL } from "@/lib/ai/generar-followup-ghl";
+import { obtenerHistorial } from "@/services/mensajes";
 import { buscarConversacionWA } from "@/lib/ghl/conversations-api";
 import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
 import { encolarMensajeGHL, obtenerStatsAprobacion } from "@/services/ghl-aprobacion";
@@ -146,12 +147,16 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
 
   const nivel = seg.nivel + 1;
 
-  const [nombre, contactId, links] = await Promise.all([
+  const config = await getFollowupConfig(seg.tipo).catch(() => null);
+  const historialLimite = config?.historial_limite ?? 10;
+
+  const [nombre, contactId, links, historial] = await Promise.all([
     obtenerNombreLead(seg.lead_id),
     resolverContactoGHL(seg),
     seg.tipo === "payment"
       ? obtenerLinksLead(seg.lead_id).catch(() => ({ linkPago: null, linkApartado: null }))
       : Promise.resolve({ linkPago: null, linkApartado: null }),
+    obtenerHistorial(seg.lead_id, historialLimite).catch(() => ""),
   ]);
 
   if (!contactId) {
@@ -182,7 +187,7 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     : null;
 
   const texto = await generarFollowupGHL(
-    { nombre, tipo: seg.tipo, nivel, horarioPrometido, gatilloSnapshot: seg.gatillo_snapshot, ...links },
+    { nombre, tipo: seg.tipo, nivel, horarioPrometido, gatilloSnapshot: seg.gatillo_snapshot, historial: historial || null, ...links },
     { leadId: seg.lead_id, traceId },
   );
 

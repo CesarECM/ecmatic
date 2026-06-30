@@ -1,6 +1,8 @@
-// GHL-9.4 / MPS-5 — Haiku: genera el copy del mensaje de follow-up por tipo × nivel.
-// Tipos actualizados: payment | conversational | nurturing
+// GHL-9.4 / MPS-5 / MPS-15 — Haiku: genera el copy del mensaje de follow-up por tipo × nivel.
+// MPS-15: inyecta historial de conversación; tool use permite extenderlo si el contexto es insuficiente.
 import { callClaudeIA } from "./client";
+import { logSistema } from "@/services/log-sistema";
+import { obtenerHistorial } from "@/services/mensajes";
 import type { TipoSeguimiento } from "@/services/seguimiento-lead";
 
 export interface ContextoFollowup {
@@ -11,6 +13,7 @@ export interface ContextoFollowup {
   gatilloSnapshot?: string | null;   // ej. "Precio especial: $1,799 hasta el 30 jun"
   linkPago?: string | null;          // URL de pago total (landing o pasarela)
   linkApartado?: string | null;      // URL de apartado
+  historial?: string | null;         // últimos N mensajes — "Lead: …\nECMatic: …"
 }
 
 const INSTRUCCIONES: Record<TipoSeguimiento, Record<number, string>> = {
@@ -146,27 +149,109 @@ export async function generarFollowupGHL(
       ].filter(Boolean).join("\n")
     : "";
 
+  const historialLinea = ctx.historial
+    ? `\nHISTORIAL RECIENTE DE LA CONVERSACIÓN:\n${ctx.historial}\n\nUsa este historial para personalizar tu mensaje: retoma el hilo, evita repetir lo que ya se dijo y adapta el tono al punto exacto donde quedó la conversación.`
+    : "\nHISTORIAL RECIENTE: (sin conversación previa registrada)";
+
   const system = `Eres la IA de ventas de Centro ECM (ceecm.mx), centro de certificación CONOCER en México.
 Escribes mensajes de seguimiento para WhatsApp. Estilo: cálido, profesional, conversacional.
 Reglas: sin saludos formales de correo, sin emojis de negocios, máximo 3 oraciones salvo que se indique lo contrario.
 Siempre en español mexicano natural.
+${historialLinea}
 
 TAREA:
 ${instruccion}${linksDisponibles}`;
 
   const userContent = `CONTEXTO:\n${contextoTexto}`;
 
+  const HISTORIAL_CAP = 30;
+
+  const tool = {
+    name: "solicitar_historial_adicional",
+    description: "Solicita más mensajes del historial si el contexto actual es insuficiente para personalizar el follow-up. Úsalo solo cuando necesites entender un punto específico que el lead mencionó y que no aparece en los mensajes disponibles.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        cantidad: {
+          type: "integer",
+          description: "Mensajes adicionales a cargar (entre 5 y 20)",
+          minimum: 5,
+          maximum: 20,
+        },
+      },
+      required: ["cantidad"],
+    },
+  };
+
   try {
-    const resp = await callClaudeIA(
+    // CALL 1 — con tool disponible
+    const resp1 = await callClaudeIA(
       "GENERAR_FOLLOWUP_GHL",
       {
         max_tokens: 250,
         system,
         messages: [{ role: "user", content: userContent }],
+        tools: [tool],
+        tool_choice: { type: "auto" },
       },
       meta
     );
-    return (resp.content[0] as { text: string }).text.trim();
+
+    // Respuesta directa (caso más común)
+    if (resp1.stop_reason === "end_turn") {
+      const textBlock = resp1.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
+      return textBlock?.text.trim() ?? "";
+    }
+
+    // Tool use — la IA necesita más contexto
+    if (resp1.stop_reason === "tool_use" && meta?.leadId) {
+      const toolBlock = resp1.content.find((b) => b.type === "tool_use") as
+        { type: "tool_use"; id: string; input: { cantidad?: number } } | undefined;
+
+      if (toolBlock) {
+        const cantidadExtra  = Math.min(toolBlock.input.cantidad ?? 10, 20);
+        const limiteActual   = ctx.historial?.split("\n").length ?? 0;
+        const limiteExtendido = Math.min(limiteActual + cantidadExtra, HISTORIAL_CAP);
+
+        void logSistema({
+          categoria: "ia", tipoAccion: "followup.historial_extension", fase: "ok",
+          leadId: meta.leadId, traceId: meta.traceId,
+          resultado: `+${cantidadExtra} msgs → total cap ${limiteExtendido}`,
+          metadata: { tipo: ctx.tipo, nivel: ctx.nivel, limiteActual, cantidadExtra, limiteExtendido },
+        });
+
+        const historialExtendido = await obtenerHistorial(meta.leadId, limiteExtendido).catch(() => "");
+
+        // CALL 2 — historial extendido, sin tools (forzado a text)
+        const resp2 = await callClaudeIA(
+          "GENERAR_FOLLOWUP_GHL_EXTENDED",
+          {
+            max_tokens: 250,
+            system,
+            messages: [
+              { role: "user", content: userContent },
+              { role: "assistant", content: resp1.content },
+              {
+                role: "user",
+                content: [{
+                  type: "tool_result",
+                  tool_use_id: toolBlock.id,
+                  content: historialExtendido || "(sin mensajes adicionales disponibles)",
+                }],
+              },
+            ],
+          },
+          meta
+        );
+
+        const textBlock2 = resp2.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
+        return textBlock2?.text.trim() ?? "";
+      }
+    }
+
+    // Fallback: extraer cualquier texto disponible
+    const textFallback = resp1.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
+    return textFallback?.text.trim() ?? "";
   } catch {
     return "";
   }

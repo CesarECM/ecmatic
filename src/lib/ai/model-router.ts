@@ -29,9 +29,10 @@ export type TareaIA =
   | "SCORE_MENSAJE_GHL"        // GHL-5.2: evalúa calidad del mensaje IA generado (0-1)
   | "DETERMINAR_TAGS_GHL"     // GHL-6.2: clasifica tags y etapa de pipeline por mensaje
   | "DETECTAR_ESTADO_PAGO"    // GHL-9.2: clasifica si el lead manda comprobante, indica hora, etc.
-  | "GENERAR_FOLLOWUP_GHL"    // GHL-9.4: genera copy del mensaje de seguimiento por nivel
-  | "CLASIFICAR_COBERTURA"   // MPS-13 S51: asigna tipo de seguimiento a lead sin cobertura activa
-  | "APLICAR_KB";            // MPS-14 S52: redacta/crea contenido KB a partir de sugerencia de mejora
+  | "GENERAR_FOLLOWUP_GHL"          // GHL-9.4: genera copy del mensaje de seguimiento por nivel
+  | "GENERAR_FOLLOWUP_GHL_EXTENDED" // MPS-15 S56: segunda llamada con historial extendido vía tool use
+  | "CLASIFICAR_COBERTURA"          // MPS-13 S51: asigna tipo de seguimiento a lead sin cobertura activa
+  | "APLICAR_KB";                   // MPS-14 S52: redacta/crea contenido KB a partir de sugerencia de mejora
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -69,8 +70,9 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   SCORE_MENSAJE_GHL:      "haiku",
   DETERMINAR_TAGS_GHL:    "haiku",
   DETECTAR_ESTADO_PAGO:   "haiku",
-  GENERAR_FOLLOWUP_GHL:   "haiku",
-  CLASIFICAR_COBERTURA:   "haiku",
+  GENERAR_FOLLOWUP_GHL:          "haiku",
+  GENERAR_FOLLOWUP_GHL_EXTENDED: "haiku",
+  CLASIFICAR_COBERTURA:          "haiku",
   APLICAR_KB:             "haiku",
 };
 
