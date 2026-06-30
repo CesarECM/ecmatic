@@ -32,7 +32,7 @@ interface Props {
   items: SugerenciaItem[];
   clusters: ClusterItem[];
   aprobarAction: (id: string) => Promise<void>;
-  rechazarAction: (id: string) => Promise<void>;
+  rechazarAction: (id: string, feedback: string) => Promise<void>;
   aprobarClusterAction: (clusterId: string) => Promise<void>;
   rechazarClusterAction: (clusterId: string) => Promise<void>;
 }
@@ -63,9 +63,11 @@ function SugerenciaCard({
 }: {
   item: SugerenciaItem;
   onAprobar: () => Promise<void>;
-  onRechazar: () => Promise<void>;
+  onRechazar: (feedback: string) => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
+  const [modoRechazar, setModoRechazar] = useState(false);
+  const [feedback, setFeedback] = useState("");
   const brief = item.metadata?.brief as BriefDiseno | undefined;
 
   async function handleAprobar() {
@@ -81,12 +83,15 @@ function SugerenciaCard({
     }
   }
 
-  async function handleRechazar() {
+  async function handleRechazarConfirmar() {
+    if (!feedback.trim()) return;
     setLoading(true);
     const t = toast.loading("Rechazando...");
     try {
-      await onRechazar();
+      await onRechazar(feedback.trim());
       toast.success("Rechazado", { id: t });
+      setModoRechazar(false);
+      setFeedback("");
     } catch {
       toast.error("Error al rechazar", { id: t });
     } finally {
@@ -116,23 +121,53 @@ function SugerenciaCard({
           <p className="text-xs text-muted-foreground mt-0.5">{item.descripcion}</p>
           {brief && <BriefCard brief={brief} servicioId={item.servicio_id} />}
         </div>
-        <div className="flex gap-1 shrink-0">
-          <button
-            onClick={handleAprobar}
-            disabled={loading}
-            className="rounded bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700 disabled:opacity-50"
-          >
-            Aprobar
-          </button>
-          <button
-            onClick={handleRechazar}
-            disabled={loading}
-            className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300 disabled:opacity-50"
-          >
-            Rechazar
-          </button>
-        </div>
+        {!modoRechazar && (
+          <div className="flex gap-1 shrink-0">
+            <button
+              onClick={handleAprobar}
+              disabled={loading}
+              className="rounded bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700 disabled:opacity-50"
+            >
+              Aprobar
+            </button>
+            <button
+              onClick={() => setModoRechazar(true)}
+              disabled={loading}
+              className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300 disabled:opacity-50"
+            >
+              Rechazar
+            </button>
+          </div>
+        )}
       </div>
+
+      {modoRechazar && (
+        <div className="p-2 rounded bg-red-50 border border-red-200 space-y-1.5">
+          <p className="text-xs font-medium text-red-700">¿Por qué rechazás esta sugerencia?</p>
+          <textarea
+            autoFocus
+            className="w-full rounded border border-red-300 px-2 py-1 text-xs min-h-[44px] resize-none bg-white"
+            placeholder="Razón del rechazo (obligatorio)"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+          />
+          <div className="flex gap-1">
+            <button
+              onClick={handleRechazarConfirmar}
+              disabled={loading || !feedback.trim()}
+              className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              Confirmar rechazo
+            </button>
+            <button
+              onClick={() => { setModoRechazar(false); setFeedback(""); }}
+              className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -150,7 +185,7 @@ function ClusterCard({
   onAprobarCluster: () => Promise<void>;
   onRechazarCluster: () => Promise<void>;
   aprobarAction: (id: string) => Promise<void>;
-  rechazarAction: (id: string) => Promise<void>;
+  rechazarAction: (id: string, feedback: string) => Promise<void>;
 }) {
   const [expandido, setExpandido] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -219,7 +254,7 @@ function ClusterCard({
               key={item.id}
               item={item}
               onAprobar={() => aprobarAction(item.id)}
-              onRechazar={() => rechazarAction(item.id)}
+              onRechazar={(feedback) => rechazarAction(item.id, feedback)}
             />
           ))}
         </div>
@@ -275,7 +310,7 @@ export function ColaSugerenciasSeccion({
               key={item.id}
               item={item}
               onAprobar={() => aprobarAction(item.id)}
-              onRechazar={() => rechazarAction(item.id)}
+              onRechazar={(feedback) => rechazarAction(item.id, feedback)}
             />
           ))}
         </div>
@@ -304,7 +339,7 @@ export function ColaSugerenciasSeccion({
                   key={item.id}
                   item={item}
                   onAprobar={() => aprobarAction(item.id)}
-                  onRechazar={() => rechazarAction(item.id)}
+                  onRechazar={(feedback) => rechazarAction(item.id, feedback)}
                 />
               ))}
             </div>

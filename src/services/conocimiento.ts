@@ -282,6 +282,23 @@ Si no hay contenido relevante sobre certificaciones laborales, responde: []${bra
   return creados;
 }
 
+// MPS-16 S57 — Señal negativa leve cuando admin rechaza una sugerencia basada en este recurso.
+// Reduce score_confianza (-0.05) con piso en 0.
+export async function registrarFalloSugerencia(recursoId: string): Promise<void> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("recursos_conocimiento")
+    .select("score_confianza")
+    .eq("id", recursoId)
+    .maybeSingle();
+  if (!data) return;
+  const nuevoScore = Math.max(0, parseFloat((data.score_confianza - 0.05).toFixed(2)));
+  await supabase
+    .from("recursos_conocimiento")
+    .update({ score_confianza: nuevoScore })
+    .eq("id", recursoId);
+}
+
 // S2.3 — Registra que los recursos contribuyeron a un cierre de venta (llamar desde Sprint 3)
 export async function registrarCierre(ids: string[]): Promise<void> {
   if (ids.length === 0) return;

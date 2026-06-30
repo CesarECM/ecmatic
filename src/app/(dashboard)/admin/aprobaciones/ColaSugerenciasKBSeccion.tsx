@@ -11,8 +11,8 @@ import type { ResultadoAplicacion } from "@/services/aplicar-sugerencia-kb";
 interface Props {
   items: SugerenciaItem[];
   recursosKB: Record<string, RecursoKBResumen>;
-  aplicarAction: (id: string, override?: { titulo: string; contenido: string }) => Promise<ActionResult<ResultadoAplicacion>>;
-  eliminarAction: (id: string) => Promise<ActionResult>;
+  aplicarAction: (id: string, override?: { titulo: string; contenido: string; razon_edicion?: string }) => Promise<ActionResult<ResultadoAplicacion>>;
+  eliminarAction: (id: string, feedback: string) => Promise<ActionResult>;
 }
 
 export function ColaSugerenciasKBSeccion({ items, recursosKB, aplicarAction, eliminarAction }: Props) {
@@ -34,7 +34,7 @@ export function ColaSugerenciasKBSeccion({ items, recursosKB, aplicarAction, eli
             item={item}
             recursosKB={recursosKB}
             onAplicar={(override) => aplicarAction(item.id, override)}
-            onEliminar={() => eliminarAction(item.id)}
+            onEliminar={(feedback) => eliminarAction(item.id, feedback)}
           />
         ))}
       </div>

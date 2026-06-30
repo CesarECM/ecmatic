@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { VotoBotones } from "@/components/ui/voto-botones";
 import { ChatInput, type Mensaje, type MensajesUpdate } from "./chat-input";
 import { BannerAprobacionGHL } from "./banner-aprobacion-ghl";
 import type { WaTemplate } from "@/services/wa-templates";
@@ -174,7 +173,6 @@ export function ChatWhatsAppLead({
                     interceptado
                   </span>
                 )}
-                {esSaliente && !esOptimista && <VotoBotones mensajeId={m.id} />}
               </div>
             </div>
           );

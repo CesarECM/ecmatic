@@ -1,11 +1,9 @@
 "use client";
 
-// S21.1 — Sección de mensajes recientes de un lead con botones de votación.
+// S21.1 — Sección de mensajes recientes de un lead.
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { VotoBotones } from "@/components/ui/voto-botones";
-
 const CANAL_ICON: Record<string, string> = {
   whatsapp: "💬", email: "✉️", meet: "📹", interno: "📝",
 };
@@ -59,8 +57,7 @@ export function MensajesLead({ mensajes }: MensajesLeadProps) {
                     No enviado
                   </Badge>
                 )}
-                {/* S21.1 — Votos solo en respuestas salientes (IA) */}
-                {m.direccion === "saliente" && <VotoBotones mensajeId={m.id} />}
+
               </div>
               <p className="text-sm">{m.contenido}</p>
             </div>

@@ -31,8 +31,8 @@ interface MetaKB {
 interface Props {
   item: SugerenciaItem;
   recursosKB: Record<string, RecursoKBResumen>;
-  onAplicar: (override?: { titulo: string; contenido: string }) => Promise<ActionResult<ResultadoAplicacion>>;
-  onEliminar: () => Promise<ActionResult>;
+  onAplicar: (override?: { titulo: string; contenido: string; razon_edicion?: string }) => Promise<ActionResult<ResultadoAplicacion>>;
+  onEliminar: (feedback: string) => Promise<ActionResult>;
 }
 
 const PRIORIDAD_COLOR: Record<string, string> = {
@@ -68,12 +68,14 @@ function EtiquetaTipo({ meta }: { meta: MetaKB }) {
 
 function EditorInline({ titulo: t0, contenido: c0, onConfirmar, onCancelar, pending }: {
   titulo: string; contenido: string;
-  onConfirmar: (t: string, c: string) => void;
+  onConfirmar: (t: string, c: string, razon: string) => void;
   onCancelar: () => void;
   pending: boolean;
 }) {
   const [titulo, setTitulo] = useState(t0);
   const [contenido, setContenido] = useState(c0);
+  const [razon, setRazon] = useState("");
+  const valido = titulo.trim() && contenido.trim() && razon.trim();
   return (
     <div className="space-y-2 mt-2 p-3 rounded bg-gray-50 border">
       <input
@@ -88,10 +90,16 @@ function EditorInline({ titulo: t0, contenido: c0, onConfirmar, onCancelar, pend
         value={contenido}
         onChange={(e) => setContenido(e.target.value)}
       />
+      <textarea
+        className="w-full rounded border px-2 py-1 text-xs min-h-[48px] resize-none bg-yellow-50 border-yellow-300"
+        placeholder="¿Por qué editaste esto? (obligatorio)"
+        value={razon}
+        onChange={(e) => setRazon(e.target.value)}
+      />
       <div className="flex gap-1">
         <button
-          onClick={() => onConfirmar(titulo, contenido)}
-          disabled={pending || !titulo.trim() || !contenido.trim()}
+          onClick={() => onConfirmar(titulo, contenido, razon)}
+          disabled={pending || !valido}
           className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
         >
           Guardar → Aplicar al KB
@@ -107,6 +115,8 @@ function EditorInline({ titulo: t0, contenido: c0, onConfirmar, onCancelar, pend
 export function SugerenciaKBCard({ item, recursosKB, onAplicar, onEliminar }: Props) {
   const [expandido, setExpandido] = useState(false);
   const [modoEdicion, setModoEdicion] = useState(false);
+  const [modoDescartar, setModoDescartar] = useState(false);
+  const [feedbackDescarte, setFeedbackDescarte] = useState("");
   const [pending, startTransition] = useTransition();
 
   const meta = item.metadata as MetaKB;
@@ -121,7 +131,7 @@ export function SugerenciaKBCard({ item, recursosKB, onAplicar, onEliminar }: Pr
   const esObs  = meta.categoria_suciedad === "Obsolescencia parcial";
   const esDup  = meta.categoria_suciedad === "Duplicado semántico" && !!meta.id_b;
 
-  function handleAplicar(override?: { titulo: string; contenido: string }) {
+  function handleAplicar(override?: { titulo: string; contenido: string; razon_edicion?: string }) {
     const t = toast.loading("Aplicando al KB...");
     startTransition(async () => {
       const result = await onAplicar(override);
@@ -131,13 +141,15 @@ export function SugerenciaKBCard({ item, recursosKB, onAplicar, onEliminar }: Pr
     });
   }
 
-  function handleEliminar() {
-    if (!confirm("¿Descartar esta sugerencia permanentemente?")) return;
+  function handleEliminarConfirmar() {
+    if (!feedbackDescarte.trim()) return;
     const t = toast.loading("Descartando...");
     startTransition(async () => {
-      const result = await onEliminar();
+      const result = await onEliminar(feedbackDescarte.trim());
       if (result.error) toast.error(result.error, { id: t });
       else toast.success("Sugerencia descartada", { id: t });
+      setModoDescartar(false);
+      setFeedbackDescarte("");
     });
   }
 
@@ -212,11 +224,13 @@ export function SugerenciaKBCard({ item, recursosKB, onAplicar, onEliminar }: Pr
             className="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200">
             {expandido ? "▴" : "▾"}
           </button>
-          <button onClick={handleEliminar} disabled={pending}
-            className="rounded bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
-            title="Descartar permanentemente">
-            ✕
-          </button>
+          {!modoDescartar && (
+            <button onClick={() => setModoDescartar(true)} disabled={pending}
+              className="rounded bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
+              title="Descartar permanentemente">
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -255,15 +269,44 @@ export function SugerenciaKBCard({ item, recursosKB, onAplicar, onEliminar }: Pr
         </div>
       )}
 
-      {/* Editor inline */}
+      {/* Editor inline con razón de edición obligatoria */}
       {modoEdicion && (
         <EditorInline
           titulo={esGap ? "" : (recursoPrincipal?.titulo ?? "")}
           contenido={esGap ? "" : (recursoPrincipal?.contenido ?? "")}
-          onConfirmar={(t, c) => handleAplicar({ titulo: t, contenido: c })}
+          onConfirmar={(t, c, razon) => handleAplicar({ titulo: t, contenido: c, razon_edicion: razon })}
           onCancelar={() => setModoEdicion(false)}
           pending={pending}
         />
+      )}
+
+      {/* Confirmar descarte con feedback obligatorio */}
+      {modoDescartar && (
+        <div className="mt-2 p-3 rounded bg-red-50 border border-red-200 space-y-2">
+          <p className="text-xs font-medium text-red-700">¿Por qué descartás esta sugerencia?</p>
+          <textarea
+            autoFocus
+            className="w-full rounded border border-red-300 px-2 py-1 text-xs min-h-[52px] resize-none bg-white"
+            placeholder="Razón del descarte (obligatorio)"
+            value={feedbackDescarte}
+            onChange={(e) => setFeedbackDescarte(e.target.value)}
+          />
+          <div className="flex gap-1">
+            <button
+              onClick={handleEliminarConfirmar}
+              disabled={pending || !feedbackDescarte.trim()}
+              className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              Confirmar descarte
+            </button>
+            <button
+              onClick={() => { setModoDescartar(false); setFeedbackDescarte(""); }}
+              className="rounded bg-gray-200 px-3 py-1 text-xs hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
 
       {!modoEdicion && (

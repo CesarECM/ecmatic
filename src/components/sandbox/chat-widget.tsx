@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { VotoBotones } from "@/components/ui/voto-botones";
 import { SesionesSandbox } from "./sesiones-sandbox";
 import type { SesionGuardada } from "./sesiones-sandbox";
 
@@ -196,11 +195,6 @@ export function ChatWidget() {
               >
                 {renderMensaje(m.texto)}
               </div>
-              {m.rol === "ia" && m.mensajeId && (
-                <div className="mt-0.5 px-1">
-                  <VotoBotones mensajeId={m.mensajeId} />
-                </div>
-              )}
             </div>
           ))}
           {cargando && (

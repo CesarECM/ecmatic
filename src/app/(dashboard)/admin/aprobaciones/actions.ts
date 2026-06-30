@@ -9,6 +9,7 @@ import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 import { logSistema } from "@/services/log-sistema";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
 import { aplicarSugerenciaKB, type ResultadoAplicacion } from "@/services/aplicar-sugerencia-kb";
+import { registrarFalloSugerencia } from "@/services/conocimiento";
 
 const PATH = "/admin/aprobaciones";
 
@@ -71,31 +72,62 @@ export async function aprobarSugerenciaAction(id: string) {
   revalidatePath(PATH);
 }
 
-export async function rechazarSugerenciaAction(id: string) {
+export async function rechazarSugerenciaAction(id: string, feedback: string) {
   const supabase = createServiceClient();
-  await supabase.from("sugerencias_ia").update({ aprobado: false }).eq("id", id);
-  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-sugerencia", fase: "ok", metadata: { sugerencia_id: id } });
+  const { data } = await (supabase as any)
+    .from("sugerencias_ia")
+    .select("tipo, metadata")
+    .eq("id", id)
+    .single();
+  await (supabase as any).from("sugerencias_ia").update({
+    aprobado: false,
+    tipo_decision: "rechazado",
+    admin_feedback: feedback,
+  }).eq("id", id);
+  // Señal negativa leve: si la sugerencia tenía un recurso KB fuente, bajar su score
+  const recursoId = data?.metadata?.recurso_id ?? data?.metadata?.recurso_ids?.[0] ?? null;
+  if (recursoId && typeof recursoId === "string") {
+    void registrarFalloSugerencia(recursoId).catch(() => {});
+  }
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-sugerencia", fase: "ok", metadata: { sugerencia_id: id, feedback } });
   revalidatePath(PATH);
 }
 
-// MPS-14 S52 — Aprueba una sugerencia kb_calidad aplicando el cambio real al KB.
+// MPS-14 S52 / MPS-16 S57 — Aprueba una sugerencia kb_calidad aplicando el cambio real al KB.
+// tipo_decision: sin_edicion si no hay override, editado si el admin modificó el contenido.
 export const aprobarSugerenciaKBAction = safeAction(
-  async (id: string, override?: { titulo: string; contenido: string }): Promise<ResultadoAplicacion> => {
+  async (id: string, override?: { titulo: string; contenido: string; razon_edicion?: string }): Promise<ResultadoAplicacion> => {
+    const supabase = createServiceClient();
+    const tipoDecision = override ? "editado" : "sin_edicion";
+    await (supabase as any).from("sugerencias_ia").update({
+      tipo_decision: tipoDecision,
+      ...(override?.razon_edicion ? { admin_feedback: override.razon_edicion } : {}),
+    }).eq("id", id);
     const resultado = await aplicarSugerenciaKB(id, override);
     void logSistema({
       categoria: "ui", tipoAccion: "aprobaciones.aplicar-kb", fase: "ok",
-      metadata: { sugerencia_id: id, accion: resultado.accion, recurso_id: resultado.recursoId },
+      metadata: { sugerencia_id: id, accion: resultado.accion, recurso_id: resultado.recursoId, tipo_decision: tipoDecision },
     });
     revalidatePath(PATH);
     return resultado;
   }
 );
 
-// MPS-14 S52 — Elimina permanentemente una sugerencia (hard delete).
-export const eliminarSugerenciaAction = safeAction(async (id: string) => {
+// MPS-16 S57 — Elimina permanentemente una sugerencia; feedback obligatorio desde la UI.
+export const eliminarSugerenciaAction = safeAction(async (id: string, feedback: string) => {
   const supabase = createServiceClient();
+  // Guardar el feedback antes del delete para tener trazabilidad en logs
+  const { data } = await (supabase as any)
+    .from("sugerencias_ia")
+    .select("tipo, metadata")
+    .eq("id", id)
+    .single();
+  const recursoId = data?.metadata?.recurso_id ?? data?.metadata?.recurso_ids?.[0] ?? null;
+  if (recursoId && typeof recursoId === "string") {
+    void registrarFalloSugerencia(recursoId).catch(() => {});
+  }
   await supabase.from("sugerencias_ia").delete().eq("id", id);
-  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.eliminar-sugerencia", fase: "ok", metadata: { sugerencia_id: id } });
+  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.eliminar-sugerencia", fase: "ok", metadata: { sugerencia_id: id, feedback } });
   revalidatePath(PATH);
 });
 
