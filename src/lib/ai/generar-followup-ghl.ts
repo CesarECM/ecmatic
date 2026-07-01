@@ -160,9 +160,24 @@ Siempre en español mexicano natural.
 ${historialLinea}
 
 TAREA:
-${instruccion}${linksDisponibles}`;
+${instruccion}${linksDisponibles}
+
+FORMATO DE SALIDA — OBLIGATORIO:
+Responde ÚNICAMENTE con el texto del mensaje listo para enviar al lead. Sin notas internas, sin explicaciones, sin encabezados como "Aquí está el mensaje:", sin etiquetas entre corchetes, sin comentarios sobre lo que hiciste. El texto que escribas se enviará directamente al lead.`;
 
   const userContent = `CONTEXTO:\n${contextoTexto}`;
+
+  // Elimina notas internas que el modelo podría agregar antes/después del mensaje real.
+  // Patrones: líneas entre corchetes, prefijos "Nota:", "Aquí está el mensaje:", etc.
+  function limpiarSalida(texto: string): string {
+    return texto
+      .replace(/^\s*\[.+?\]\s*\n?/gm, "")           // [Nota: ...] o [Contexto: ...]
+      .replace(/^\s*\(.+?\)\s*\n/gm, "")              // (nota interna)
+      .replace(/^(aquí (está|te (dejo|presento))|mensaje(:|$)|seguimiento:|recordatorio:).*/gim, "")
+      .replace(/^\s*nota:.*/gim, "")                   // Nota: ... al inicio de línea
+      .replace(/\n{3,}/g, "\n\n")                      // colapsar líneas vacías
+      .trim();
+  }
 
   const HISTORIAL_CAP = 30;
 
@@ -200,7 +215,7 @@ ${instruccion}${linksDisponibles}`;
     // Respuesta directa (caso más común)
     if (resp1.stop_reason === "end_turn") {
       const textBlock = resp1.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
-      return textBlock?.text.trim() ?? "";
+      return limpiarSalida(textBlock?.text ?? "");
     }
 
     // Tool use — la IA necesita más contexto
@@ -245,13 +260,13 @@ ${instruccion}${linksDisponibles}`;
         );
 
         const textBlock2 = resp2.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
-        return textBlock2?.text.trim() ?? "";
+        return limpiarSalida(textBlock2?.text ?? "");
       }
     }
 
     // Fallback: extraer cualquier texto disponible
     const textFallback = resp1.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
-    return textFallback?.text.trim() ?? "";
+    return limpiarSalida(textFallback?.text ?? "");
   } catch {
     return "";
   }
