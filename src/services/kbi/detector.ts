@@ -123,74 +123,108 @@ async function detectarSinUso(db: DB): Promise<number> {
 }
 
 // ── Detector 3 — Patrón de edición GHL ───────────────────────────
-// Recursos KB que el admin editó 2+ veces en la última semana en la campaña GHL.
-// Acción sugerida: actualizar el recurso de raíz para que la IA no repita el error.
+// Lee el DELTA real: mensaje_ia (lo que dijo la IA) vs mensaje_final (lo que corrigió el admin).
+// Si hay recurso KB → actualizar usando la corrección como base.
+// Si no hay recurso KB → crear FAQ/Regla desde la corrección del admin.
 async function detectarPatronGHL(db: DB): Promise<number> {
-  // Sin filtro feedback_procesado — lee todos los editados recientes
   const { data: edits } = await db.from("ghl_approval_queue")
-    .select("razon_edicion, contexto")
+    .select("id, mensaje_ia, mensaje_final, razon_edicion, contexto")
     .eq("estado", "editado")
     .gte("revisado_at", HACE_7_DIAS())
-    .limit(50);
+    .not("mensaje_final", "is", null)
+    .limit(20);
 
   if (!edits?.length) return 0;
 
-  // Agrupar razones de edición por recurso KB
-  const mapaRecurso = new Map<string, string[]>();
-  for (const e of edits) {
-    const ids: string[] = (e.contexto?.recursosIds as string[] | undefined) ?? [];
-    for (const rid of ids) {
-      if (e.razon_edicion) {
-        mapaRecurso.set(rid, [...(mapaRecurso.get(rid) ?? []), e.razon_edicion]);
-      }
-    }
-  }
-
-  // Solo recursos con 2+ edits
-  const conProblemas = [...mapaRecurso.entries()]
-    .filter(([, razones]) => razones.length >= 2)
-    .slice(0, MAX_POR_TIPO);
-  if (!conProblemas.length) return 0;
-
-  const { data: recursos } = await db.from("recursos_conocimiento")
-    .select("id, titulo, contenido")
-    .in("id", conProblemas.map(([id]) => id))
-    .in("tipo", ["faq", "regla"]);
-
-  const mapaRecursos = Object.fromEntries(
-    (recursos ?? []).map((r: { id: string; titulo: string; contenido: string }) => [r.id, r])
-  );
-
   let creados = 0;
-  for (const [id, razones] of conProblemas) {
-    const r = mapaRecursos[id];
-    if (!r || await yaExistePendiente(db, id, "actualizar")) continue;
 
-    // Haiku detecta qué cambiar específicamente
-    const res = await callClaudeIA("ANALISIS", {
-      max_tokens: 200,
-      messages: [{ role: "user", content:
-        `Eres editor de KB de un centro de certificaciones CONOCER México.
-Un recurso fue editado manualmente ${razones.length} veces esta semana con estas razones:
-${razones.slice(0, 3).join(" / ")}
+  for (const edit of edits) {
+    if (creados >= MAX_POR_TIPO) break;
 
-Recurso actual: "${r.titulo}": ${r.contenido.slice(0, 200)}
+    const mensajeFinal = (edit.mensaje_final as string | null)?.trim();
+    const mensajeIA    = (edit.mensaje_ia   as string | null)?.trim();
+    const razon        = (edit.razon_edicion as string | null)?.trim();
+    const ids: string[] = (edit.contexto?.recursosIds as string[] | undefined) ?? [];
 
-Propón una versión mejorada del contenido que corrija el problema recurrente.
+    if (!mensajeFinal) continue;
+
+    if (ids.length > 0) {
+      // ── Caso A: hay recurso KB — actualizar con la corrección del admin ──
+      const { data: recurso } = await db.from("recursos_conocimiento")
+        .select("id, titulo, contenido")
+        .eq("id", ids[0])
+        .in("tipo", ["faq", "regla"])
+        .maybeSingle() as { data: { id: string; titulo: string; contenido: string } | null };
+
+      if (!recurso || await yaExistePendiente(db, recurso.id, "actualizar")) continue;
+
+      // Haiku integra la corrección del admin en el recurso KB
+      const res = await callClaudeIA("ANALISIS", {
+        max_tokens: 250,
+        messages: [{ role: "user", content:
+          `Eres editor de KB de un centro de certificaciones CONOCER México.
+El admin corrigió una respuesta de IA. Actualiza el recurso KB con la información correcta.
+
+IA respondió: "${mensajeIA?.slice(0, 250) ?? "(no disponible)"}"
+Admin corrigió a: "${mensajeFinal.slice(0, 300)}"
+${razon ? `Razón del admin: "${razon}"` : ""}
+
+Recurso KB actual — Título: "${recurso.titulo}"
+Contenido: ${recurso.contenido.slice(0, 250)}
+
+Genera el contenido KB actualizado integrando la corrección.
 JSON: {"contenido_nuevo": "..."}` }],
-    });
-    const raw  = (res.content[0] as { text: string }).text;
-    const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { contenido_nuevo?: string };
+      });
+      const raw  = (res.content[0] as { text: string }).text;
+      const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { contenido_nuevo?: string };
 
-    await db.from("kbi_sugerencias").insert({
-      recurso_id:          id,
-      tipo_accion:         "actualizar",
-      titulo_propuesto:    r.titulo,
-      contenido_propuesto: json.contenido_nuevo ?? r.contenido,
-      razon: `Editado ${razones.length}x en 7 días: "${razones.slice(0, 2).join(" / ")}"`,
-      origen: "detector_patron",
-    });
-    creados++;
+      const razonDisplay = [
+        razon ? `Feedback: "${razon}"` : null,
+        `IA: "${mensajeIA?.slice(0, 80) ?? ""}…"`,
+        `Corrección: "${mensajeFinal.slice(0, 80)}…"`,
+      ].filter(Boolean).join("\n");
+
+      await db.from("kbi_sugerencias").insert({
+        recurso_id:          recurso.id,
+        tipo_accion:         "actualizar",
+        titulo_propuesto:    recurso.titulo,
+        contenido_propuesto: json.contenido_nuevo ?? mensajeFinal,
+        razon:               razonDisplay,
+        origen:              "detector_patron",
+      });
+      creados++;
+
+    } else {
+      // ── Caso B: sin recurso KB — crear FAQ/Regla desde la corrección ──
+      const res = await callClaudeIA("ANALISIS", {
+        max_tokens: 250,
+        messages: [{ role: "user", content:
+          `Eres editor de KB de un centro de certificaciones CONOCER México.
+El admin corrigió una respuesta de IA que no tenía recurso KB de base.
+Extrae un recurso FAQ o Regla de la respuesta correcta del admin.
+
+Respuesta correcta del admin: "${mensajeFinal.slice(0, 350)}"
+${razon ? `Razón de la edición: "${razon}"` : ""}
+
+JSON: {"tipo": "faq|regla", "titulo": "...", "contenido": "..."}
+Si el contenido no amerita un recurso KB independiente, responde: {}` }],
+      });
+      const raw  = (res.content[0] as { text: string }).text;
+      const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { tipo?: string; titulo?: string; contenido?: string };
+
+      if (!json.titulo?.trim() || !json.contenido?.trim()) continue;
+
+      await db.from("kbi_sugerencias").insert({
+        recurso_id:          null,
+        tipo_accion:         "crear",
+        tipo_recurso_nuevo:  json.tipo === "regla" ? "regla" : "faq",
+        titulo_propuesto:    json.titulo,
+        contenido_propuesto: json.contenido,
+        razon:               `Sin KB de base. Admin corrigió IA${razon ? ` — "${razon}"` : ""}.\nCorrección: "${mensajeFinal.slice(0, 120)}…"`,
+        origen:              "detector_patron",
+      });
+      creados++;
+    }
   }
   return creados;
 }
