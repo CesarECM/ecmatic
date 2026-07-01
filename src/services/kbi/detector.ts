@@ -30,36 +30,55 @@ async function yaExistePendiente(db: DB, recursoId: string | null, tipoAccion: s
 }
 
 // ── Detector 1 — Baja confianza ───────────────────────────────────
-// Recursos que se usan mucho (≥10 señales) pero rara vez conducen a conversión (<20%).
-// Acción sugerida: actualizar el contenido para que sea más persuasivo o correcto.
+// Primero intenta con kbi_senales (sistema nuevo). Si está vacío,
+// usa score_confianza + score_uso de recursos_conocimiento (datos históricos).
 async function detectarBajaConfianza(db: DB): Promise<number> {
+  // Intento 1: datos KBI (disponibles después de acumular señales)
   const { data: agregados } = await db.rpc("kbi_agregar_senales");
-  if (!agregados?.length) return 0;
+  const hayKBI = (agregados?.length ?? 0) > 0;
 
-  const candidatos = (agregados as { recurso_id: string; total_usos: number; total_cierres: number }[])
-    .filter(a => a.total_usos >= 10 && a.total_cierres / a.total_usos < 0.20)
-    .slice(0, MAX_POR_TIPO);
-  if (!candidatos.length) return 0;
+  let candidatos: { id: string; titulo: string; contenido: string; razon: string }[] = [];
 
-  const { data: recursos } = await db.from("recursos_conocimiento")
-    .select("id, titulo, contenido")
-    .in("id", candidatos.map(c => c.recurso_id))
-    .in("tipo", ["faq", "regla"])
-    .eq("activo", true).eq("aprobado", true);
+  if (hayKBI) {
+    const filtrados = (agregados as { recurso_id: string; total_usos: number; total_cierres: number }[])
+      .filter(a => a.total_usos >= 10 && a.total_cierres / a.total_usos < 0.20)
+      .slice(0, MAX_POR_TIPO);
+
+    const { data: recs } = await db.from("recursos_conocimiento")
+      .select("id, titulo, contenido")
+      .in("id", filtrados.map(c => c.recurso_id))
+      .in("tipo", ["faq", "regla"])
+      .eq("activo", true).eq("aprobado", true);
+
+    candidatos = (recs ?? []).map((r: { id: string; titulo: string; contenido: string }) => {
+      const agg = filtrados.find(f => f.recurso_id === r.id)!;
+      const pct = Math.round((agg.total_cierres / agg.total_usos) * 100);
+      return { ...r, razon: `Baja efectividad KBI: ${pct}% de conversión en ${agg.total_usos} usos.` };
+    });
+  } else {
+    // Fallback: usar score_confianza histórico (< 0.35 con 5+ usos)
+    const { data: recs } = await db.from("recursos_conocimiento")
+      .select("id, titulo, contenido, score_confianza, score_uso")
+      .in("tipo", ["faq", "regla"])
+      .eq("activo", true).eq("aprobado", true)
+      .lt("score_confianza", 0.35)
+      .gte("score_uso", 5)
+      .order("score_confianza", { ascending: true })
+      .limit(MAX_POR_TIPO);
+
+    candidatos = (recs ?? []).map((r: { id: string; titulo: string; contenido: string; score_confianza: number; score_uso: number }) => ({
+      ...r,
+      razon: `Baja confianza histórica: score ${Math.round(r.score_confianza * 100)}% con ${r.score_uso} usos. Contenido puede necesitar mejora.`,
+    }));
+  }
 
   let creados = 0;
-  for (const r of (recursos ?? [])) {
+  for (const r of candidatos) {
     if (await yaExistePendiente(db, r.id, "actualizar")) continue;
-    const agg = candidatos.find(c => c.recurso_id === r.id)!;
-    const pct = Math.round((agg.total_cierres / agg.total_usos) * 100);
     await db.from("kbi_sugerencias").insert({
-      recurso_id:          r.id,
-      tipo_accion:         "actualizar",
-      titulo_propuesto:    r.titulo,
-      contenido_propuesto: r.contenido,
-      razon: `Baja efectividad: ${agg.total_cierres} cierres de ${agg.total_usos} usos (${pct}%). ` +
-             `Revisar si el contenido responde la pregunta del lead con suficiente claridad y persuasión.`,
-      origen: "detector_confianza",
+      recurso_id: r.id, tipo_accion: "actualizar",
+      titulo_propuesto: r.titulo, contenido_propuesto: r.contenido,
+      razon: r.razon, origen: "detector_confianza",
     });
     creados++;
   }
@@ -67,33 +86,36 @@ async function detectarBajaConfianza(db: DB): Promise<number> {
 }
 
 // ── Detector 2 — Sin uso ──────────────────────────────────────────
-// Recursos faq/regla que llevan 30+ días sin recibir ninguna señal de uso.
-// Acción sugerida: desactivar para limpiar el KB y mejorar la precisión de búsqueda.
+// Usa score_uso=0 de recursos_conocimiento (compatible desde el día 1).
+// Si hay datos KBI, también excluye recursos que sí tienen señales nuevas.
 async function detectarSinUso(db: DB): Promise<number> {
+  // IDs que ya recibieron señales KBI (puede estar vacío al inicio)
   const { data: idsConUsoRaw } = await db.from("kbi_senales")
     .select("recurso_id").eq("tipo_senal", "uso");
   const idsConUso = new Set<string>((idsConUsoRaw ?? []).map((r: { recurso_id: string }) => r.recurso_id));
 
+  // score_uso=0: nunca apareció en ninguna conversación (histórico + nuevo)
   const { data: recursos } = await db.from("recursos_conocimiento")
-    .select("id, titulo, contenido")
+    .select("id, titulo, contenido, created_at")
     .in("tipo", ["faq", "regla"])
     .eq("activo", true).eq("aprobado", true)
-    .lt("created_at", HACE_30_DIAS())
-    .limit(20);
+    .eq("score_uso", 0)
+    .lt("created_at", HACE_7_DIAS())  // al menos 7 días de vida antes de sugerir desactivar
+    .order("created_at", { ascending: true })
+    .limit(MAX_POR_TIPO * 3);
 
-  const sinUso = (recursos ?? []).filter((r: { id: string }) => !idsConUso.has(r.id));
+  const candidatos = (recursos ?? []).filter((r: { id: string }) => !idsConUso.has(r.id));
   let creados = 0;
 
-  for (const r of sinUso.slice(0, MAX_POR_TIPO)) {
+  for (const r of candidatos.slice(0, MAX_POR_TIPO)) {
     if (await yaExistePendiente(db, r.id, "desactivar")) continue;
     await db.from("kbi_sugerencias").insert({
       recurso_id:          r.id,
       tipo_accion:         "desactivar",
       titulo_propuesto:    r.titulo,
       contenido_propuesto: r.contenido,
-      razon: `Sin ningún uso registrado en 30+ días desde su creación. ` +
-             `Considera si este recurso sigue siendo relevante para el catálogo actual.`,
-      origen: "detector_confianza",
+      razon:               `0 usos históricos desde su creación. ¿Sigue siendo relevante?`,
+      origen:              "detector_confianza",
     });
     creados++;
   }
@@ -104,10 +126,10 @@ async function detectarSinUso(db: DB): Promise<number> {
 // Recursos KB que el admin editó 2+ veces en la última semana en la campaña GHL.
 // Acción sugerida: actualizar el recurso de raíz para que la IA no repita el error.
 async function detectarPatronGHL(db: DB): Promise<number> {
+  // Sin filtro feedback_procesado — lee todos los editados recientes
   const { data: edits } = await db.from("ghl_approval_queue")
     .select("razon_edicion, contexto")
     .eq("estado", "editado")
-    .eq("feedback_procesado", true)
     .gte("revisado_at", HACE_7_DIAS())
     .limit(50);
 
@@ -174,35 +196,45 @@ JSON: {"contenido_nuevo": "..."}` }],
 }
 
 // ── Detector 4 — Huecos de cobertura ─────────────────────────────
-// Analiza mensajes entrantes recientes para encontrar temas sin recurso KB.
-// Acción sugerida: crear un nuevo faq o regla con un draft generado por Haiku.
+// Lee mensajes entrantes; si no hay, usa cuerpos de mensajes GHL como fuente.
+// Corrige bug: yaExistePendiente no se usa en el loop (bloquearía todas las iteraciones).
 async function detectarHuecosCobertura(db: DB): Promise<number> {
-  // No crear más si ya hay 5+ sugerencias "crear" pendientes (evitar flood)
   const { count: pendientesCrear } = await db.from("kbi_sugerencias")
     .select("id", { count: "exact", head: true })
     .eq("tipo_accion", "crear").eq("estado", "pendiente");
   if ((pendientesCrear ?? 0) >= 5) return 0;
 
+  // Fuente 1: mensajes entrantes de la tabla mensajes
   const { data: mensajes } = await db.from("mensajes")
     .select("contenido")
     .eq("direccion", "entrante")
     .gte("created_at", HACE_7_DIAS())
     .limit(30);
 
-  if (!mensajes?.length) return 0;
+  // Fuente 2 (fallback): cuerpos de mensajes de la campaña GHL
+  let textos: string[] = (mensajes ?? []).map((m: { contenido: string }) => m.contenido);
+  if (textos.length < 5) {
+    const { data: ghlMsgs } = await db.from("ghl_approval_queue")
+      .select("cuerpo")
+      .gte("created_at", HACE_7_DIAS())
+      .not("cuerpo", "is", null)
+      .limit(30);
+    textos = [...textos, ...(ghlMsgs ?? []).map((m: { cuerpo: string }) => m.cuerpo ?? "")];
+  }
 
-  const preguntas = (mensajes as { contenido: string }[]).map(m => m.contenido).join("\n");
+  if (!textos.length) return 0;
 
   const res = await callClaudeIA("ANALISIS", {
-    max_tokens: 300,
+    max_tokens: 400,
     messages: [{ role: "user", content:
-      `Analiza estas preguntas de leads sobre certificaciones CONOCER México.
-Identifica máx ${MAX_POR_TIPO} temas recurrentes que probablemente no están cubiertos en el KB.
+      `Analiza estas preguntas/mensajes de leads sobre certificaciones CONOCER México.
+Identifica máx ${MAX_POR_TIPO} temas recurrentes que probablemente NO están cubiertos en el KB.
 Para cada uno, genera un draft de FAQ o Regla.
 JSON: {"huecos": [{"tipo": "faq|regla", "titulo": "...", "contenido": "...", "razon": "..."}]}
+Si todos los temas parecen cubiertos, responde: {"huecos": []}
 
-Preguntas:
-${preguntas}` }],
+Mensajes:
+${textos.join("\n---\n")}` }],
   });
   const raw  = (res.content[0] as { text: string }).text;
   const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
@@ -210,17 +242,18 @@ ${preguntas}` }],
   };
 
   let creados = 0;
+  // Sin yaExistePendiente en el loop: el check de pendientesCrear < 5 al inicio
+  // ya garantiza que no se inunda el panel. Cada hueco es único por título.
   for (const h of (json.huecos ?? []).slice(0, MAX_POR_TIPO)) {
-    if (!h.titulo || !h.contenido) continue;
-    if (await yaExistePendiente(db, null, "crear")) continue;
+    if (!h.titulo?.trim() || !h.contenido?.trim()) continue;
     await db.from("kbi_sugerencias").insert({
-      recurso_id:         null,
-      tipo_accion:        "crear",
-      tipo_recurso_nuevo: h.tipo === "regla" ? "regla" : "faq",
-      titulo_propuesto:   h.titulo,
+      recurso_id:          null,
+      tipo_accion:         "crear",
+      tipo_recurso_nuevo:  h.tipo === "regla" ? "regla" : "faq",
+      titulo_propuesto:    h.titulo,
       contenido_propuesto: h.contenido,
-      razon:              h.razon,
-      origen:             "detector_huecos",
+      razon:               h.razon,
+      origen:              "detector_huecos",
     });
     creados++;
   }
