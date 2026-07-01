@@ -4,6 +4,9 @@ import { agregarTagsContacto, obtenerContacto } from "@/lib/ghl/contacts-api";
 import { buscarConversacionWA, obtenerOCrearConversacionWA, obtenerMensajes, enviarMensajeGHLFragmentado } from "@/lib/ghl/conversations-api";
 import { registrarRespuestaGHL } from "@/services/ab-workflows-ghl";
 import { generarRespuesta } from "@/lib/ai/motor-respuesta";
+import { detectarViolacion } from "@/lib/ai/guardrails-precio";
+import { procesarArcoEmocional } from "@/services/arco-emocional";
+import { registrarCierre } from "@/services/conocimiento";
 import { guardarMensaje, obtenerHistorial } from "@/services/mensajes";
 import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { obtenerFaseLead } from "@/services/cagc";
@@ -15,7 +18,7 @@ import { identificarDesconfianza } from "@/lib/ai/tres-desconfianzas";
 import { construirProtocoloObjecion } from "@/lib/ai/protocolo-objecion";
 import { obtenerRolDinamico } from "@/services/rol-dinamico";
 import { evaluarScoreMensajeGHL } from "@/lib/ai/evaluar-score-ghl";
-import { encolarMensajeGHL, obtenerUmbralAuto } from "@/services/ghl-aprobacion";
+import { encolarMensajeGHL, obtenerUmbralAuto, actualizarStatsAprobacion } from "@/services/ghl-aprobacion";
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
 import { actualizarTagsYPipeline } from "@/services/ghl-tagging-progresivo";
 import { dispararDemoSbc, confirmarSlotDemo } from "@/services/ghl-demo-sbc";
@@ -160,7 +163,32 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
 
   if (!resultado) return;
 
-  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds, nuevoModo, citaFin } = resultado;
+  const { texto, leadId, intencion, setterFaseActual, nombre, recursosIds, nuevoModo, citaFin, historial } = resultado;
+  const contextoItem = { intencion, setter_fase: setterFaseActual, conv_id: convId, recursosIds };
+
+  // S68.1 — Guardrails de precio e inyección: detección determinista, sin llamada a IA
+  const violacion = detectarViolacion(texto, cuerpo);
+  if (violacion) {
+    void logSistema({
+      categoria: "webhook", tipoAccion: "ghl_sbc.guardrail", fase: "warn",
+      resultado: `violacion:${violacion.tipo} — encolando para revisión`,
+      metadata: { contactId, leadId, tipo: violacion.tipo, detalle: violacion.detalle },
+    });
+    await encolarYNotificar(contactId, convId, leadId, cuerpo, texto, 0, `guardrail:${violacion.tipo}`, contextoItem, 3);
+    return;
+  }
+
+  // S68.2 — Arco emocional: hot lead o frustrado acumulado → handoff sin auto-send
+  const arco = await procesarArcoEmocional(leadId, [cuerpo], historial).catch(() => ({ triggerHandoff: false }));
+  if (arco.triggerHandoff) {
+    void logSistema({
+      categoria: "webhook", tipoAccion: "ghl_sbc.arco_emocional", fase: "warn",
+      resultado: "handoff triggado — encolando para revisión humana",
+      metadata: { contactId, leadId },
+    });
+    await encolarYNotificar(contactId, convId, leadId, cuerpo, texto, 0, "arco_emocional:handoff", contextoItem, 2);
+    return;
+  }
 
   // GHL-9: si el lead tiene seguimiento de pago activo, detectar si está enviando comprobante
   void (async () => {
@@ -199,8 +227,6 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     metadata: { contactId },
   });
 
-  const contextoItem = { intencion, setter_fase: setterFaseActual, conv_id: convId, recursosIds };
-
   if (pasaUmbral) {
     // Score suficiente — intentar enviar directo sin revisión humana
     let enviado = false;
@@ -210,6 +236,13 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "ok", resultado: `auto conv:${convId}` });
     } catch (e) {
       void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.enviar", fase: "error", resultado: String(e) });
+    }
+
+    // S68.3 + S69.2 — persistir el mensaje enviado y cerrar el loop KB
+    if (enviado) {
+      void guardarMensaje({ leadId, contenido: texto, direccion: "saliente" }).catch(() => null);
+      if (recursosIds?.length) void registrarCierre(recursosIds).catch(() => null);
+      void actualizarStatsAprobacion(CAMPANA_ACTIVA, "aprobado").catch(() => null);
     }
 
     // Invariante: si el envío directo falló, encolar para que siempre llegue al admin o al lead
@@ -291,6 +324,7 @@ interface ResultadoMotor {
   recursosIds: string[];
   nuevoModo: ModoRevelacion;
   citaFin?: Date; // presente solo cuando el lead confirmó un slot en este turno
+  historial: string;
 }
 
 async function generarRespuestaMotorCompleto(
@@ -441,5 +475,5 @@ async function generarRespuestaMotorCompleto(
   });
 
   // El mensaje saliente se guarda solo cuando se aprueba/envía, no aquí
-  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds, nuevoModo, citaFin };
+  return { texto, leadId: lead.id, intencion, setterFaseActual, nombre, recursosIds, nuevoModo, citaFin, historial };
 }

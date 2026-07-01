@@ -178,7 +178,7 @@ const ETAPAS = [
     criterios_entrada: "Cliente compró la certificación EC0217.01 completa con Centro ECM dentro de los 30 días.",
     criterios_salida: "Etapa terminal. Registro vinculado al pipeline de certificación EC0217.01.",
     tareas_obligatorias: [
-      { id: "t7_1", nombre: "Aplicar descuento en cotización de Tomás", tipo: "manual", obligatoria: true,
+      { id: "t7_1", nombre: "Aplicar descuento en cotización del asesor", tipo: "manual", obligatoria: true,
         descripcion: "El pago de SmartBuilderEC ($1,799 MXN o el monto pagado) se descuenta del precio de la evaluación EC0217.01. No cotizar desde cero. No crear un nuevo lead — usar el mismo registro." },
       { id: "t7_2", nombre: "Vincular al pipeline de certificación EC0217.01", tipo: "manual", obligatoria: true,
         descripcion: "Mover el lead al pipeline correspondiente del EC0217.01 preservando todo el historial. Nunca duplicar el contacto." }

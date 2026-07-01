@@ -129,7 +129,7 @@ function serviciosEspeciales() {
     },
     {
       titulo: "Sesión de Diagnóstico CONOCER (Gratuita)",
-      contenido: `Sesión gratuita de 20 minutos con Tomás para conocer la situación del candidato, identificar el Estándar de Competencia CONOCER más adecuado para su perfil, resolver dudas sobre el proceso de certificación y revelar el precio personalizado del servicio. Sin costo, sin compromiso. Primer paso recomendado para cualquier proceso de certificación con Centro ECM.`,
+      contenido: `Sesión gratuita de 20 minutos con nuestro asesor para conocer la situación del candidato, identificar el Estándar de Competencia CONOCER más adecuado para su perfil, resolver dudas sobre el proceso de certificación y revelar el precio personalizado del servicio. Sin costo, sin compromiso. Primer paso recomendado para cualquier proceso de certificación con Centro ECM.`,
       estandar_conocer: null,
       nivel_estandar: null,
       modalidad: "en_linea",

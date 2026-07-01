@@ -77,8 +77,8 @@ function buildEtapas(ec) {
       tareas_obligatorias: [
         { id: "t3_1", nombre: "Aplicar protocolo Setter — 6 fases", tipo: "manual", obligatoria: true,
           descripcion: `Seguir el protocolo: (1) Apertura elegante. (2) Diagnóstico de situación. (3) Identificación del dolor. (4) Situación deseada. (5) Cualificación: inversión, tiempo, fit del ${codigo}. Si NO califica: despedida amable + nurturing, sin forzar. (6) Si califica: agendar sesión diagnóstico.` },
-        { id: "t3_2", nombre: "Agendar videollamada de diagnóstico con Tomás", tipo: "manual", obligatoria: true,
-          descripcion: "Proponer horarios disponibles. Confirmar por WhatsApp y email." }
+        { id: "t3_2", nombre: "Agendar videollamada de diagnóstico con el asesor", tipo: "manual", obligatoria: true,
+          descripcion: "Proponer horarios disponibles del asesor. Confirmar por WhatsApp y email." }
       ],
       plantillas_mensaje: [], condiciones_workflow: [], canales: ["whatsapp", "llamada"],
       protocolo: {
@@ -95,7 +95,7 @@ function buildEtapas(ec) {
       etapas_siguientes: ["Videollamada Realizada / Propuesta Presentada", "Perdido / Sin Respuesta"],
       sla_dias: 7, rotting_dias: 3,
       criterios_entrada: "Sesión de diagnóstico agendada en Google Calendar; invitación enviada.",
-      criterios_salida: "Sesión de diagnóstico realizada con Tomás.",
+      criterios_salida: "Sesión de diagnóstico realizada con el asesor.",
       tareas_obligatorias: [
         { id: "t4_1", nombre: "Enviar confirmación de cita", tipo: "manual", obligatoria: true,
           descripcion: "Confirmar fecha, hora CDMX, link Meet y nombre del asesor. Recordar que es gratuita y sin compromiso." },
@@ -233,7 +233,7 @@ async function crearPipeline(ec) {
     .insert({
       ruta,
       nombre: `${codigo} · ${nombre} — Entrada en Frío`,
-      descripcion: `Pipeline consultivo para prospectos fríos interesados en certificarse en el ${codigo} (${nombre}). Calificación por WhatsApp con protocolo Setter; cierre en videollamada de diagnóstico con Tomás.${notaDesc}`,
+      descripcion: `Pipeline consultivo para prospectos fríos interesados en certificarse en el ${codigo} (${nombre}). Calificación por WhatsApp con protocolo Setter; cierre en videollamada de diagnóstico con el asesor.${notaDesc}`,
       tipo: "tronco",
       servicio_id: null,
       fase_cagc_inicio: 0,

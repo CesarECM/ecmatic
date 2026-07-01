@@ -1,5 +1,25 @@
 # ECMatic — Arquitectura y Convenciones
 
+## Posicionamiento estratégico
+
+ECMatic es una **capa de inteligencia y decisión**, no un CRM con comunicación directa al lead.
+
+| Responsabilidad | Quién la ejecuta |
+|---|---|
+| Analizar conversaciones, comportamientos y señales | ECMatic (IA) |
+| Decidir qué acción ejecutar y cuándo | ECMatic (motor) |
+| Base de conocimiento, aprendizaje continuo, aprobaciones | ECMatic (admin panel) |
+| Analítica, scores, modelos matemáticos, A/B, KPIs | ECMatic (admin panel) |
+| Configuración del motor IA, guardrails, protocolos | ECMatic (admin panel) |
+| Vista espejo enriquecida de GHL (CAGC, DISC, contexto IA) | ECMatic (admin panel) |
+| Enviar mensajes WA y email, ejecutar workflows | **GHL** |
+| Gestionar citas, pipelines, contactos, templates | **GHL** |
+| Recibir mensajes entrantes del lead | **GHL** → webhook → ECMatic |
+
+La gestión operativa de leads (mover etapas, asignar vendedor, agendar cita) vive en GHL. ECMatic es el cerebro que decide, aprende y enriquece los datos.
+
+---
+
 ## Stack
 
 | Capa | Tecnología |
@@ -9,14 +29,15 @@
 | Auth | Supabase Auth (usuario/contraseña) |
 | IA | Claude via Anthropic SDK — modelo por tarea via model-router |
 | Embeddings | OpenAI text-embedding-3-small (1536 dims) |
-| WhatsApp | Meta WhatsApp Business API v20 |
-| Email transaccional | Resend |
-| Email nurturing | Brevo (listas segmentadas) |
-| Pagos | Stripe (Checkout Sessions + webhooks) |
-| Calendario | Google Calendar API (OAuth por vendedor) |
-| Videollamadas | Google Meet (link automático en citas) |
-| Certificación | SmartBuilderEC API |
-| Facturación | Facturama (CFDI 4.0) |
+| GHL (GoHighLevel) | Capa de ejecución: WA outbound + inbound, email, citas, pipelines, contactos, templates, workflows |
+| ~~WhatsApp inbound directo~~ | ~~Meta WA Business API v20~~ `[DEPRECADO D8]` — reemplazado por GHL webhook |
+| ~~Email transaccional~~ | ~~Resend~~ `[DEPRECADO D4]` — reemplazado por GHL |
+| ~~Email nurturing~~ | ~~Brevo~~ `[DEPRECADO D4]` — reemplazado por GHL |
+| Pagos | Stripe — links generados en ECMatic, confirmación notificada a GHL (D11, mecanismo TBD) |
+| ~~Calendario~~ | ~~Google Calendar API~~ `[DEPRECADO D6]` — GHL se sincroniza nativamente con GCal de vendedores |
+| ~~Videollamadas~~ | ~~Google Meet~~ `[DEPRECADO D6]` — links generados por GHL vía integración GCal |
+| Certificación | SmartBuilderEC API (directo, sin cambios — D10) |
+| Facturación | Facturama (CFDI 4.0, directo, sin cambios — D10) |
 | Deploy | Vercel — crons nativos + ceecm.mx |
 
 ---
@@ -182,13 +203,23 @@ const res = await anthropic.messages.create({
 
 Tareas configurables: `CLASIFICAR`, `RESPUESTA`, `ANALISIS`, `COACHING`, `ENCUESTA`, `SUGERIR_KB`, `COMPETIDORES`, `CHURN`.
 
-### WhatsApp Hardening — Cola de mensajes
+### ~~WhatsApp Hardening — Cola de mensajes~~ `[DEPRECADO jun 2026]`
+
+> ⚠️ Este patrón envía WA directamente vía Meta API. Está deprecado (Fase A).
+> No usar para código nuevo. Ver **D1** en Principios de Integración GHL.
 
 ```
-enviarRespuestaWhatsApp()
-  → sendTextMessageWithRetry()   retry 1s/2s/4s
-      → si falla: encolarMensaje()  persiste en mensajes_cola
-          → cron /api/admin/procesar-cola cada 5 min vacía la cola
+[DEPRECADO] enviarRespuestaWhatsApp() → sendTextMessageWithRetry() → Meta API
+[DEPRECADO] encolarMensaje() → mensajes_cola → cron procesar-cola
+```
+
+### Canal único de salida WA (patrón vigente)
+
+```
+enviarMensajeGHL(leadId, texto)
+  → buscar/crear contacto en GHL por teléfono
+      → POST GHL Conversation Message API
+          → GHL → WhatsApp Business API → Lead
 ```
 
 ### Server Actions
@@ -208,6 +239,129 @@ export async function moverLeadDesdePerfilAction(formData: FormData) {
 
 - `listarLeads()` selecciona solo las columnas que la lista/kanban necesita (sin `metadata`).
 - `obtenerLeadsParaNurturing()` usa 2 rondas: 5 queries en paralelo, luego mensajes por IDs conocidos.
+
+---
+
+## Principios de Integración GHL
+
+Directrices globales vigentes desde **30 jun 2026**. Toda implementación nueva debe cumplirlas sin excepción.
+
+### D1 — Canal único de salida WhatsApp
+
+```
+ECMatic (decisión) → enviarMensajeGHL() → GHL → WA Business API → Lead
+```
+
+- ECMatic **nunca** envía WA directamente (ni Meta API, ni Twilio).
+- `enviarMensajeGHL()` es el **único** punto de salida de mensajería WA.
+- D1 aplica también a alertas internas (notificaciones WA a César admin).
+- Email, SMS, llamadas: no están afectados por D1 (email tiene su propia directriz D4).
+
+### D2 — Templates gestionados en GHL, evaluados en ECMatic
+
+- Los templates WA se crean, editan y envían a Meta **exclusivamente desde GHL**.
+- ECMatic **no gestiona** el ciclo de vida del template.
+- ECMatic **evalúa** efectividad: tasa de respuesta, conversión, score A/B (Thompson Sampling).
+- El módulo `wa_templates` + `lib/whatsapp/templates-api.ts` (Sprint 34) está deprecado.
+
+### D3 — Pipelines gestionados en GHL, conocidos por ECMatic
+
+- GHL es la **fuente de verdad** de pipelines y etapas.
+- ECMatic mantiene una **copia local** sincronizada periódicamente (GHL API → tabla `pipelines`).
+- ECMatic puede **disparar workflows** de GHL sobre leads específicos — GHL ejecuta la acción.
+- ECMatic puede **proponer** cambios de etapa pero la gestión operativa de leads vive en GHL.
+- Los seeds locales (`scripts/seed/pipeline-*.js`) siguen siendo válidos para inicialización.
+
+### D4 — Email exclusivamente vía GHL
+
+- Todo email (transaccional y nurturing) sale por GHL.
+- Resend y Brevo quedan **deprecados**.
+- ECMatic decide qué comunicar y cuándo; GHL ejecuta el envío.
+- Las secuencias de nurturing de Brevo se migran a workflows de GHL.
+
+### D5 — Contactos bidireccional (última escritura gana)
+
+- **GHL** es origen de: nombre, teléfono, email, etiquetas GHL, etapa de pipeline.
+- **ECMatic** es origen de: CAGC, avatar DISC, score salud, historial conversacional, KB, contexto IA.
+- Regla de merge: gana el registro con `updated_at` más reciente por campo.
+- MPS-8 (`sync-contacto-ghl.ts`) implementa el push ECMatic → GHL; GHL webhook implementa el inverso.
+
+### D6 — Citas gestionadas por GHL
+
+- GHL gestiona el calendario de citas (creación, modificación, cancelación).
+- GHL se sincroniza nativamente con Google Calendar de los vendedores — ECMatic no toca la GCal API.
+- ECMatic ya no genera Meet links directamente.
+- `lib/google/calendar.ts`, `lib/google/meet.ts`, `services/citas.ts` (flujo de creación) → deprecados.
+
+### D7 — Alertas admin también vía GHL
+
+- D1 aplica a **todo** WA saliente, incluyendo notificaciones internas a César.
+- No existe excepción de "admin bypass" — consistencia total con D1.
+
+### D8 — Lead entry: GHL es el punto de entrada
+
+```
+Lead (WA/formulario/anuncio) → GHL → webhook GHL → ECMatic (upsert + procesamiento IA)
+```
+
+- GHL crea el contacto primero. Su webhook notifica a ECMatic.
+- ECMatic hace upsert en Supabase y procesa la conversación con IA.
+- El webhook Meta directo (`api/whatsapp/webhook/`) queda **deprecado**.
+- `api/ghl/` es el canal principal de mensajes entrantes (ya implementado en MPS-1).
+
+### D9 — Nurturing: ECMatic decide, GHL ejecuta
+
+- ECMatic analiza el lead (CAGC, score, comportamiento) y determina la secuencia/workflow apropiada.
+- ECMatic instruye a GHL para inscribir al lead en el workflow correspondiente.
+- GHL envía los mensajes WA y emails de nurturing.
+- ECMatic mide efectividad y ajusta la decisión (motor bayesiano sigue activo).
+
+### D10 — Facturama y SmartBuilderEC siguen directas
+
+- Estas integraciones son especializadas (fiscal y certificación) — GHL no las reemplaza.
+- No están afectadas por el pivot GHL.
+
+### D11 — Stripe + notificación a GHL (mecanismo TBD)
+
+- Links de pago generados desde ECMatic (Stripe Checkout Sessions).
+- Cuando `checkout.session.completed`: ECMatic registra el pago en Supabase **y** notifica a GHL.
+- El mecanismo exacto de notificación (webhook push, contacto field, workflow trigger) se define al abordar el módulo de pagos.
+
+---
+
+## Plan de Deprecación (jun 2026)
+
+| Fase | Descripción | Plazo |
+|---|---|---|
+| **A — Marcado** | Documentado como deprecado. No usar para código nuevo. | Vigente desde 30 jun |
+| **B — Deshabilitado** | Feature flag desactiva el módulo sin eliminar código. | ~jul 2026 |
+| **C — Eliminado** | Código removido cuando se confirma cero tráfico. | ~ago 2026 |
+
+| Componente | Directriz | Motivo | Fase |
+|---|---|---|---|
+| `services/whatsapp-sender.ts` | D1 | Outbound WA directo → GHL | A |
+| `services/mensajes-cola.ts` | D1 | Cola outbound WA → GHL | A |
+| `lib/whatsapp/sendTextMessage*` | D1 | Outbound Meta API → GHL | A |
+| `api/admin/procesar-cola/` | D1 | Cron cola WA → GHL | A |
+| `lib/whatsapp/templates-api.ts` | D2 | Templates → GHL los gestiona | A |
+| `wa_templates` (tabla + UI) | D2 | Templates → GHL los gestiona | A |
+| `lib/email/resend.ts` | D4 | Email → GHL | A |
+| `lib/email/brevo.ts` | D4 | Email → GHL | A |
+| `lib/email/transaccional.ts` | D4 | Email → GHL | A |
+| `lib/email/campanas.ts` | D4 | Email → GHL | A |
+| `services/nurturing.ts` (envíos) | D4+D9 | Email/WA nurturing → GHL ejecuta | A |
+| `services/reengagement.ts` | D1+D4 | WA y email → GHL | A |
+| `services/notificaciones-cita.ts` | D1+D4+D6 | WA/email cita → GHL | A |
+| `services/resumen-semanal.ts` | D1+D4 | WA/email → GHL | A |
+| `services/recordatorios.ts` | D1+D4 | WA/email → GHL | A |
+| WA step en `prospeccion-secuencial.ts` | D1+D4 | WA/email → GHL | A |
+| `lib/google/calendar.ts` | D6 | GHL gestiona citas+GCal sync | A |
+| `lib/google/meet.ts` | D6 | GHL genera Meet links | A |
+| `services/citas.ts` (creación+Meet) | D6 | GHL gestiona agendamiento | A |
+| `services/meet-post-sesion.ts` | D6 | GHL/GCal manejan transcriptos | A |
+| `services/log-agendamiento.ts` | D6 | Agendamiento → GHL | A |
+| `api/whatsapp/webhook/` | D8 | Inbound WA → GHL webhook | A |
+| Vista Kanban/lista de leads ECMatic | D8 | Gestión operativa → GHL | A |
 
 ---
 

@@ -69,8 +69,8 @@ const ETAPAS = [
     tareas_obligatorias: [
       { id: "t3_1", nombre: "Aplicar protocolo Setter — 6 fases", tipo: "manual", obligatoria: true,
         descripcion: "Seguir el protocolo: (1) Apertura elegante. (2) Diagnóstico de situación. (3) Identificación del dolor. (4) Definición de situación deseada. (5) Cualificación: capacidad de inversión, tiempo, fit del EC0217.01. Si NO califica: despedida amable + agregar a nurturing, sin forzar venta. (6) Si califica: transición y agendamiento de la sesión diagnóstico." },
-      { id: "t3_2", nombre: "Agendar videollamada de diagnóstico con Tomás", tipo: "manual", obligatoria: true,
-        descripcion: "Proponer horarios disponibles de Tomás. La sesión es gratuita, sin compromiso, de aproximadamente 30-45 minutos. Confirmar por WhatsApp y email." }
+      { id: "t3_2", nombre: "Agendar videollamada de diagnóstico con el asesor", tipo: "manual", obligatoria: true,
+        descripcion: "Proponer horarios disponibles del asesor. La sesión es gratuita, sin compromiso, de aproximadamente 30-45 minutos. Confirmar por WhatsApp y email." }
     ],
     plantillas_mensaje: [],
     condiciones_workflow: [],
@@ -90,10 +90,10 @@ const ETAPAS = [
     sla_dias: 7,
     rotting_dias: 3,
     criterios_entrada: "Sesión de diagnóstico agendada en Google Calendar; invitación enviada al prospecto.",
-    criterios_salida: "Sesión de diagnóstico realizada con Tomás.",
+    criterios_salida: "Sesión de diagnóstico realizada con el asesor.",
     tareas_obligatorias: [
       { id: "t4_1", nombre: "Enviar confirmación de cita por WhatsApp y email", tipo: "manual", obligatoria: true,
-        descripcion: "Confirmar fecha, hora (CDMX), link de Google Meet y nombre del asesor (Tomás). Recordar que la sesión es gratuita y sin compromiso." },
+        descripcion: "Confirmar fecha, hora (CDMX), link de Google Meet y nombre del asesor asignado. Recordar que la sesión es gratuita y sin compromiso." },
       { id: "t4_2", nombre: "Recordatorio 24 h antes de la sesión", tipo: "manual", obligatoria: true,
         descripcion: "Enviar recordatorio por WhatsApp el día anterior confirmando asistencia. Si cancela: reagendar de inmediato." }
     ],
@@ -114,7 +114,7 @@ const ETAPAS = [
     etapas_siguientes: ["Liga de Pago Enviada", "En Seguimiento Post-Diagnóstico", "Perdido / Sin Respuesta"],
     sla_dias: 2,
     rotting_dias: 3,
-    criterios_entrada: "Sesión de diagnóstico con Tomás completada. Precio y opciones de servicio revelados.",
+    criterios_entrada: "Sesión de diagnóstico completada. Precio y opciones de servicio revelados.",
     criterios_salida: "Prospecto decide: compra (→ Liga de Pago), necesita tiempo (→ Seguimiento), o descarta (→ Perdido).",
     tareas_obligatorias: [
       { id: "t5_1", nombre: "Registrar resultado de la videollamada", tipo: "manual", obligatoria: true,
@@ -240,7 +240,7 @@ async function main() {
     .insert({
       ruta,
       nombre: "EC0217.01 · Certificación — Entrada en Frío",
-      descripcion: "Pipeline consultivo para prospectos fríos interesados en certificarse en el EC0217.01. La calificación ocurre por WhatsApp con protocolo Setter; la venta se cierra en videollamada de diagnóstico con Tomás.",
+      descripcion: "Pipeline consultivo para prospectos fríos interesados en certificarse en el EC0217.01. La calificación ocurre por WhatsApp con protocolo Setter; la venta se cierra en videollamada de diagnóstico con el asesor.",
       tipo: "tronco",
       servicio_id: null,
       fase_cagc_inicio: 0,

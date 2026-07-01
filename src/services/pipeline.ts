@@ -8,6 +8,7 @@ import { calcularCalidadConversacion } from "@/services/calidad-conversacional";
 import { generarMemoriaLead } from "@/services/memoria-lead";
 import { registrarConversionPrompt } from "@/services/prompt-experimentos";
 import { registrarConversionExperimento } from "@/services/experimentos";
+import { registrarConversionGHL } from "@/services/ab-workflows-ghl";
 import { obtenerFaseLead } from "@/services/cagc";
 import { inscribirEnPipeline } from "@/services/pipeline-multi";
 import { asignarEtiquetaProducto } from "@/services/etiquetas-hooks";
@@ -75,7 +76,7 @@ export async function moverLead(
 
   const { data: lead, error: fetchError } = await supabase
     .from("leads")
-    .select("pipeline_stage, pipeline_ruta, email")
+    .select("pipeline_stage, pipeline_ruta, email, telefono")
     .eq("id", leadId)
     .single();
 
@@ -154,6 +155,11 @@ export async function moverLead(
   if (nuevaEtapa === "Comprado") {
     void registrarConversionExperimento(leadId).catch(console.error);
     void registrarConversionPrompt(leadId).catch(console.error);
+    // S70.1 — Señal de conversión GHL: solo cuando el lead vino por el path GHL
+    const telefono = (lead as Record<string, unknown>).telefono as string | null;
+    if (typeof telefono === "string" && telefono.startsWith("ghl_")) {
+      void registrarConversionGHL(telefono.slice(4), process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26").catch(console.error);
+    }
   }
 
   // S14.4 — Auto-etiqueta con producto comprado

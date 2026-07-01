@@ -158,7 +158,7 @@ function buildEtapas(ec) {
         { id: "t6_2", nombre: "Transferir al pipeline de ventas activo", tipo: "manual", obligatoria: true,
           descripcion: `Mover al lead al pipeline "Entrada en Frío" del ${codigo}, en la etapa "Calificando" (ya respondió, no necesita primer contacto de nuevo). Aplicar todo el historial de nurturing como contexto.` },
         { id: "t6_3", nombre: "Agendar sesión diagnóstico con prioridad", tipo: "manual", obligatoria: true,
-          descripcion: "El lead recuperado tiene prioridad para agendar. Ofrecer disponibilidad inmediata de Tomás para no perder el momentum del retorno." },
+          descripcion: "El lead recuperado tiene prioridad para agendar. Ofrecer disponibilidad inmediata del asesor para no perder el momentum del retorno." },
       ],
       plantillas_mensaje: [], condiciones_workflow: [], canales: ["whatsapp", "email"],
       protocolo: {
