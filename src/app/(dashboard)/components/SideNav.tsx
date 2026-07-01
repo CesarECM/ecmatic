@@ -18,7 +18,7 @@ const SECTIONS: NavSection[] = [
       { href: "/admin/tickets",       label: "Tickets",             emoji: "🎫", roles: ["admin", "vendedor"] },
       { href: "/admin/citas",         label: "Citas",               emoji: "📅", roles: ["admin"] },
       { href: "/admin/prospeccion",   label: "Prospección",         emoji: "📋", roles: ["admin"] },
-      { href: "/admin/plantillas-wa", label: "Plantillas WA",        emoji: "💬", roles: ["admin"] },
+      { href: "/admin/plantillas-wa", label: "Plantillas WA",       emoji: "💬", roles: ["admin"] },
       { href: "/vendedor/agenda",     label: "Mi agenda",           emoji: "🗓️", roles: ["vendedor"] },
       { href: "/vendedor/llamadas",   label: "Mis llamadas",        emoji: "📞", roles: ["vendedor"] },
       { href: "/vendedor/comisiones", label: "Mis comisiones",      emoji: "💵", roles: ["vendedor"] },
@@ -28,48 +28,50 @@ const SECTIONS: NavSection[] = [
     id: "conocimiento",
     label: "Conocimiento",
     items: [
-      { href: "/admin/servicios",           label: "Servicios",           emoji: "🛍️", roles: ["admin"] },
-      { href: "/admin/servicios/auditoria", label: "Auditoría Servicios IA", emoji: "🔍", roles: ["admin"] },
-      { href: "/admin/conocimiento",  label: "Base de conocimiento",emoji: "📚", roles: ["admin"] },
-      { href: "/admin/nurturing",     label: "Nurturing",           emoji: "📧", roles: ["admin"] },
-      { href: "/admin/matriz",        label: "Matriz nD",           emoji: "🧮", roles: ["admin"] },
-      { href: "/admin/gatillos",      label: "Gatillos mentales",   emoji: "⚡", roles: ["admin"] },
-      { href: "/admin/momentos",      label: "Momentos de cierre",  emoji: "⏱️", roles: ["admin"] },
-      { href: "/admin/etiquetas",     label: "Etiquetas",           emoji: "🏷️", roles: ["admin"] },
-      { href: "/admin/cagc",              label: "Auditoría CAGC",      emoji: "🧭", roles: ["admin"] },
-      { href: "/admin/matriz-cagc-global",label: "Matriz Global CAGC",  emoji: "🗺️", roles: ["admin"] },
+      { href: "/admin/servicios",    label: "Servicios",           emoji: "🛍️", roles: ["admin"] },
+      { href: "/admin/conocimiento", label: "Base de conocimiento",emoji: "📚", roles: ["admin"] },
     ],
   },
   {
     id: "operaciones",
     label: "Operaciones",
     items: [
-      { href: "/admin/ghl-campaign",  label: "Campaña SBC",         emoji: "📣", roles: ["admin"] },
-      { href: "/admin/aprobaciones",  label: "Aprobaciones",        emoji: "✅", roles: ["admin"] },
-      { href: "/admin/pipelines",        label: "Pipelines",           emoji: "🔀", roles: ["admin"] },
-      { href: "/admin/ghl-workflows",  label: "GHL Workflows",       emoji: "⚡", roles: ["admin"] },
-      { href: "/admin/protocolos",    label: "Protocolos",          emoji: "🎯", roles: ["admin"] },
-      { href: "/admin/postventa",     label: "Post-Venta",          emoji: "🎓", roles: ["admin"] },
-      { href: "/admin/vendedores",    label: "Vendedores",          emoji: "🏆", roles: ["admin"] },
-      { href: "/admin/marca",         label: "Identidad de marca",  emoji: "🎨", roles: ["admin"] },
+      { href: "/admin/ghl-campaign", label: "Campaña SBC",  emoji: "📣", roles: ["admin"] },
+      { href: "/admin/aprobaciones", label: "Aprobaciones", emoji: "✅", roles: ["admin"] },
+      { href: "/admin/pipelines",    label: "Pipelines",    emoji: "🔀", roles: ["admin"] },
+      { href: "/admin/vendedores",   label: "Vendedores",   emoji: "🏆", roles: ["admin"] },
     ],
   },
   {
     id: "sistema",
     label: "Sistema",
     items: [
-      { href: "/admin/analitica",     label: "Analítica",           emoji: "📊", roles: ["admin"] },
-      { href: "/admin/financiero",    label: "Financiero",          emoji: "💰", roles: ["admin", "admin_financiero"] },
-      { href: "/admin/log",                    label: "Log de sistema",      emoji: "📋", roles: ["admin"] },
-      { href: "/admin/debug-agendamiento",    label: "Debug Agendamiento",  emoji: "🗓️", roles: ["admin"] },
-      { href: "/admin/auditoria-integridad", label: "Integridad",          emoji: "🔍", roles: ["admin"] },
-      { href: "/admin/sistema",             label: "Estado sistema",      emoji: "🔌", roles: ["admin"] },
-      { href: "/admin/automatizaciones",label: "Automatizaciones",    emoji: "⚙️", roles: ["admin"] },
-      { href: "/admin/guia",          label: "Guía de uso",         emoji: "📖", roles: ["admin"] },
-      { href: "/admin/sandbox",       label: "Widget de Pruebas",   emoji: "🧪", roles: ["admin"] },
-      { href: "/admin/pruebas",       label: "Usuarios de Prueba",  emoji: "👥", roles: ["admin"] },
-      { href: "/admin/depuracion",    label: "Depuración",          emoji: "🔬", roles: ["admin"] },
-      { href: "/admin/lanzamiento",   label: "Lanzamiento",         emoji: "🚀", roles: ["admin"] },
+      { href: "/admin/analitica",       label: "Analítica",       emoji: "📊", roles: ["admin"] },
+      { href: "/admin/financiero",      label: "Financiero",      emoji: "💰", roles: ["admin", "admin_financiero"] },
+      { href: "/admin/log",             label: "Log de sistema",  emoji: "📋", roles: ["admin"] },
+      { href: "/admin/sistema",         label: "Estado sistema",  emoji: "🔌", roles: ["admin"] },
+      { href: "/admin/automatizaciones",label: "Automatizaciones",emoji: "⚙️", roles: ["admin"] },
+    ],
+  },
+  {
+    id: "herramientas",
+    label: "Herramientas",
+    items: [
+      { href: "/admin/servicios/auditoria",  label: "Auditoría Servicios IA", emoji: "🔍", roles: ["admin"] },
+      { href: "/admin/matriz",               label: "Matriz nD",              emoji: "🧮", roles: ["admin"] },
+      { href: "/admin/gatillos",             label: "Gatillos mentales",      emoji: "⚡", roles: ["admin"] },
+      { href: "/admin/momentos",             label: "Momentos de cierre",     emoji: "⏱️", roles: ["admin"] },
+      { href: "/admin/etiquetas",            label: "Etiquetas",              emoji: "🏷️", roles: ["admin"] },
+      { href: "/admin/cagc",                 label: "Auditoría CAGC",         emoji: "🧭", roles: ["admin"] },
+      { href: "/admin/matriz-cagc-global",   label: "Matriz Global CAGC",     emoji: "🗺️", roles: ["admin"] },
+      { href: "/admin/ghl-workflows",        label: "GHL Workflows",          emoji: "⚡", roles: ["admin"] },
+      { href: "/admin/protocolos",           label: "Protocolos",             emoji: "🎯", roles: ["admin"] },
+      { href: "/admin/debug-agendamiento",   label: "Debug Agendamiento",     emoji: "🗓️", roles: ["admin"] },
+      { href: "/admin/auditoria-integridad", label: "Integridad",             emoji: "🔍", roles: ["admin"] },
+      { href: "/admin/guia",                 label: "Guía de uso",            emoji: "📖", roles: ["admin"] },
+      { href: "/admin/sandbox",              label: "Widget de Pruebas",      emoji: "🧪", roles: ["admin"] },
+      { href: "/admin/pruebas",              label: "Usuarios de Prueba",     emoji: "👥", roles: ["admin"] },
+      { href: "/admin/depuracion",           label: "Depuración",             emoji: "🔬", roles: ["admin"] },
     ],
   },
 ];
@@ -130,7 +132,7 @@ function SectionBlock({ section, rol, esVendedor, pathname, collapsed, open, onT
   );
 }
 
-const INIT_SECTIONS = Object.fromEntries(SECTIONS.map((s) => [s.id, true]));
+const INIT_SECTIONS = Object.fromEntries(SECTIONS.map((s) => [s.id, s.id !== "herramientas"]));
 
 export function SideNav({ rol, esVendedor = false }: { rol: Rol; esVendedor?: boolean }) {
   const pathname = usePathname();
