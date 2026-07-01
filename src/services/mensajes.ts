@@ -133,6 +133,21 @@ export async function obtenerHistorial(leadId: string, limite = 10): Promise<str
     .join("\n");
 }
 
+// MPS-19 S72.2 — Retorna la fecha del último mensaje ENTRANTE del lead.
+// Null si el lead nunca respondió (ventana WA cerrada por definición).
+export async function obtenerUltimoEntrante(leadId: string): Promise<Date | null> {
+  const supabase = createServiceClient();
+  const { data } = await (supabase
+    .from("mensajes") as any)
+    .select("created_at")
+    .eq("lead_id", leadId)
+    .eq("direccion", "entrante")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { created_at: string } | null };
+  return data?.created_at ? new Date(data.created_at) : null;
+}
+
 export function dividirRespuesta(texto: string): string[] {
   if (texto.length <= 160) return [texto];
   const oraciones = texto.match(/[^.!?]+[.!?]+/g) ?? [texto];

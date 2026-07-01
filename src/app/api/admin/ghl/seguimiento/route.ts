@@ -7,7 +7,7 @@ import { logSistema } from "@/services/log-sistema";
 import { obtenerVencidos, type SeguimientoLead } from "@/services/seguimiento-lead";
 import { detectarSilencios } from "@/services/detectar-silencio";
 import { generarFollowupGHL } from "@/lib/ai/generar-followup-ghl";
-import { obtenerHistorial } from "@/services/mensajes";
+import { obtenerHistorial, obtenerUltimoEntrante } from "@/services/mensajes";
 import { buscarConversacionWA } from "@/lib/ghl/conversations-api";
 import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
 import { encolarMensajeGHL, obtenerStatsAprobacion } from "@/services/ghl-aprobacion";
@@ -129,6 +129,17 @@ async function registrarIntento(seg: SeguimientoLead): Promise<void> {
     }));
 }
 
+const VENTANA_WA_MS = 24 * 3_600_000; // MPS-19: ventana de sesión WA
+
+// MPS-19 S72.3 — Devuelve true si el lead está fuera de la ventana WA de 24h.
+// Null (nunca respondió) equivale a ventana cerrada: el primer mensaje de campaña
+// lo envía GHL como template; ECMatic no puede iniciar conversación libre.
+async function estaFueraDeVentanaWA(leadId: string): Promise<boolean> {
+  const ultimo = await obtenerUltimoEntrante(leadId).catch(() => null);
+  if (!ultimo) return true;
+  return Date.now() - ultimo.getTime() > VENTANA_WA_MS;
+}
+
 type ResultadoProcesamiento = "encolado" | "ya_en_cola" | "fallo_contacto" | "fallo_conv" | "fallo_ia" | "fallo_encolar";
 
 async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promise<ResultadoProcesamiento> {
@@ -203,19 +214,33 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
 
   const labelContexto = `Recordatorio ${seg.tipo} · nivel ${nivel}${seg.gatillo_snapshot ? ` · ${seg.gatillo_snapshot}` : ""}`;
 
+  // MPS-19 S72.3 — Verificar ventana WA de 24h antes de encolar
+  const fueraDeVentana = await estaFueraDeVentanaWA(seg.lead_id).catch(() => false);
+
+  if (fueraDeVentana) {
+    void logSistema({
+      categoria: "cron", tipoAccion: "cron.seguimiento.fuera_ventana_wa", fase: "warn", traceId,
+      resultado: "lead fuera de ventana WA 24h — encolando como requiere_template",
+      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, tipo: seg.tipo, nivel },
+    });
+  }
+
   // Encolar con seguimientoId para que avanzarNivel se dispare al aprobar/rechazar
   const itemId = await encolarMensajeGHL({
-    campana:       seg.campana ?? CAMPANA_ACTIVA,
-    ghlContactId:  contactId,
+    campana:          seg.campana ?? CAMPANA_ACTIVA,
+    ghlContactId:     contactId,
     convId,
-    leadEcmaticId: seg.lead_id,
+    leadEcmaticId:    seg.lead_id,
     nombre,
-    mensajeLead:   labelContexto,
-    mensajeIA:     texto,
-    contexto:      { tipo: seg.tipo, nivel, gatillo: seg.gatillo_snapshot },
-    scoreIA:       0.75,
-    razonScore:    `Recordatorio automático — ${labelContexto}`,
-    seguimientoId: seg.id,
+    mensajeLead:      labelContexto,
+    mensajeIA:        texto,
+    contexto:         { tipo: seg.tipo, nivel, gatillo: seg.gatillo_snapshot },
+    scoreIA:          fueraDeVentana ? 0 : 0.75,
+    razonScore:       fueraDeVentana
+      ? `⚠️ Fuera de ventana WA — enviar template desde GHL`
+      : `Recordatorio automático — ${labelContexto}`,
+    seguimientoId:    seg.id,
+    requiereTemplate: fueraDeVentana,
   }).catch(() => null);
 
   if (!itemId) {
@@ -233,10 +258,11 @@ async function procesarSeguimiento(seg: SeguimientoLead, traceId: string): Promi
     convId,
     contactId,
     nombre,
-    mensajeLead:   labelContexto,
-    scoreIA:       0.75,
-    leadEcmaticId: seg.lead_id,
-    urgencia:      1,
+    mensajeLead:      labelContexto,
+    scoreIA:          fueraDeVentana ? 0 : 0.75,
+    leadEcmaticId:    seg.lead_id,
+    urgencia:         fueraDeVentana ? 2 : 1,
+    requiereTemplate: fueraDeVentana,
   }).catch(() => null);
 
   void registrarIntento(seg);

@@ -13,6 +13,7 @@ export interface ParamsNotifGHL {
   scoreIA: number;
   leadEcmaticId?: string;
   urgencia?: number;
+  requiereTemplate?: boolean; // MPS-19: lead fuera de ventana WA 24h
 }
 
 function prefijo(urgencia: number): string {
@@ -63,7 +64,7 @@ export async function notificarBatchPendientesGHL(total: number): Promise<void> 
 }
 
 export async function notificarMensajePendienteGHL(params: ParamsNotifGHL): Promise<void> {
-  const { contactId, nombre, mensajeLead, scoreIA, leadEcmaticId, urgencia = 0 } = params;
+  const { contactId, nombre, mensajeLead, scoreIA, leadEcmaticId, urgencia = 0, requiereTemplate = false } = params;
   const adminWa = process.env.ADMIN_WHATSAPP;
 
   if (!adminWa) {
@@ -76,18 +77,26 @@ export async function notificarMensajePendienteGHL(params: ParamsNotifGHL): Prom
     return;
   }
 
-  const displayNombre  = nombre ?? contactId.slice(-6);
-  const scoreDisplay   = `${Math.round(scoreIA * 100)}%`;
-  const fichaUrl       = leadEcmaticId
+  const displayNombre = nombre ?? contactId.slice(-6);
+  const fichaUrl      = leadEcmaticId
     ? `${BASE_URL}/admin/leads/${leadEcmaticId}`
     : `${BASE_URL}/admin/aprobaciones`;
 
-  const texto =
-    `${prefijo(urgencia)} *Mensaje GHL pendiente de aprobación*\n\n` +
-    `👤 ${displayNombre}\n` +
-    `💬 "${mensajeLead.slice(0, 100)}${mensajeLead.length > 100 ? "…" : ""}"\n` +
-    `🎯 Score IA: ${scoreDisplay}\n\n` +
-    `Revisar → ${fichaUrl}`;
+  // MPS-19: notificación diferenciada cuando se requiere template
+  const texto = requiereTemplate
+    ? `${prefijo(urgencia)} *Seguimiento requiere template WA*\n\n` +
+      `👤 ${displayNombre}\n` +
+      `⚠️ La ventana de 24h está cerrada — NO se puede enviar mensaje libre.\n` +
+      `📋 El sistema generó un texto de referencia para que lo adaptes al template en GHL.\n\n` +
+      `1️⃣ Abre la ficha del lead → ${fichaUrl}\n` +
+      `2️⃣ Copia el texto sugerido\n` +
+      `3️⃣ Ve a GHL → envía el template al contacto\n` +
+      `4️⃣ Regresa a ECMatic y marca "Enviado manualmente"`
+    : `${prefijo(urgencia)} *Mensaje GHL pendiente de aprobación*\n\n` +
+      `👤 ${displayNombre}\n` +
+      `💬 "${mensajeLead.slice(0, 100)}${mensajeLead.length > 100 ? "…" : ""}"\n` +
+      `🎯 Score IA: ${Math.round(scoreIA * 100)}%\n\n` +
+      `Revisar → ${fichaUrl}`;
 
   void logSistema({
     categoria:  "webhook",

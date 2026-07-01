@@ -26,6 +26,7 @@ import {
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
 import { procesarFeedbackEdicion } from "@/services/ghl-feedback-edicion";
+import { obtenerUltimoEntrante } from "@/services/mensajes";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -225,6 +226,27 @@ export const aprobarMensajeGHLAction = safeAction(async (
   campana: string,
   leadId: string
 ) => {
+  // MPS-19 S72.4 — Double-check: re-verificar ventana WA en tiempo real.
+  // El item pudo encolarse dentro de ventana pero el admin tardó >24h en aprobar.
+  const VENTANA_WA_MS = 24 * 3_600_000;
+  if (leadEcmaticId) {
+    const ultimo = await obtenerUltimoEntrante(leadEcmaticId).catch(() => null);
+    const fueraDeVentana = !ultimo || (Date.now() - ultimo.getTime() > VENTANA_WA_MS);
+    if (fueraDeVentana) {
+      // Actualizar el item en cola para que la UI muestre el banner correcto
+      const supabase = createServiceClient();
+      await (supabase as any)
+        .from("ghl_approval_queue")
+        .update({ requiere_template: true, razon_score: "⚠️ Ventana WA expiró — enviar template desde GHL" })
+        .eq("id", itemId);
+      void logSistema({
+        categoria: "ui", tipoAccion: "ghl_aprobacion.envio_bloqueado_ventana", fase: "warn",
+        leadId, resultado: `item:${itemId} — ventana WA expiró al intentar aprobar`,
+      });
+      throw new Error("La ventana de 24h de WhatsApp expiró. Envía un template desde GHL y usa 'Marcar como enviado manualmente'.");
+    }
+  }
+
   await enviarMensajeGHLFragmentado(convId, mensajeIA, ghlContactId);
 
   if (leadEcmaticId) {
@@ -315,6 +337,39 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
   void logSistema({
     categoria: "ui", tipoAccion: "ghl_aprobacion.editar", fase: "ok",
     leadId, resultado: `item:${itemId}`, metadata: { razonEdicion: razonEdicion.slice(0, 100) },
+  });
+
+  revalidatePath(`/admin/leads/${leadId}`);
+  revalidatePath("/admin/aprobaciones");
+});
+
+// MPS-19 S72.4 — El admin envió el template manualmente desde GHL; cierra el loop en ECMatic.
+// No llama a GHL (el admin ya envió), solo registra el resultado y avanza el nivel.
+export const marcarEnviadoManualmenteGHLAction = safeAction(async (
+  itemId: string,
+  campana: string,
+  leadId: string
+) => {
+  await resolverItemAprobacion({
+    id: itemId,
+    estado: "aprobado",
+    mensajeFinal: "(enviado manualmente vía template GHL)",
+  });
+  await actualizarStatsAprobacion(campana, "aprobado");
+  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
+
+  const supabase = createServiceClient();
+  const { data: qItem } = await (supabase as any)
+    .from("ghl_approval_queue").select("seguimiento_id").eq("id", itemId).maybeSingle();
+  const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
+  if (seguimientoId) {
+    const seg = await obtenerPorId(seguimientoId).catch(() => null);
+    if (seg?.estado === "activo") await avanzarNivel(seg).catch(() => null);
+  }
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.enviado_template_manual", fase: "ok",
+    leadId, resultado: `item:${itemId}`,
   });
 
   revalidatePath(`/admin/leads/${leadId}`);

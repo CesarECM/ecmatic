@@ -25,6 +25,7 @@ export interface ItemAprobacionGHL {
   created_at: string;
   revisado_at: string | null;
   enviado_at: string | null;
+  requiere_template: boolean;
 }
 
 export interface StatsAprobacionGHL {
@@ -78,22 +79,24 @@ export async function encolarMensajeGHL(params: {
   scoreIA?: number;
   razonScore?: string;
   seguimientoId?: string | null;  // MPS-5: para avanzarNivel al aprobar
+  requiereTemplate?: boolean;     // MPS-19: lead fuera de ventana WA 24h
 }): Promise<string | null> {
   const supabase = createServiceClient();
   const { data, error } = await (supabase as any)
     .from("ghl_approval_queue")
     .insert({
-      campana:          params.campana,
-      ghl_contact_id:   params.ghlContactId,
-      conv_id:          params.convId,
-      lead_ecmatic_id:  params.leadEcmaticId ?? null,
-      nombre:           params.nombre ?? null,
-      mensaje_lead:     params.mensajeLead,
-      mensaje_ia:       params.mensajeIA,
-      contexto:         params.contexto ?? null,
-      score_ia:         params.scoreIA ?? null,
-      razon_score:      params.razonScore ?? null,
-      seguimiento_id:   params.seguimientoId ?? null,
+      campana:           params.campana,
+      ghl_contact_id:    params.ghlContactId,
+      conv_id:           params.convId,
+      lead_ecmatic_id:   params.leadEcmaticId ?? null,
+      nombre:            params.nombre ?? null,
+      mensaje_lead:      params.mensajeLead,
+      mensaje_ia:        params.mensajeIA,
+      contexto:          params.contexto ?? null,
+      score_ia:          params.scoreIA ?? null,
+      razon_score:       params.razonScore ?? null,
+      seguimiento_id:    params.seguimientoId ?? null,
+      requiere_template: params.requiereTemplate ?? false,
     })
     .select("id")
     .single() as { data: { id: string } | null; error: unknown };
