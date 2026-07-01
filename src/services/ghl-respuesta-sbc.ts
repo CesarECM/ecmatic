@@ -7,6 +7,7 @@ import { generarRespuesta } from "@/lib/ai/motor-respuesta";
 import { detectarViolacion } from "@/lib/ai/guardrails-precio";
 import { procesarArcoEmocional } from "@/services/arco-emocional";
 import { registrarCierre } from "@/services/conocimiento";
+import { registrarSenales } from "@/services/kbi/senales";
 import { guardarMensaje, obtenerHistorial } from "@/services/mensajes";
 import { clasificarIntencion } from "@/lib/ai/clasificador";
 import { obtenerFaseLead } from "@/services/cagc";
@@ -241,7 +242,10 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     // S68.3 + S69.2 — persistir el mensaje enviado y cerrar el loop KB
     if (enviado) {
       void guardarMensaje({ leadId, contenido: texto, direccion: "saliente" }).catch(() => null);
-      if (recursosIds?.length) void registrarCierre(recursosIds).catch(() => null);
+      if (recursosIds?.length) {
+        void registrarCierre(recursosIds).catch(() => null);
+        void registrarSenales("cierre", recursosIds, { leadId }).catch(() => null);
+      }
       void actualizarStatsAprobacion(CAMPANA_ACTIVA, "aprobado").catch(() => null);
     }
 

@@ -1,6 +1,7 @@
 import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
+import { registrarSenales } from "@/services/kbi/senales";
 import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import { inferirRespuestaMatriz } from "@/services/matriz-ia";
@@ -12,7 +13,8 @@ import { instruccionReglaOroCierre } from "./regla-oro-cierre";
 import { generarBloqueEstrategiaPrecio, type DatosPrecioServicio, type LinkPago } from "./estrategia-precio";
 import type { ModoRevelacion } from "./detector-revelacion";
 import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
-import { buscarRecursos, calcularScore, formatearRecursoKB } from "./kb-search";
+import { buscarRecursosKBI, calcularScore, formatearRecursoKB } from "./kb-search";
+import { calcularScoreRespuesta } from "@/services/kbi/scores";
 import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
 import { obtenerRelacionesParaPrompt } from "@/services/servicio-relaciones";
 import { obtenerHintCalidadLead } from "@/services/calidad-conversacional";
@@ -103,7 +105,7 @@ export async function generarRespuesta(
   };
 
   const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt] = await Promise.all([
-    buscarRecursos(queryParaBusqueda),
+    buscarRecursosKBI(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
     obtenerIdentidad().catch(() => null),
@@ -128,7 +130,21 @@ export async function generarRespuesta(
 
   const todosRecursos = [...serviciosSemánticos, ...kb];
   void registrarUso(todosRecursos.map((r) => r.id));
-  if (todosRecursos.length === 0) void sugerirRecursoDesdeQuery(queryParaBusqueda);
+  if (todosRecursos.length === 0) {
+    void sugerirRecursoDesdeQuery(queryParaBusqueda);
+    // KBI S75.3 — trigger inline: 0 resultados KB → sugerencia de tipo "crear"
+    void import("@/services/kbi/detector").then(({ crearSugerenciaHueco }) =>
+      crearSugerenciaHueco(queryParaBusqueda).catch(() => null)
+    );
+  }
+
+  // KBI S73.4 — señal 'uso' para el pool KB (faq/regla); sesionId agrupa la conversación
+  if (kb.length > 0) {
+    void registrarSenales("uso", kb.map((r) => r.id), {
+      leadId:    contexto.leadId,
+      sesionId:  crypto.randomUUID(),
+    });
+  }
 
   // S32.8 — Seleccionar imagen activa del canal para el servicio principal
   const canalParaImagen = (contexto.canal_origen === "email" ? "email"
@@ -346,9 +362,16 @@ ${instruccionReglaOroCierre()}`;
 
   const raw  = (response.content[0] as { text: string }).text.trim();
   const texto = normalizarRespuesta(raw);
+
+  // KBI S74.3 — score de respuesta Bayesiano (async, no bloquea el retorno)
+  const kbIds = kb.map((r) => r.id);
+  const scoreConfianza = kbIds.length > 0
+    ? await calcularScoreRespuesta(kbIds, texto).catch(() => calcularScore(todosRecursos, sugerenciaMatriz, texto))
+    : calcularScore(todosRecursos, sugerenciaMatriz, texto);
+
   return {
     texto,
-    scoreConfianza: calcularScore(todosRecursos, sugerenciaMatriz, texto),
+    scoreConfianza,
     imagenUrl: imagenActivaUrl,
     recursosIds: todosRecursos.map((r) => r.id),
   };

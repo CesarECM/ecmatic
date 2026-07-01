@@ -9,7 +9,10 @@ import { ColaMensajesSeccion } from "./ColaMensajesSeccion";
 import { ColaSugerenciasSeccion } from "./ColaSugerenciasSeccion";
 import { ColaSugerenciasKBSeccion } from "./ColaSugerenciasKBSeccion";
 import { ColaGHLSeccion } from "./ColaGHLSeccion";
+import { KBISugerenciasSeccion } from "./KBISugerenciasSeccion";
 import type { RecursoKBResumen } from "./SugerenciaKBCard";
+import type { RecursoActual } from "./KBISugerenciaModal";
+import type { KBISugerenciaItem } from "./KBISugerenciaCard";
 import {
   aprobarSugerenciaAction, rechazarSugerenciaAction,
   aprobarClusterAction, rechazarClusterAction,
@@ -17,6 +20,7 @@ import {
   aprobarComprobanteAction, rechazarComprobanteAction,
   aprobarSugerenciaKBAction, eliminarSugerenciaAction,
   previsualizarCambioKBAction,
+  aprobarKBISugerenciaAction, rechazarKBISugerenciaAction,
 } from "./actions";
 
 export const metadata = { title: "Cola de Aprobaciones · ECMatic" };
@@ -34,6 +38,7 @@ export default async function AprobacionesPage() {
     { data: matriz },
     { data: sugerencias },
     { data: clusters },
+    { data: kbiSugerencias },
     etiquetasPendientes,
     mensajesPendientes,
     comprobantesPendientes,
@@ -50,11 +55,28 @@ export default async function AprobacionesPage() {
       .is("aprobado", null).order("prioridad").order("created_at"),
     (supabase as any).from("clusters_sugerencias")
       .select("id, titulo_generado, conteo").order("conteo", { ascending: false }),
+    (supabase as any).from("kbi_sugerencias")
+      .select("id, recurso_id, tipo_accion, tipo_recurso_nuevo, titulo_propuesto, contenido_propuesto, razon, origen, created_at")
+      .eq("estado", "pendiente").order("created_at"),
     listarPendientes(),
     listarMensajesPendientes(),
     listarComprobantesPendientes(),
     listarPendientesGHL().catch(() => []),
   ]);
+
+  // MPS-20 — Fetch recursos actuales referenciados en kbi_sugerencias (para before/after en modal)
+  const kbiItems = (kbiSugerencias ?? []) as KBISugerenciaItem[];
+  const kbiRecursoIds = [...new Set(kbiItems.map(s => s.recurso_id).filter(Boolean) as string[])];
+  const mapaKBIRecursos: Record<string, RecursoActual> = {};
+  if (kbiRecursoIds.length > 0) {
+    const { data: kbiRecursos } = await supabase
+      .from("recursos_conocimiento")
+      .select("id, titulo, contenido")
+      .in("id", kbiRecursoIds);
+    for (const r of (kbiRecursos ?? []) as { id: string; titulo: string; contenido: string }[]) {
+      mapaKBIRecursos[r.id] = { titulo: r.titulo, contenido: r.contenido };
+    }
+  }
 
   // MPS-14 S52 — Separar sugerencias KB de las generales y hacer batch-fetch de recursos referenciados
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,6 +107,7 @@ export default async function AprobacionesPage() {
 
   const totalPendientes =
     (kb?.length ?? 0) + (matriz?.length ?? 0) + (sugerencias?.length ?? 0) +
+    kbiItems.length +
     etiquetasPendientes.length + mensajesPendientes.length + comprobantesPendientes.length +
     pendientesGHL.length;
 
@@ -100,6 +123,14 @@ export default async function AprobacionesPage() {
           Todo aprobado — no hay sugerencias pendientes.
         </div>
       )}
+
+      {/* MPS-20 S76.3 — Sugerencias KBI (ciclo de aprendizaje real) */}
+      <KBISugerenciasSeccion
+        items={kbiItems}
+        recursosActuales={mapaKBIRecursos}
+        aprobarAction={aprobarKBISugerenciaAction}
+        rechazarAction={rechazarKBISugerenciaAction}
+      />
 
       <ColaKBSeccion items={kb ?? []} />
 

@@ -37,6 +37,8 @@
     { "path": "/api/admin/ghl/campana/decay",           "schedule": "0 8 * * *" },
     { "path": "/api/admin/ghl/kb-feedback-scan",        "schedule": "0 10 * * *" },
     { "path": "/api/admin/ghl/procesar-buffer",         "schedule": "*/1 * * * *" },
-    { "path": "/api/admin/ghl/prior-global",           "schedule": "0 12 * * 1" }
+    { "path": "/api/admin/ghl/prior-global",           "schedule": "0 12 * * 1" },
+    { "path": "/api/admin/kbi/calcular-scores",        "schedule": "30 9 * * *" },
+    { "path": "/api/admin/kbi/detectar",               "schedule": "30 14 * * *" }
   ]
 }

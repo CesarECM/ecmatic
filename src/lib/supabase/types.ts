@@ -8,6 +8,7 @@ export type Temperamento = "D" | "I" | "S" | "C";
 export type TipoAvatar = "B2C" | "B2B";
 export type TipoRecurso =
   | "faq"
+  | "regla"
   | "objecion"
   | "servicio"
   | "template_wa"

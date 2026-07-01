@@ -26,6 +26,7 @@ export type RecursoRow = {
   contenido: string;
   score_confianza: number;
   score_uso: number;
+  kbi_score?: number | null;
   aprobado: boolean;
   activo: boolean;
   origen: string;
@@ -191,7 +192,13 @@ export function RecursoCard({ r }: { r: RecursoRow }) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs text-muted-foreground whitespace-nowrap">
-              score {(r.score_confianza * 100).toFixed(0)}% · {r.score_uso} usos
+              score {(r.score_confianza * 100).toFixed(0)}%
+              {r.kbi_score != null && r.kbi_score !== 0.5 && (
+                <span className={`ml-1 font-medium ${r.kbi_score >= 0.6 ? "text-green-600" : r.kbi_score >= 0.35 ? "text-amber-600" : "text-red-500"}`}>
+                  · KBI {(r.kbi_score * 100).toFixed(0)}%
+                </span>
+              )}
+              {" · "}{r.score_uso} usos
             </span>
             <AuditorIABtn tipo="kb" id={r.id} nombre={r.titulo} />
           </div>

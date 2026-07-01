@@ -10,6 +10,7 @@ import { logSistema } from "@/services/log-sistema";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
 import { aplicarSugerenciaKB, type ResultadoAplicacion } from "@/services/aplicar-sugerencia-kb";
 import { registrarFalloSugerencia } from "@/services/conocimiento";
+import { aplicarKBISugerencia, rechazarKBISugerencia, type ResultadoKBI } from "@/services/kbi/aplicador";
 
 const PATH = "/admin/aprobaciones";
 
@@ -224,3 +225,27 @@ export async function rechazarComprobanteAction(id: string) {
   void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-comprobante", fase: "ok", metadata: { comprobante_id: id } });
   revalidatePath(PATH);
 }
+
+// MPS-20 S76.2 — Acciones KBI: aprobar aplica el cambio real; rechazar registra señal negativa.
+export const aprobarKBISugerenciaAction = safeAction(
+  async (id: string, override?: { titulo?: string; contenido?: string }): Promise<ResultadoKBI> => {
+    const resultado = await aplicarKBISugerencia(id, override);
+    void logSistema({
+      categoria: "ui", tipoAccion: "kbi.aprobaciones.aprobar", fase: "ok",
+      metadata: { id, accion: resultado.accion, recursoId: resultado.recursoId },
+    });
+    revalidatePath(PATH);
+    return resultado;
+  }
+);
+
+export const rechazarKBISugerenciaAction = safeAction(
+  async (id: string, feedback: string): Promise<void> => {
+    await rechazarKBISugerencia(id, feedback);
+    void logSistema({
+      categoria: "ui", tipoAccion: "kbi.aprobaciones.rechazar", fase: "ok",
+      metadata: { id, feedback },
+    });
+    revalidatePath(PATH);
+  }
+);

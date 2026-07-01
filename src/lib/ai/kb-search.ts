@@ -122,6 +122,50 @@ export async function buscarRecursos(query: string, limitePorPool = 3): Promise<
   return { servicios, kb };
 }
 
+// MPS-20 S74.3 — Versión KBI del pool de KB: usa buscar_recursos_kbi en lugar de buscar_recursos.
+// El RPC combina similitud coseno (70%) + kbi_score Bayesiano (30%).
+// Servicios mantienen su pool separado sin cambios.
+// El re-ranking Haiku se conserva sobre los resultados de la RPC KBI.
+export async function buscarRecursosKBI(query: string, limitePorPool = 3): Promise<ResultadosBusqueda> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = createServiceClient() as any;
+  const embedding = await generarEmbedding(query);
+  const limiteKBI = Math.max(limitePorPool * 2 + 2, 8);
+
+  const [kbiRes, svcRes] = await Promise.all([
+    supabase.rpc("buscar_recursos_kbi", { query_embedding: embedding, limite: limiteKBI, umbral: 0.60 }),
+    supabase.rpc("buscar_servicios",    { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
+  ]);
+
+  let servicios = (svcRes.data ?? []) as RecursoKB[];
+
+  // Fallback de texto para servicios (sin cambios respecto a buscarRecursos)
+  if (servicios.length === 0) {
+    const palabras = query.trim().split(/\s+/).filter(p => p.length > 3);
+    if (palabras.length > 0) {
+      const orClause = palabras.flatMap(p =>
+        [`titulo.ilike.%${p}%`, `contenido.ilike.%${p}%`, `caracteristicas.ilike.%${p}%`]
+      ).join(",");
+      const { data: textData } = await supabase
+        .from("servicios")
+        .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es, estandar_conocer, nivel_estandar, modalidad, duracion_horas, requisitos_previos, entregables, garantia, sector_industria, ocupacion_objetivo, url_landing_propia, slug, modo_venta")
+        .eq("activo", true).eq("aprobado", true)
+        .or(orClause)
+        .limit(limitePorPool);
+      if (textData?.length) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        servicios = (textData as any[]).map(r => ({ ...r, tipo: "servicio" }));
+      }
+    }
+  }
+
+  // Re-ranking Haiku sobre los candidatos KBI expandidos
+  const kbiRaw = (kbiRes.data ?? []) as RecursoKB[];
+  const kb = await rerankarPool(query, kbiRaw, limitePorPool);
+
+  return { servicios, kb };
+}
+
 // Score heurístico de confianza: recursos KB y matriz elevan; frases de incertidumbre bajan.
 export function calcularScore(
   recursos: { id: string }[],

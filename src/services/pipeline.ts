@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { generarEmbedding } from "@/lib/ai/client";
 import { registrarCierre, registrarFalloRecursos } from "@/services/conocimiento";
+import { registrarSenales } from "@/services/kbi/senales";
 import { actualizarListasAlMoverEtapa, excluirDeNurturing } from "@/lib/email/campanas";
 import { actualizarScoreMatriz } from "@/services/matriz";
 import { clasificarLead } from "@/services/avatares";
@@ -225,6 +226,7 @@ async function acreditarRecursosAlCerrar(leadId: string): Promise<void> {
     const ids = (recursos ?? []).map((r: { id: string }) => r.id);
     // incremento=2: conversión vale el doble que un avance intermedio
     await registrarCierre(ids, 2);
+    void registrarSenales("cierre", ids);
   } catch {
     // No bloquear el flujo principal
   }
@@ -250,6 +252,7 @@ async function registrarAvancePipeline(leadId: string): Promise<void> {
     });
     const ids = (recursos ?? []).map((r: { id: string }) => r.id);
     await registrarCierre(ids, 1);
+    void registrarSenales("cierre", ids);
   } catch {
     // No bloquear el flujo principal
   }
@@ -275,6 +278,7 @@ async function registrarFalloConversacion(leadId: string): Promise<void> {
     });
     const ids = (recursos ?? []).map((r: { id: string }) => r.id);
     await registrarFalloRecursos(ids);
+    void registrarSenales("perdida", ids);
   } catch {
     // No bloquear el flujo principal
   }

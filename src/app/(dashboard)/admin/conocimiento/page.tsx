@@ -12,7 +12,7 @@ export default async function ConocimientoPage() {
   const [{ data: recursos }, alertas] = await Promise.all([
     (createServiceClient() as any)
       .from("recursos_conocimiento")
-      .select("id, tipo, titulo, contenido, score_confianza, score_uso, aprobado, activo, origen, created_at, versiones_previas, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es, contextos_aplica")
+      .select("id, tipo, titulo, contenido, score_confianza, score_uso, kbi_score, aprobado, activo, origen, created_at, versiones_previas, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es, contextos_aplica")
       .neq("tipo", "servicio")   // S32.7 — servicios viven en /admin/servicios
       .order("created_at", { ascending: false }),
     detectarObsoletos(),
