@@ -22,6 +22,46 @@ function prefijo(urgencia: number): string {
   return "🆘 URGENTE";
 }
 
+export async function notificarBatchPendientesGHL(total: number): Promise<void> {
+  const adminWa = process.env.ADMIN_WHATSAPP;
+  if (!adminWa) return;
+
+  const texto =
+    `📬 *Cola de aprobación: ${total} mensajes pendientes*\n\n` +
+    `Revisar → ${BASE_URL}/admin/aprobaciones`;
+
+  void logSistema({
+    categoria:  "webhook",
+    tipoAccion: "ghl_aprobacion.notif_batch",
+    fase:       "inicio",
+    resultado:  `total:${total} adminWa:${adminWa}`,
+  });
+
+  try {
+    const adminContactId = await buscarOCrearContactoGHL(adminWa, "César Admin");
+    if (!adminContactId) throw new Error("buscarOCrearContactoGHL retornó null");
+
+    const adminConvId = await obtenerOCrearConversacionWA(adminContactId);
+    if (!adminConvId) throw new Error("obtenerOCrearConversacionWA retornó null");
+
+    await enviarMensajeGHL(adminConvId, texto, adminContactId);
+
+    void logSistema({
+      categoria:  "webhook",
+      tipoAccion: "ghl_aprobacion.notif_batch",
+      fase:       "ok",
+      resultado:  `batch_enviado total:${total}`,
+    });
+  } catch (err) {
+    void logSistema({
+      categoria:  "webhook",
+      tipoAccion: "ghl_aprobacion.notif_batch",
+      fase:       "error",
+      resultado:  String(err).slice(0, 200),
+    });
+  }
+}
+
 export async function notificarMensajePendienteGHL(params: ParamsNotifGHL): Promise<void> {
   const { contactId, nombre, mensajeLead, scoreIA, leadEcmaticId, urgencia = 0 } = params;
   const adminWa = process.env.ADMIN_WHATSAPP;

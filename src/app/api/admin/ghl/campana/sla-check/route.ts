@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { logSistema } from "@/services/log-sistema";
 import { listarPendientesGHL, registrarNotificacionSLA } from "@/services/ghl-aprobacion";
-import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
+import { notificarMensajePendienteGHL, notificarBatchPendientesGHL } from "@/services/ghl-aprobacion-notif";
 
 const CRON_SECRET = process.env.CRON_SECRET;
+const UMBRAL_BATCH = 10; // > este número → notificación única de resumen
 
 // Minutos desde creación → índice de notificación esperado
 // t+4h=240m → t+6h=360m → t+7h=420m → t+7.5h=450m → t+7.5h+5m cada 5m
@@ -25,6 +26,12 @@ function notificacionEsperada(minutos: number, conteo: number): boolean {
   return notifAdicionales >= (conteo - UMBRALES_MINUTOS.length + 1);
 }
 
+// 9am–10pm CDMX (UTC-6 fijo desde 2023): 15:00–04:00 UTC
+function enHorarioHabil(): boolean {
+  const h = new Date().getUTCHours();
+  return h >= 15 || h < 4;
+}
+
 export async function GET(request: NextRequest) {
   const auth = request.headers.get("authorization");
   if (!CRON_SECRET || auth !== `Bearer ${CRON_SECRET}`) {
@@ -33,37 +40,51 @@ export async function GET(request: NextRequest) {
 
   void logSistema({ categoria: "cron", tipoAccion: "cron.ghl-sla-check", fase: "inicio", resultado: "Revisando SLA cola aprobación GHL" });
 
+  if (!enHorarioHabil()) {
+    void logSistema({ categoria: "cron", tipoAccion: "cron.ghl-sla-check", fase: "debug", resultado: "Fuera de horario (9am–10pm CDMX)" });
+    return NextResponse.json({ pendientes: 0, notificados: 0, fuera_horario: true });
+  }
+
   const inicio = Date.now();
   let notificados = 0;
 
   try {
     const pendientes = await listarPendientesGHL();
 
-    for (const item of pendientes) {
-      const minutos = minutosDesde(item.created_at);
-      const conteo  = item.conteo_notificaciones;
+    const debenNotificar = pendientes.filter(item =>
+      notificacionEsperada(minutosDesde(item.created_at), item.conteo_notificaciones)
+    );
 
-      if (!notificacionEsperada(minutos, conteo)) continue;
+    if (debenNotificar.length > 0) {
+      if (pendientes.length > UMBRAL_BATCH) {
+        await notificarBatchPendientesGHL(pendientes.length).catch(() => null);
+        await Promise.all(
+          debenNotificar.map(item => registrarNotificacionSLA(item.id, item.conteo_notificaciones))
+        );
+        notificados = debenNotificar.length;
+      } else {
+        for (const item of debenNotificar) {
+          await notificarMensajePendienteGHL({
+            itemId:        item.id,
+            convId:        item.conv_id,
+            contactId:     item.ghl_contact_id,
+            nombre:        item.nombre,
+            mensajeLead:   item.mensaje_lead,
+            scoreIA:       item.score_ia ?? 0.5,
+            leadEcmaticId: item.lead_ecmatic_id ?? undefined,
+            urgencia:      item.conteo_notificaciones,
+          }).catch(() => null);
 
-      await notificarMensajePendienteGHL({
-        itemId:        item.id,
-        convId:        item.conv_id,
-        contactId:     item.ghl_contact_id,
-        nombre:        item.nombre,
-        mensajeLead:   item.mensaje_lead,
-        scoreIA:       item.score_ia ?? 0.5,
-        leadEcmaticId: item.lead_ecmatic_id ?? undefined,
-        urgencia:      conteo,
-      }).catch(() => null);
-
-      await registrarNotificacionSLA(item.id, conteo);
-      notificados++;
+          await registrarNotificacionSLA(item.id, item.conteo_notificaciones);
+          notificados++;
+        }
+      }
     }
 
     void logSistema({
       categoria: "cron", tipoAccion: "cron.ghl-sla-check", fase: "ok",
       resultado: `${pendientes.length} pendientes, ${notificados} notificados`,
-      metadata:  { pendientes: pendientes.length, notificados, duracion_ms: Date.now() - inicio },
+      metadata:  { pendientes: pendientes.length, notificados, batch: pendientes.length > UMBRAL_BATCH, duracion_ms: Date.now() - inicio },
     });
 
     return NextResponse.json({ pendientes: pendientes.length, notificados });
