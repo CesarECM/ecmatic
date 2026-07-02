@@ -6,6 +6,8 @@ interface GhlContactoCardProps {
   nombre?: string | null;
   telefono?: string | null;
   email?: string | null;
+  ghlUrl?: string | null;
+  waUrl?: string | null;
 }
 
 function CampoCopiable({ etiqueta, valor }: { etiqueta: string; valor: string }) {
@@ -16,9 +18,7 @@ function CampoCopiable({ etiqueta, valor }: { etiqueta: string; valor: string })
       await navigator.clipboard.writeText(valor);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 1800);
-    } catch {
-      /* clipboard no disponible en contextos inseguros */
-    }
+    } catch { /* clipboard no disponible en contextos inseguros */ }
   }, [valor]);
 
   return (
@@ -36,7 +36,7 @@ function CampoCopiable({ etiqueta, valor }: { etiqueta: string; valor: string })
   );
 }
 
-export function GhlContactoCard({ nombre, telefono, email }: GhlContactoCardProps) {
+export function GhlContactoCard({ nombre, telefono, email, ghlUrl, waUrl }: GhlContactoCardProps) {
   const [todoCopiado, setTodoCopiado] = useState(false);
 
   const copiarTodo = useCallback(async () => {
@@ -49,9 +49,7 @@ export function GhlContactoCard({ nombre, telefono, email }: GhlContactoCardProp
       await navigator.clipboard.writeText(lineas.join("\n"));
       setTodoCopiado(true);
       setTimeout(() => setTodoCopiado(false), 1800);
-    } catch {
-      /* clipboard no disponible */
-    }
+    } catch { /* clipboard no disponible */ }
   }, [nombre, telefono, email]);
 
   if (!nombre && !telefono && !email) return null;
@@ -68,6 +66,28 @@ export function GhlContactoCard({ nombre, telefono, email }: GhlContactoCardProp
       >
         {todoCopiado ? "✓ Copiado" : "Copiar todo"}
       </button>
+      {waUrl && (
+        <a
+          href={waUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Abrir chat en WhatsApp Web"
+          className="text-xs px-2.5 py-1 rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-colors font-medium"
+        >
+          WA ↗
+        </a>
+      )}
+      {ghlUrl && (
+        <a
+          href={ghlUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Ver contacto en GHL"
+          className="text-xs px-2.5 py-1 rounded border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors font-medium"
+        >
+          GHL ↗
+        </a>
+      )}
     </div>
   );
 }
