@@ -213,6 +213,7 @@ export default async function LeadPerfilPage({
           <ChatWhatsAppLead
             leadId={id}
             tieneTelefono={!!lead.telefono}
+            telefonoLead={lead.telefono ?? null}
             mensajesIniciales={mensajesIniciales}
             hayMasIniciales={hayMasIniciales}
             dentro24h={dentro24h}

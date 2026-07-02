@@ -13,6 +13,7 @@ import {
 interface Props {
   item: ItemAprobacionGHL;
   leadId: string;
+  telefonoLead?: string | null;
 }
 
 function ScoreChip({ score }: { score: number }) {
@@ -31,8 +32,20 @@ function ScoreChip({ score }: { score: number }) {
 // MPS-19 S72.5 — Banner para items que requieren template WA (ventana 24h cerrada).
 // El admin ve el texto sugerido como referencia, va a GHL a enviar el template,
 // y regresa a ECMatic para cerrar el loop con "Marcar como enviado".
-function BannerTemplate({ item, leadId }: Props) {
+function BannerTemplate({ item, leadId, telefonoLead }: Props) {
   const [pending, startTransition] = useTransition();
+  const [copiado, setCopiado] = useState(false);
+
+  const urlWA = telefonoLead
+    ? `https://web.whatsapp.com/send?phone=${telefonoLead.replace(/^\+/, "")}&text=${encodeURIComponent(item.mensaje_ia)}`
+    : null;
+
+  function copiarMensaje() {
+    navigator.clipboard.writeText(item.mensaje_ia).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    });
+  }
 
   function marcarEnviado() {
     startTransition(async () => {
@@ -77,12 +90,32 @@ function BannerTemplate({ item, leadId }: Props) {
 
       {/* Pasos */}
       <ol className="text-xs text-orange-800 space-y-0.5 list-decimal list-inside">
-        <li>Copia el texto de referencia</li>
-        <li>Ve a GHL → busca el contacto → envía el template de WA</li>
+        <li>Copia el mensaje sugerido</li>
+        <li>Abre WhatsApp Web con el contacto y envía el template</li>
         <li>Regresa aquí y haz clic en "Marcar como enviado"</li>
       </ol>
 
-      {/* Acciones */}
+      {/* Acciones rápidas */}
+      <div className="flex gap-1 flex-wrap">
+        <button
+          onClick={copiarMensaje}
+          className="rounded bg-white border border-orange-300 px-3 py-1.5 text-xs text-orange-800 hover:bg-orange-100 font-medium"
+        >
+          {copiado ? "✓ Copiado" : "📋 Copiar mensaje"}
+        </button>
+        {urlWA && (
+          <a
+            href={urlWA}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded bg-green-600 px-3 py-1.5 text-xs text-white hover:bg-green-700 font-medium"
+          >
+            💬 Abrir en WA Web
+          </a>
+        )}
+      </div>
+
+      {/* Acciones de cierre */}
       <div className="flex gap-1 flex-wrap">
         <button
           onClick={marcarEnviado}
@@ -103,10 +136,10 @@ function BannerTemplate({ item, leadId }: Props) {
   );
 }
 
-export function BannerAprobacionGHL({ item, leadId }: Props) {
+export function BannerAprobacionGHL({ item, leadId, telefonoLead }: Props) {
   // MPS-19: derivar hacia el banner de template si aplica
   if (item.requiere_template) {
-    return <BannerTemplate item={item} leadId={leadId} />;
+    return <BannerTemplate item={item} leadId={leadId} telefonoLead={telefonoLead} />;
   }
 
   return <BannerAprobacionLibre item={item} leadId={leadId} />;

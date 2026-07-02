@@ -29,6 +29,7 @@ function renderTexto(texto: string): React.ReactNode {
 interface Props {
   leadId: string;
   tieneTelefono: boolean;
+  telefonoLead?: string | null;
   mensajesIniciales: Mensaje[];
   hayMasIniciales: boolean;
   dentro24h: boolean;
@@ -39,7 +40,7 @@ interface Props {
 }
 
 export function ChatWhatsAppLead({
-  leadId, tieneTelefono, mensajesIniciales, hayMasIniciales,
+  leadId, tieneTelefono, telefonoLead, mensajesIniciales, hayMasIniciales,
   dentro24h, modoSistema, leadNombre, templatesAprobados, pendienteGHL,
 }: Props) {
   const [mensajes, setMensajes] = useState<Mensaje[]>(mensajesIniciales);
@@ -190,7 +191,7 @@ export function ChatWhatsAppLead({
       {/* Banner aprobación GHL — max-h para que nunca aplaste el área de mensajes */}
       {pendienteGHL && (
         <div className="shrink-0 overflow-y-auto max-h-[200px]">
-          <BannerAprobacionGHL item={pendienteGHL} leadId={leadId} />
+          <BannerAprobacionGHL item={pendienteGHL} leadId={leadId} telefonoLead={telefonoLead} />
         </div>
       )}
 
