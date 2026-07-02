@@ -176,7 +176,7 @@ export function FollowupMonitor({ kpis, atascados, proximos, escalados }: {
       {atascados.length > 0 && (
         <div className="space-y-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
           <p className="text-xs font-semibold text-red-600 dark:text-red-400">
-            Atascados — proximo_at vencido y siguen activos (el cron falla silenciosamente en estos leads)
+            Atascados — motor detenido en estos leads, requieren atención manual
           </p>
           <SegTable
             rows={atascados}

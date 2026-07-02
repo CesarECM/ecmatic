@@ -1,8 +1,8 @@
 import type { EstadosLeadsCampana } from "@/services/ghl-aprobacion";
 
 const CONFIG = [
-  { key: "noAlcanzados",    label: "Sin alcanzar aún",       color: "bg-slate-300 dark:bg-slate-600" },
-  { key: "excluidos",       label: "Excluidos (ya comp./new)", color: "bg-purple-400" },
+  { key: "noAlcanzados",    label: "Por procesar",   color: "bg-sky-400 dark:bg-sky-600" },
+  { key: "excluidos",       label: "Excluidos",       color: "bg-purple-400" },
   { key: "sin_contactar",   label: "Enviados — sin respuesta", color: "bg-slate-500" },
   { key: "en_espera",       label: "En espera",               color: "bg-yellow-500" },
   { key: "en_conversacion", label: "En conversación",         color: "bg-blue-500" },

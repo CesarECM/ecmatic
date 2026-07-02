@@ -30,7 +30,7 @@ export function NivelesRoadmap({
   nivelActual, trustScore, decisionsWindow, windowSize,
   lastDecisionAt, automatizado, aprobadosTotal, tasaLimpia,
 }: Props) {
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(true);
 
   const pct          = Math.round(trustScore * 100);
   const windowFill   = decisionsWindow.length;
