@@ -219,7 +219,7 @@ async function detectarPatronGHL(db: DB): Promise<number> {
   const { data: edits } = await db.from("ghl_approval_queue")
     .select("id, mensaje_ia, mensaje_final, razon_edicion, contexto")
     .eq("estado", "editado")
-    .is("feedback_procesado", null)
+    .eq("feedback_procesado", false)
     .gte("revisado_at", HACE_7_DIAS())
     .not("mensaje_final", "is", null)
     .limit(20);
@@ -248,7 +248,7 @@ export async function detectarPatronGHLItem(itemId: string): Promise<void> {
       .select("mensaje_ia, mensaje_final, razon_edicion, contexto")
       .eq("id", itemId)
       .eq("estado", "editado")
-      .is("feedback_procesado", null)
+      .eq("feedback_procesado", false)
       .not("mensaje_final", "is", null)
       .maybeSingle();
 
