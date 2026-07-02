@@ -99,9 +99,15 @@ export function CampanaControls({ activa, pendientes }: Props) {
       {auditMsg && (
         <p className="text-xs text-green-600 dark:text-green-400">{auditMsg}</p>
       )}
-      {pendientes > 0 && (
+      {pendientes >= 10 && (
+        <p className="text-xs text-red-600 dark:text-red-400">
+          Freno máximo — {pendientes} pendientes ·{" "}
+          <a href="/admin/aprobaciones" className="underline">Revisar</a>
+        </p>
+      )}
+      {pendientes > 0 && pendientes < 10 && (
         <p className="text-xs text-yellow-600 dark:text-yellow-400">
-          ⏸ {pendientes} pendiente{pendientes > 1 ? "s" : ""} ·{" "}
+          Freno {Math.round((pendientes / 10) * 100)}% activo · {pendientes} pendiente{pendientes > 1 ? "s" : ""} ·{" "}
           <a href="/admin/aprobaciones" className="underline">Revisar</a>
         </p>
       )}

@@ -435,3 +435,4 @@ Lead (WA/formulario/anuncio) → GHL → webhook GHL → ECMatic (upsert + proce
 | MPS-17 S65 | Re-ranking semántico KB (cross-encoder Haiku) | ✅ Completo |
 | MPS-17 S66 | Arco emocional del lead + HITL hot/frustrado | ✅ Completo |
 | MPS-17 S67 | Guardrails de precio (descuento/inyección → cola) | ✅ Completo |
+| MPS-22 S82 | Velocidad continua leads/min + freno proporcional por pendientes | ✅ Completo |

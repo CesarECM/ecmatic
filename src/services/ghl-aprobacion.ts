@@ -48,12 +48,13 @@ export interface StatsAprobacionGHL {
   window_size: number;             // tamaño máximo de decisions_window (default 20)
   last_decision_at: string | null; // timestamp de la última decisión humana (para decay)
   last_phantom_at: string | null;  // timestamp de la última inyección de phantom (anti-doble)
+  // S82 — Token accumulator para velocidad continua
+  leads_acumulados: number;        // fracción acumulada entre runs del cron (token bucket)
 }
 
 export interface NivelCampana {
   nivel: 0 | 1 | 2 | 3 | 4;
-  tamanoLote: number;
-  intervaloMin: number;
+  velocidadLeadsPorMin: number;  // tasa base sin freno aplicado
   umbral: number;
   descripcion: string;
 }
@@ -247,23 +248,20 @@ export async function obtenerUmbralAuto(_campana: string): Promise<number> {
   return UMBRAL_AUTO_FIJO;
 }
 
-// Registra que se disparó un lote automático
-export async function registrarLoteAuto(campana: string): Promise<void> {
+// S82: actualiza el acumulador de tokens del cron.
+// registrarLote=true → también marca ultimo_lote_at (display "último envío").
+export async function actualizarAcumulador(
+  campana: string,
+  nuevoAcumulador: number,
+  registrarLote: boolean = false,
+): Promise<void> {
   const supabase = createServiceClient();
   await (supabase as any).from("ghl_approval_stats")
-    .update({ ultimo_lote_at: new Date().toISOString() })
+    .update({
+      leads_acumulados: nuevoAcumulador,
+      ...(registrarLote && { ultimo_lote_at: new Date().toISOString() }),
+    })
     .eq("campana_key", campana);
-}
-
-// Limpia el timer de intervalo al resolver el último pendiente.
-// Garantiza que el siguiente cron dispare sin esperar el intervalo mínimo,
-// compensando el tiempo perdido durante el bloqueo por pendientes.
-export async function limpiarIntervaloDisparo(campana: string): Promise<void> {
-  const supabase = createServiceClient();
-  await (supabase as any).from("ghl_approval_stats")
-    .update({ ultimo_lote_at: null })
-    .eq("campana_key", campana);
-  void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.intervalo_limpiado", fase: "ok", resultado: campana });
 }
 
 // Avanza (o reinicia) la página activa de la campaña.
@@ -399,7 +397,7 @@ export async function obtenerEstadosLeadsCampana(campana: string): Promise<Estad
   return resultado;
 }
 
-// Reinicia todos los contadores y la ventana bayesiana a cero.
+// Reinicia todos los contadores, la ventana bayesiana y el acumulador a cero.
 export async function reiniciarNivelesCampana(campana: string): Promise<void> {
   const supabase = createServiceClient();
   await (supabase as any)
@@ -415,6 +413,7 @@ export async function reiniciarNivelesCampana(campana: string): Promise<void> {
       decisions_window:       [],
       trust_score:            0,
       last_decision_at:       null,
+      leads_acumulados:       0,
       updated_at:             new Date().toISOString(),
     })
     .eq("campana_key", campana);

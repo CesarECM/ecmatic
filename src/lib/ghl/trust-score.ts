@@ -12,10 +12,13 @@ export const SAMPLE_RATE        = 50;    // 1 de cada N candidatos va a revisió
 export const TRUST_NIVEL4       = 0.86;  // trust_score mínimo para auto-activar nivel 4
 export const DECAY_GRACE_DAYS   = 3;     // días sin decisión antes de iniciar decay
 
-// Anclas de interpolación: [trust_score] → [lote, intervalo]
-const ANCLAS_TS       = [0, 0.30, 0.56, 0.75, 0.86] as const;
-const ANCLAS_LOTE     = [10, 20, 30, 50, 100]        as const;
-const ANCLAS_INTERVALO = [60, 30, 20, 15, 10]        as const;
+// Anclas de interpolación: [trust_score] → [velocidad en leads/min]
+// Throughput equivalente al sistema anterior: N0=0.17/min N1=0.67/min N2=1.5/min N3=3.33/min N4=10/min
+const ANCLAS_TS        = [0, 0.30, 0.56, 0.75, 0.86] as const;
+const ANCLAS_VELOCIDAD = [0.167, 0.667, 1.5, 3.333, 10] as const;
+
+export const MAX_PENDIENTES_FRENO = 10;   // 10 pendientes → velocidad 0
+export const CRON_INTERVAL_MIN    = 5;    // cron auto-disparo corre cada 5 min
 
 // ── Wilson lower bound ────────────────────────────────────────────────────────
 
@@ -80,9 +83,16 @@ function interpolate(ts: number, anclas: readonly number[], valores: readonly nu
   return valores[valores.length - 1];
 }
 
+// ── Freno proporcional por pendientes ────────────────────────────────────────
+
+// Retorna factor [0, 1]. 0 pendientes = plena velocidad; MAX_PENDIENTES_FRENO = detenida.
+export function calcularFactorFreno(pendientes: number): number {
+  return Math.max(0, (MAX_PENDIENTES_FRENO - pendientes) / MAX_PENDIENTES_FRENO);
+}
+
 // ── Parámetros operativos ─────────────────────────────────────────────────────
 
-// Deriva lote e intervalo del trust_score (interpolación continua).
+// Deriva velocidad (leads/min) del trust_score por interpolación continua.
 // nivel es solo etiqueta diagnóstica — no controla nada.
 export function parametrosDesdeScore(
   trustScore: number,
@@ -91,15 +101,13 @@ export function parametrosDesdeScore(
   if (automatizado) {
     return {
       nivel: 4,
-      tamanoLote: 100,
-      intervaloMin: 10,
+      velocidadLeadsPorMin: 10,
       umbral: UMBRAL_AUTO_FIJO,
       descripcion: "Plena confianza — velocidad máxima, calidad mínima 92 %",
     };
   }
 
-  const tamanoLote  = Math.round(interpolate(trustScore, ANCLAS_TS, ANCLAS_LOTE));
-  const intervaloMin = Math.round(interpolate(trustScore, ANCLAS_TS, ANCLAS_INTERVALO));
+  const velocidadLeadsPorMin = interpolate(trustScore, ANCLAS_TS, ANCLAS_VELOCIDAD);
 
   const nivel: 0 | 1 | 2 | 3 | 4 =
     trustScore >= 0.86 ? 4 :
@@ -117,8 +125,7 @@ export function parametrosDesdeScore(
 
   return {
     nivel,
-    tamanoLote,
-    intervaloMin,
+    velocidadLeadsPorMin,
     umbral: UMBRAL_AUTO_FIJO,
     descripcion: descripciones[nivel],
   };

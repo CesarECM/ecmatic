@@ -37,6 +37,12 @@ function horaTexto(): string {
 }
 
 
+function formatVelocidad(v: number): string {
+  if (v <= 0) return "0 leads/min";
+  if (v >= 1) return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)} leads/min`;
+  return `1 lead / ${(1 / v).toFixed(1)} min`;
+}
+
 type EstadoClaudeAPI = "operativa" | "sin_creditos" | "error" | "timeout" | "sin_datos";
 
 async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAPI; hace: string | null }> {
@@ -92,15 +98,18 @@ export default async function GHLCampaignPage() {
     .order("updated_at", { ascending: false })
     .limit(50) as { data: LogRow[] | null };
 
-  const nivel        = calcularNivel(aprobacionStats ?? { trust_score: 0, automatizado: false });
-  const totalGHL     = ghlResult.total;
-  const paginaActual = aprobacionStats?.pagina_campana ?? 1;
-  const totalPaginas = totalGHL > 0 ? Math.ceil(totalGHL / nivel.tamanoLote) : 0;
-  const noAlcanzados = Math.max(0, totalGHL - logsInfo.total);
-  const activa       = aprobacionStats?.activa ?? false;
-  const capAlcanzado = enviadosHoy >= CAP_DIA;
-  const pctPool      = totalGHL > 0 ? Math.min(100, Math.round((logsInfo.total / totalGHL) * 100)) : 0;
-  const pctDia       = Math.min(100, Math.round((enviadosHoy / CAP_DIA) * 100));
+  const nivel          = calcularNivel(aprobacionStats ?? { trust_score: 0, automatizado: false });
+  const factorFreno    = Math.max(0, (10 - pendientes) / 10);
+  const velocidadEfectiva = nivel.velocidadLeadsPorMin * factorFreno;
+  const leadsPerRun    = Math.max(1, Math.round(nivel.velocidadLeadsPorMin * 5));
+  const totalGHL       = ghlResult.total;
+  const paginaActual   = aprobacionStats?.pagina_campana ?? 1;
+  const totalPaginas   = totalGHL > 0 ? Math.ceil(totalGHL / leadsPerRun) : 0;
+  const noAlcanzados   = Math.max(0, totalGHL - logsInfo.total);
+  const activa         = aprobacionStats?.activa ?? false;
+  const capAlcanzado   = enviadosHoy >= CAP_DIA;
+  const pctPool        = totalGHL > 0 ? Math.min(100, Math.round((logsInfo.total / totalGHL) * 100)) : 0;
+  const pctDia         = Math.min(100, Math.round((enviadosHoy / CAP_DIA) * 100));
 
   // Ventanas: 09:30–19:30 mensajes nuevos · 09:00–22:00 recordatorios
   const enVentanaMensajes     = hora >= 9.5 && hora < 19.5;
@@ -109,8 +118,8 @@ export default async function GHLCampaignPage() {
   const motivosPausaMensajes: MotivoItem[] = [
     !activa            && "Campaña desactivada manualmente",
     !enVentanaMensajes && "Fuera de horario (09:30 – 19:30 CDMX)",
-    pendientes > 0     && {
-      texto: `${pendientes} mensaje${pendientes > 1 ? "s" : ""} pendiente${pendientes > 1 ? "s" : ""} de aprobación`,
+    pendientes >= 10   && {
+      texto: `Freno máximo — ${pendientes} pendientes sin revisar`,
       href:  "/admin/aprobaciones",
     },
     capAlcanzado       && `Cap diario de ${CAP_DIA.toLocaleString()} alcanzado`,
@@ -147,7 +156,7 @@ export default async function GHLCampaignPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Pool de contactos GHL</h2>
           <span className="text-xs text-muted-foreground">
-            Página {paginaActual}{totalPaginas > 0 ? ` de ${totalPaginas}` : ""} · lote {nivel.tamanoLote}
+            Página {paginaActual}{totalPaginas > 0 ? ` de ${totalPaginas}` : ""} · ~{leadsPerRun}/run
           </span>
         </div>
         <div className="grid grid-cols-3 gap-4">
@@ -166,7 +175,9 @@ export default async function GHLCampaignPage() {
           ventana="09:30 – 19:30 CDMX"
           activa={motivosPausaMensajes.length === 0}
           motivos={motivosPausaMensajes}
-          sub={`Lote de ${nivel.tamanoLote} contactos cada ${nivel.intervaloMin} min`}
+          sub={pendientes === 0
+            ? formatVelocidad(nivel.velocidadLeadsPorMin)
+            : `${formatVelocidad(velocidadEfectiva)} efectivos · freno ${Math.round((1 - factorFreno) * 100)}% (${pendientes} pendiente${pendientes !== 1 ? "s" : ""})`}
         />
         <VentanaCard
           titulo="Recordatorios de seguimiento"
@@ -185,11 +196,22 @@ export default async function GHLCampaignPage() {
         </div>
         <p className="text-xs text-muted-foreground">{nivel.descripcion}</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <MiniStat label="Lote"          value={`${nivel.tamanoLote} contactos`} />
-          <MiniStat label="Intervalo"     value={`${nivel.intervaloMin} min`} />
-          <MiniStat label="Aprobados"     value={(aprobacionStats?.aprobados ?? 0).toString()} />
-          <MiniStat label="Umbral IA"     value={`${Math.round((aprobacionStats?.umbral_auto ?? 0.92) * 100)}%`} />
+          <MiniStat label="Velocidad base"     value={formatVelocidad(nivel.velocidadLeadsPorMin)} />
+          <MiniStat label="Velocidad efectiva" value={formatVelocidad(velocidadEfectiva)}
+            color={factorFreno < 1 ? (factorFreno === 0 ? "text-red-500" : "text-yellow-500") : ""} />
+          <MiniStat label="Aprobados"          value={(aprobacionStats?.aprobados ?? 0).toString()} />
+          <MiniStat label="Umbral IA"          value={`${Math.round((aprobacionStats?.umbral_auto ?? 0.92) * 100)}%`} />
         </div>
+        {pendientes > 0 && pendientes < 10 && (
+          <div className="flex items-center gap-2 text-xs text-yellow-700 dark:text-yellow-400">
+            <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+              <div className="h-1.5 rounded-full bg-yellow-400 transition-all" style={{ width: `${Math.round((1 - factorFreno) * 100)}%` }} />
+            </div>
+            <span className="shrink-0">Freno {Math.round((1 - factorFreno) * 100)}% · {pendientes} pendiente{pendientes !== 1 ? "s" : ""} ·{" "}
+              <a href="/admin/aprobaciones" className="underline">revisar</a>
+            </span>
+          </div>
+        )}
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Enviados hoy</span>

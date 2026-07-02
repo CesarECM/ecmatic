@@ -3,24 +3,22 @@ import { procesarLoteCampana } from "@/services/ghl-pipeline-campana";
 import {
   obtenerStatsAprobacion, calcularNivel,
   contarEnviadosHoy, contarPendientes,
-  registrarLoteAuto, actualizarPaginaCampana,
-  debeNotificarPausa, registrarNotifPausa,
+  actualizarAcumulador, actualizarPaginaCampana,
 } from "@/services/ghl-aprobacion";
-import { sendTextMessage } from "@/lib/whatsapp/client";
+import { calcularFactorFreno, CRON_INTERVAL_MIN } from "@/lib/ghl/trust-score";
 import { logSistema } from "@/services/log-sistema";
 
-export const runtime = "nodejs";
+export const runtime    = "nodejs";
 export const maxDuration = 300;
 
-const CAMPANA       = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
-const CAP_DIA       = 10_000;
-const HORA_INICIO   = 9 * 60 + 30;  // 09:30 CDMX
-const HORA_FIN      = 19 * 60 + 30; // 19:30 CDMX
-const BASE_URL      = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecmatic.vercel.app";
+const CAMPANA     = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
+const CAP_DIA     = 10_000;
+const HORA_INICIO = 9 * 60 + 30;   // 09:30 CDMX
+const HORA_FIN    = 19 * 60 + 30;  // 19:30 CDMX
 
 function horaCDMX(): number {
   const now = new Date();
-  const h = ((now.getUTCHours() - 6) + 24) % 24;
+  const h   = ((now.getUTCHours() - 6) + 24) % 24;
   return h * 60 + now.getUTCMinutes();
 }
 
@@ -36,65 +34,85 @@ export async function GET() {
     return NextResponse.json({ ok: true, motivo: "fuera_de_horario", hora });
   }
 
-  const pendientes = await contarPendientes(CAMPANA);
-  if (pendientes > 0) {
-    const adminWa = process.env.ADMIN_WHATSAPP;
-    if (adminWa && (await debeNotificarPausa(CAMPANA))) {
-      void sendTextMessage(
-        adminWa,
-        `⏸ *Campaña SBC pausada*\n\n${pendientes} mensaje${pendientes > 1 ? "s" : ""} pendiente${pendientes > 1 ? "s" : ""} de aprobación.\n\nRevisar → ${BASE_URL}/admin/aprobaciones`,
-      ).catch(() => null);
-      await registrarNotifPausa(CAMPANA);
-    }
-    void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "warn", resultado: `pausada — ${pendientes} pendientes` });
-    return NextResponse.json({ ok: true, motivo: "pausada_por_pendientes", pendientes });
-  }
-
   const enviadosHoy = await contarEnviadosHoy(CAMPANA);
   if (enviadosHoy >= CAP_DIA) {
     void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "warn", resultado: `cap diario alcanzado: ${enviadosHoy}` });
     return NextResponse.json({ ok: true, motivo: "cap_diario", enviadosHoy });
   }
 
-  const nivel = calcularNivel(stats);
+  // ── Velocidad efectiva con freno proporcional por pendientes ──────────────
+  const nivel          = calcularNivel(stats);
+  const pendientes     = await contarPendientes(CAMPANA);
+  const factorFreno    = calcularFactorFreno(pendientes);
 
-  // Verificar si ya pasó el intervalo mínimo desde el último lote
-  if (stats.ultimo_lote_at) {
-    const msDesdeUltimo = Date.now() - new Date(stats.ultimo_lote_at).getTime();
-    const msIntervalo   = nivel.intervaloMin * 60 * 1000;
-    if (msDesdeUltimo < msIntervalo) {
-      const restaMin = Math.ceil((msIntervalo - msDesdeUltimo) / 60_000);
-      return NextResponse.json({ ok: true, motivo: "intervalo_no_cumplido", restaMin, nivel: nivel.nivel });
-    }
+  if (factorFreno === 0) {
+    void logSistema({
+      categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "warn",
+      resultado: `freno máximo — ${pendientes} pendientes`,
+    });
+    return NextResponse.json({ ok: true, motivo: "freno_maximo", pendientes });
   }
 
-  // Ajustar lote para no superar el cap diario
-  const disponibles  = CAP_DIA - enviadosHoy;
-  const tamanoLote   = Math.min(nivel.tamanoLote, disponibles);
+  const velocidadEfectiva = nivel.velocidadLeadsPorMin * factorFreno;
+
+  // ── Token accumulator (soporta tasas fraccionarias como 0.5 leads/min) ───
+  const accAnterior  = stats.leads_acumulados ?? 0;
+  const accNuevo     = accAnterior + velocidadEfectiva * CRON_INTERVAL_MIN;
+  const leadsToSend  = Math.floor(accNuevo);
+  const accResiduo   = accNuevo - leadsToSend;
+
+  if (leadsToSend === 0) {
+    await actualizarAcumulador(CAMPANA, accResiduo);
+    return NextResponse.json({
+      ok: true, motivo: "acumulando",
+      acc: accNuevo.toFixed(3), pendientes, factorFreno,
+    });
+  }
+
+  // ── Ajustar para no superar el cap diario ────────────────────────────────
+  const loteEfectivo = Math.min(leadsToSend, CAP_DIA - enviadosHoy);
+  const paginaActual = stats.pagina_campana ?? 1;
 
   void logSistema({
     categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "inicio",
-    resultado: `nivel:${nivel.nivel} lote:${tamanoLote} enviadosHoy:${enviadosHoy}`,
+    resultado: `nivel:${nivel.nivel} vel:${velocidadEfectiva.toFixed(2)}/min freno:${Math.round(factorFreno * 100)}% lote:${loteEfectivo} pendientes:${pendientes}`,
   });
 
-  const paginaActual = stats.pagina_campana ?? 1;
-
-  const resultado = await procesarLoteCampana(paginaActual, tamanoLote).catch((e) => {
+  const resultado = await procesarLoteCampana(paginaActual, loteEfectivo).catch((e) => {
     void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "error", resultado: String(e) });
     return null;
   });
 
   if (resultado) {
     await Promise.all([
-      registrarLoteAuto(CAMPANA),
+      actualizarAcumulador(CAMPANA, accResiduo, true),
       actualizarPaginaCampana(CAMPANA, resultado.nextPage),
     ]);
     void logSistema({
       categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "ok",
-      resultado: `enviados:${resultado.enviados} excluidos:${resultado.excluidos} pagina:${paginaActual}→${resultado.nextPage ?? 1}`,
-      metadata: { nivel: nivel.nivel, tamanoLote, paginaActual, nextPage: resultado.nextPage },
+      resultado: `enviados:${resultado.enviados} excluidos:${resultado.excluidos} acc:${accAnterior.toFixed(2)}→${accResiduo.toFixed(2)} pagina:${paginaActual}→${resultado.nextPage ?? 1}`,
+      metadata: {
+        nivel: nivel.nivel,
+        velocidadBase: nivel.velocidadLeadsPorMin,
+        velocidadEfectiva,
+        factorFreno,
+        pendientes,
+        loteEfectivo,
+        paginaActual,
+        nextPage: resultado.nextPage,
+      },
     });
   }
 
-  return NextResponse.json({ ok: true, nivel: nivel.nivel, tamanoLote, paginaActual, resultado });
+  return NextResponse.json({
+    ok: true,
+    nivel: nivel.nivel,
+    velocidadBase: nivel.velocidadLeadsPorMin,
+    velocidadEfectiva,
+    factorFreno,
+    pendientes,
+    loteEfectivo,
+    paginaActual,
+    resultado,
+  });
 }

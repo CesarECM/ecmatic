@@ -20,8 +20,6 @@ import {
   resolverItemAprobacion,
   actualizarStatsAprobacion,
   obtenerStatsAprobacion,
-  contarPendientes,
-  limpiarIntervaloDisparo,
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
@@ -255,7 +253,6 @@ export const aprobarMensajeGHLAction = safeAction(async (
 
   await resolverItemAprobacion({ id: itemId, estado: "aprobado", mensajeFinal: mensajeIA });
   await actualizarStatsAprobacion(campana, "aprobado");
-  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // Registrar cierre en los recursos KB que generaron esta respuesta
   const supabase = createServiceClient();
@@ -313,7 +310,6 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
     mensajeFinal: textoFinal, razonEdicion,
   });
   await actualizarStatsAprobacion(campana, "editado");
-  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // MPS-20: genera kbi_sugerencia inmediatamente tras cada edición del admin.
   // after() garantiza que sobreviva en Vercel tras retornar el Server Action.
@@ -356,7 +352,6 @@ export const marcarEnviadoManualmenteGHLAction = safeAction(async (
     mensajeFinal: "(enviado manualmente vía template GHL)",
   });
   await actualizarStatsAprobacion(campana, "aprobado");
-  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
@@ -389,7 +384,6 @@ export const rechazarMensajeGHLAction = safeAction(async (
 
   await resolverItemAprobacion({ id: itemId, estado: "rechazado" });
   await actualizarStatsAprobacion(campana, "rechazado");
-  void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
   // avanzarNivel también al rechazar: el recordatorio no se envió, pero el nivel pasa
   const seguimientoId = qItem?.seguimiento_id as string | null | undefined;

@@ -158,8 +158,8 @@ export function NivelesRoadmap({
           <div className="rounded-lg bg-muted/30 p-3 space-y-2">
             <p className="text-xs font-medium">Parámetros actuales</p>
             <div className="grid grid-cols-3 gap-3 text-xs">
-              <ParamCard icon="📦" label="Lote" value={`${calcLote(trustScore, automatizado)} contactos`} />
-              <ParamCard icon="⏱" label="Intervalo" value={`${calcIntervalo(trustScore, automatizado)} min`} />
+              <ParamCard icon="⚡" label="Velocidad" value={formatVelocidad(calcVelocidad(trustScore, automatizado))} />
+              <ParamCard icon="🔄" label="Por run (5 min)" value={`~${Math.max(1, Math.round(calcVelocidad(trustScore, automatizado) * 5))} leads`} />
               <ParamCard icon="🎯" label="Auto-aprueba" value={`score > ${Math.round((UMBRAL_AUTO_FIJO + (nivelActual === 4 ? UMBRAL_BORDERLINE : 0)) * 100)}%`} />
             </div>
           </div>
@@ -206,11 +206,10 @@ export function NivelesRoadmap({
   );
 }
 
-// ── Helpers de interpolación (mirrors de trust-score.ts, sin importar lógica en UI) ──
+// ── Helpers de velocidad (mirrors de trust-score.ts, sin importar lógica en UI) ──
 
 const ANCLAS_TS        = [0, 0.30, 0.56, 0.75, 0.86];
-const ANCLAS_LOTE      = [10, 20, 30, 50, 100];
-const ANCLAS_INTERVALO = [60, 30, 20, 15, 10];
+const ANCLAS_VELOCIDAD = [0.167, 0.667, 1.5, 3.333, 10];
 
 function interp(ts: number, anclas: number[], vals: number[]): number {
   if (ts <= anclas[0]) return vals[0];
@@ -224,8 +223,15 @@ function interp(ts: number, anclas: number[], vals: number[]): number {
   return vals[vals.length - 1];
 }
 
-function calcLote(ts: number, auto: boolean)      { return auto ? 100 : Math.round(interp(ts, ANCLAS_TS, ANCLAS_LOTE)); }
-function calcIntervalo(ts: number, auto: boolean)  { return auto ? 10  : Math.round(interp(ts, ANCLAS_TS, ANCLAS_INTERVALO)); }
+function calcVelocidad(ts: number, auto: boolean): number {
+  return auto ? 10 : interp(ts, ANCLAS_TS, ANCLAS_VELOCIDAD);
+}
+
+function formatVelocidad(v: number): string {
+  if (v <= 0) return "0 leads/min";
+  if (v >= 1) return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)} leads/min`;
+  return `1 lead / ${(1 / v).toFixed(1)} min`;
+}
 
 // ── Sub-componentes ────────────────────────────────────────────────────────────
 
