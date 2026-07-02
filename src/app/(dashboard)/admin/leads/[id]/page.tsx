@@ -8,6 +8,8 @@ import { listarTemplates } from "@/services/wa-templates";
 import { obtenerProtocoloActivoLead, obtenerHistorialToques } from "@/services/lead-protocolo";
 import { listarLlamadasLead } from "@/services/llamadas";
 import { obtenerPendienteGHLParaLead } from "@/services/ghl-aprobacion";
+import { obtenerEtiquetasLead } from "@/services/etiquetas";
+import { obtenerContacto } from "@/lib/ghl/contacts-api";
 import { ChatWhatsAppLead } from "@/components/leads/chat-whatsapp-lead";
 import { LeadInfoPanel } from "@/components/leads/lead-info-panel";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
@@ -46,6 +48,7 @@ export default async function LeadPerfilPage({
     historialToques,
     llamadasLead,
     pendienteGHL,
+    etiquetasEcmatic,
   ] = await Promise.all([
     supabase.from("leads").select("*").eq("id", id).single(),
     obtenerHistorialPipeline(id),
@@ -73,9 +76,28 @@ export default async function LeadPerfilPage({
     obtenerHistorialToques(id).catch(() => []),
     listarLlamadasLead(id).catch(() => []),
     obtenerPendienteGHLParaLead(id).catch(() => null),
+    obtenerEtiquetasLead(id).catch(() => [] as { id: string; nombre: string; categoria: string; color: string }[]),
   ]);
 
   if (!lead) notFound();
+
+  // GHL tags: busca el ghl_contact_id más reciente de este lead en la cola de aprobación
+  const { data: qItemContacto } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("ghl_contact_id")
+    .eq("lead_ecmatic_id", id)
+    .not("ghl_contact_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { ghl_contact_id: string } | null };
+
+  let tagsGHL: string[] = [];
+  if (qItemContacto?.ghl_contact_id) {
+    try {
+      const contactoGHL = await obtenerContacto(qItemContacto.ghl_contact_id);
+      tagsGHL = contactoGHL.tags ?? [];
+    } catch { /* falla silenciosamente si GHL no responde */ }
+  }
 
   const dentro24h = (msgReciente24h ?? []).length > 0;
   const templatesAprobados = todosTemplates.filter((t: { estado_meta: string }) => t.estado_meta === "APPROVED");
@@ -138,6 +160,24 @@ export default async function LeadPerfilPage({
               <span className="text-xs text-green-600 font-medium">★ Recurrente</span>
             )}
           </div>
+          {(etiquetasEcmatic.length > 0 || tagsGHL.length > 0) && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+              {etiquetasEcmatic.map((e) => (
+                <span
+                  key={e.id}
+                  style={{ backgroundColor: e.color + "22", color: e.color, borderColor: e.color + "66" }}
+                  className="text-xs px-2 py-0.5 rounded-full border font-medium"
+                >
+                  {e.categoria}: {e.nombre}
+                </span>
+              ))}
+              {tagsGHL.map((t) => (
+                <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-medium">
+                  ghl: {t}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         {/* Agendar llamada manual para el vendedor asignado */}
         <form action={agendarLlamadaAdminAction} className="flex items-center gap-1 shrink-0">

@@ -140,13 +140,18 @@ async function procesarUnEdit(db: DB, edit: {
 
   if (ids.length > 0) {
     // ── Caso A: hay recurso KB — actualizar con la corrección del admin ──
-    const { data: recurso } = await db.from("recursos_conocimiento")
+    // Busca el primer recurso entre todos los ids que sea faq/regla y sin duplicado pendiente.
+    const { data: recursos } = await db.from("recursos_conocimiento")
       .select("id, titulo, contenido")
-      .eq("id", ids[0])
-      .in("tipo", ["faq", "regla"])
-      .maybeSingle() as { data: { id: string; titulo: string; contenido: string } | null };
+      .in("id", ids)
+      .in("tipo", ["faq", "regla"]) as { data: { id: string; titulo: string; contenido: string }[] | null };
 
-    if (!recurso || await yaExistePendiente(db, recurso.id, "actualizar")) return false;
+    let recurso: { id: string; titulo: string; contenido: string } | null = null;
+    for (const r of (recursos ?? [])) {
+      if (!await yaExistePendiente(db, r.id, "actualizar")) { recurso = r; break; }
+    }
+
+    if (!recurso) return false;
 
     const res = await callClaudeIA("ANALISIS", {
       max_tokens: 250,
@@ -252,15 +257,22 @@ export async function detectarPatronGHLItem(itemId: string): Promise<void> {
       .not("mensaje_final", "is", null)
       .maybeSingle();
 
-    if (!edit) return;
+    if (!edit) {
+      void logSistema({ categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "warn", traceId,
+        resultado: "item no encontrado (ya procesado o estado incorrecto)", metadata: { itemId } });
+      return;
+    }
 
-    await procesarUnEdit(db, edit);
+    const ids = (edit.contexto?.recursosIds as string[] | undefined) ?? [];
+    const creado = await procesarUnEdit(db, edit);
 
     await db.from("ghl_approval_queue")
       .update({ feedback_procesado: true, feedback_procesado_at: new Date().toISOString() })
       .eq("id", itemId);
 
-    void logSistema({ categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "ok", traceId, metadata: { itemId } });
+    void logSistema({ categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "ok", traceId,
+      resultado: creado ? "sugerencia creada" : "sin sugerencia (Claude descartó o duplicado)",
+      metadata: { itemId, caso: ids.length > 0 ? "A" : "B", recurso_ids: ids } });
   } catch (err) {
     void logSistema({
       categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "error", traceId,
