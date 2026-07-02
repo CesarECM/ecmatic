@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { ReglasList } from "@/components/reglas/reglas-list";
 import { NuevaReglaForm } from "@/components/reglas/nueva-regla-form";
+import { TagBuilder } from "@/components/reglas/tag-builder";
 
 export const metadata = { title: "Reglas Conversacionales · ECMatic" };
 export const revalidate = 0;
@@ -33,6 +34,8 @@ export default async function ReglasPage() {
         </div>
         <NuevaReglaForm />
       </div>
+
+      <TagBuilder />
 
       <ReglasList reglas={reglas ?? []} />
     </div>
