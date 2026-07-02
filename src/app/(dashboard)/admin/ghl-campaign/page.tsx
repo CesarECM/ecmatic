@@ -109,6 +109,35 @@ export default async function GHLCampaignPage() {
       obtenerHistorialEnvios(db).catch(() => [] as number[]),
     ]);
 
+  // ── Diagnóstico de errores silenciosos ────────────────────────────────────
+  // Verifica env vars y los últimos logs del cron para detectar fallos que no
+  // se manifiestan visualmente en el resto del panel.
+  const workflowAOk = !!process.env.GHL_WORKFLOW_A_ID;
+  const workflowBOk = !!process.env.GHL_WORKFLOW_B_ID;
+
+  const { data: ultimosCronLogs } = await db
+    .from("log_sistema")
+    .select("fase, resultado, created_at")
+    .eq("tipo_accion", "ghl_campana.auto")
+    .in("fase", ["ok", "error"])
+    .order("created_at", { ascending: false })
+    .limit(6) as { data: { fase: string; resultado: string | null; created_at: string }[] | null };
+
+  let cronErrorConsecutivos = 0;
+  let ultimoCronError: string | null = null;
+  let ultimoCronErrorHace: string | null = null;
+  for (const log of ultimosCronLogs ?? []) {
+    if (log.fase !== "error") break;
+    cronErrorConsecutivos++;
+    if (cronErrorConsecutivos === 1) {
+      ultimoCronError = log.resultado;
+      const mins = Math.floor((Date.now() - new Date(log.created_at).getTime()) / 60_000);
+      ultimoCronErrorHace = mins < 60 ? `hace ${mins} min` : `hace ${Math.floor(mins / 60)} h`;
+    }
+  }
+
+  const hayErrorSilencioso = !workflowAOk || !workflowBOk || cronErrorConsecutivos >= 2;
+
   const { data: logs } = await db
     .from("ghl_campana_logs")
     .select("ghl_contact_id, nombre, categoria_sbc, variante, enviado, enviado_at, respuesta_tipo, convirtio, updated_at")
@@ -194,6 +223,35 @@ export default async function GHLCampaignPage() {
           <CampanaControls activa={activa} pendientes={pendientes} />
         </div>
       </div>
+
+      {/* ── Banner de error silencioso ─────────────────────────────── */}
+      {hayErrorSilencioso && (
+        <div className="rounded-lg border border-red-500/50 bg-red-500/8 p-4 space-y-2">
+          <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+            Error silencioso — los WhatsApp no están saliendo
+          </p>
+          {!workflowAOk && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              · <code className="bg-red-500/10 px-1 rounded">GHL_WORKFLOW_A_ID</code> no está configurado en Vercel
+            </p>
+          )}
+          {!workflowBOk && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              · <code className="bg-red-500/10 px-1 rounded">GHL_WORKFLOW_B_ID</code> no está configurado en Vercel
+            </p>
+          )}
+          {cronErrorConsecutivos >= 2 && ultimoCronError && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              · Cron falló {cronErrorConsecutivos} veces seguidas
+              {ultimoCronErrorHace && <span className="text-muted-foreground"> ({ultimoCronErrorHace})</span>}
+              {": "}<code className="bg-red-500/10 px-1 rounded text-[11px]">{ultimoCronError.slice(0, 140)}</code>
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground pt-0.5">
+            Verifica las variables de entorno en Vercel y que los workflows A/B estén activos en GHL.
+          </p>
+        </div>
+      )}
 
       {/* S6: Banner de pendientes prominente ──────────────────────────────── */}
       {pendientes > 0 && (
