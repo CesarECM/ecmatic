@@ -19,6 +19,7 @@ import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./
 import { obtenerRelacionesParaPrompt } from "@/services/servicio-relaciones";
 import { obtenerHintCalidadLead } from "@/services/calidad-conversacional";
 import { obtenerVariantePrompt } from "@/services/prompt-experimentos";
+import { obtenerReglasAplicables, formatearReglasParaPrompt } from "@/services/reglas-conversacionales";
 import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
 import type { SlotDisponible } from "@/services/citas";
 import type { EstadoSetter } from "./setter-protocol";
@@ -82,6 +83,8 @@ interface ContextoLead {
   memoriaIA?: string | null;
   // Auto-reply de WA Business: el lead tiene un saludo automático, no es una consulta real
   esAutoReply?: boolean;
+  // MPS-21 — Tags GHL cacheados en leads.tags_ghl para matching de reglas
+  tagsGhl?: string[];
 }
 
 export interface RespuestaIA {
@@ -104,7 +107,7 @@ export async function generarRespuesta(
     ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
   };
 
-  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt] = await Promise.all([
+  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt, reglasAplicables] = await Promise.all([
     buscarRecursosKBI(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
@@ -118,6 +121,11 @@ export async function generarRespuesta(
           temperamento: contexto.temperamento,
         }).catch(() => null)
       : Promise.resolve(null),
+    obtenerReglasAplicables({
+      tagsGhl:       contexto.tagsGhl ?? [],
+      temperamento:  contexto.temperamento,
+      pipelineStage: contexto.pipelineStage,
+    }).catch(() => []),
   ]);
 
   const { servicios: serviciosSemánticos, kb } = resultadosBusqueda;
@@ -309,6 +317,7 @@ export async function generarRespuesta(
     ? `\nMEMORIA DE SESIONES ANTERIORES CON ESTE LEAD:\n${contexto.memoriaIA}` : "";
   const varianteLinea = variantePrompt
     ? `\nINSTRUCCIÓN ADICIONAL (experimento activo — variante ${variantePrompt.variante.toUpperCase()}):\n${variantePrompt.texto}` : "";
+  const reglasLinea = formatearReglasParaPrompt(reglasAplicables);
   const autoReplyLinea = contexto.esAutoReply
     ? "\n- CONTEXTO CLAVE: El mensaje recibido es una respuesta automática de WhatsApp Business del lead (saludo o bienvenida automática, no una consulta real). NOSOTROS lo contactamos a él — él NO nos contactó. NUNCA preguntes '¿En qué puedo ayudarte?' ni '¿Para qué nos contactaste?'. Retoma el hilo de prospección explicando brevemente el motivo de nuestro contacto y abre con una pregunta de descubrimiento sobre su situación."
     : "";
@@ -337,7 +346,7 @@ ${contexto.historial || "(primera interacción)"}${memoriaLinea}
 BASE DE CONOCIMIENTO — FAQs y recursos adicionales:
 ${recursosTexto}
 ${practicasTexto}
-${formatearGatillosParaPrompt(gatillos)}${matrizLinea}
+${formatearGatillosParaPrompt(gatillos)}${matrizLinea}${reglasLinea}
 
 INSTRUCCIONES:
 - Responde en español, tono cálido y profesional

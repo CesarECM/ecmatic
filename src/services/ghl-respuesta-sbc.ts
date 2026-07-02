@@ -349,7 +349,8 @@ async function generarRespuestaMotorCompleto(
   // Ruta del pipeline SBC — garantiza que el motor inyecte la ficha del servicio
   const SBC_PIPELINE_RUTA = process.env.GHL_SBC_PIPELINE_RUTA ?? "smartbuilder_vd_wa_mqqau2nj";
 
-  const { data: lead, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: lead, error } = await (supabase as any)
     .from("leads")
     .upsert(
       {
@@ -357,6 +358,9 @@ async function generarRespuestaMotorCompleto(
         canal_origen:  "whatsapp",
         privacidad_aceptada: true,
         ...(nombre && { nombre }),
+        // MPS-21 S79 — cachear ghl_contact_id y tags del contacto
+        ghl_contact_id: contactId,
+        ...(tagsGHL.length && { tags_ghl: tagsGHL, tags_ghl_at: new Date().toISOString() }),
       },
       { onConflict: "telefono" }
     )
@@ -460,6 +464,7 @@ async function generarRespuestaMotorCompleto(
       leadId:        lead.id,
       memoriaIA,
       esAutoReply:   detectarAutoReplyWABusiness(cuerpo),
+      tagsGhl:       tagsGHL,
       ...(slotsDemo?.length && { slotsDisponibles: slotsDemo }),
       ...(meetLinkDemo && { meetLink: meetLinkDemo }),
     }));

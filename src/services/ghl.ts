@@ -99,14 +99,25 @@ export async function procesarContactoGHL(payload: GHLWebhookPayload): Promise<v
 
   let leadId: string;
 
+  const ghlContactId = c.id ?? payload.contact_id ?? null;
+  const tagsGHL      = c.tags ?? payload.tags ?? [];
+
   if (existente) {
     leadId = existente.id;
-    const updates: { nombre?: string; email?: string; canal_origen?: string } = {};
+    const updates: {
+      nombre?: string; email?: string; canal_origen?: string;
+      ghl_contact_id?: string; tags_ghl?: string[]; tags_ghl_at?: string;
+    } = {};
     if (!existente.nombre && nombre) updates.nombre = nombre;
     if (!existente.email && email) updates.email = email;
-    // Sobreescribe canal solo si era whatsapp sin atribución previa
     if (existente.canal_origen === "whatsapp" && canal !== "ghl") {
       updates.canal_origen = canal;
+    }
+    // MPS-21 S79 — cachear ghl_contact_id y tags_ghl
+    if (ghlContactId) updates.ghl_contact_id = ghlContactId;
+    if (tagsGHL.length) {
+      updates.tags_ghl    = tagsGHL;
+      updates.tags_ghl_at = new Date().toISOString();
     }
     if (Object.keys(updates).length > 0) {
       await supabase.from("leads").update(updates).eq("id", leadId);
@@ -119,6 +130,8 @@ export async function procesarContactoGHL(payload: GHLWebhookPayload): Promise<v
         nombre: nombre ?? null,
         email: email ?? null,
         canal_origen: canal,
+        ...(ghlContactId && { ghl_contact_id: ghlContactId }),
+        ...(tagsGHL.length && { tags_ghl: tagsGHL, tags_ghl_at: new Date().toISOString() }),
       })
       .select("id")
       .single();
@@ -141,8 +154,7 @@ export async function procesarContactoGHL(payload: GHLWebhookPayload): Promise<v
     });
   }
 
-  // S16.6 — etiquetado automático
-  const tagsGHL = c.tags ?? payload.tags ?? [];
+  // S16.6 — etiquetado automático (ECMatic legacy, se depreca con MPS-21)
   void etiquetarLeadGHL(leadId, tagsGHL);
 }
 

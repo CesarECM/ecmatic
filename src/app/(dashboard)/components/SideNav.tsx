@@ -30,6 +30,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/admin/servicios",    label: "Servicios",           emoji: "🛍️", roles: ["admin"] },
       { href: "/admin/conocimiento", label: "Base de conocimiento",emoji: "📚", roles: ["admin"] },
+      { href: "/admin/reglas",       label: "Reglas conv.",        emoji: "🧠", roles: ["admin"] },
     ],
   },
   {

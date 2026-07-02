@@ -25,6 +25,7 @@ interface KBISugerencia {
   titulo_propuesto: string;
   contenido_propuesto: string;
   estado: string;
+  metadata: Record<string, unknown>;
 }
 
 // Override opcional: el admin puede editar titulo y contenido antes de aprobar.
@@ -43,7 +44,7 @@ export async function aplicarKBISugerencia(
 
   const { data: s, error } = await db
     .from("kbi_sugerencias")
-    .select("id, recurso_id, tipo_accion, tipo_recurso_nuevo, titulo_propuesto, contenido_propuesto, estado")
+    .select("id, recurso_id, tipo_accion, tipo_recurso_nuevo, titulo_propuesto, contenido_propuesto, estado, metadata")
     .eq("id", sugerenciaId)
     .maybeSingle() as { data: KBISugerencia | null; error: unknown };
 
@@ -55,8 +56,30 @@ export async function aplicarKBISugerencia(
 
   let resultado: ResultadoKBI;
 
+  // ── CREAR regla_conversacional: nueva regla en MPS-21 ───────────
+  if (s.tipo_accion === "crear" && s.tipo_recurso_nuevo === "regla_conversacional") {
+    const tipoRegla = (s.metadata?.tipo as string | undefined) ?? "tactica";
+    const condiciones = (s.metadata?.condiciones as Record<string, unknown> | undefined) ?? {};
+    const { data: nueva } = await db
+      .from("reglas_conversacionales")
+      .insert({
+        nombre:      titulo,
+        instruccion: contenido,
+        tipo:        ["tactica","urgencia","restriccion","rebate","producto"].includes(tipoRegla)
+                       ? tipoRegla : "tactica",
+        condiciones,
+        origen:      "kbi_aprendida",
+        aprobada:    true,
+        aprobada_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (!nueva?.id) throw new Error("Insert regla_conversacional no retornó ID");
+    resultado = { accion: "creado", recursoId: nueva.id, titulo };
+  }
+
   // ── CREAR: nuevo recurso faq o regla ─────────────────────────────
-  if (s.tipo_accion === "crear") {
+  else if (s.tipo_accion === "crear") {
     const tipo = (s.tipo_recurso_nuevo ?? "faq") as TipoRecurso;
     const nuevo = await crearRecurso(tipo, titulo, contenido, "ia_sugerido");
     if (!nuevo?.id) throw new Error("crearRecurso no retornó ID");
@@ -82,7 +105,7 @@ export async function aplicarKBISugerencia(
   }
 
   else {
-    throw new Error(`tipo_accion desconocido: ${s.tipo_accion}`);
+    throw new Error(`tipo_accion desconocido: ${s.tipo_accion} / tipo_recurso: ${s.tipo_recurso_nuevo}`);
   }
 
   // Marcar como aplicada — siempre después del cambio exitoso

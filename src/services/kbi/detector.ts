@@ -347,6 +347,73 @@ ${textos.join("\n---\n")}` }],
   return creados;
 }
 
+// ── Detector 5 — Patrón táctica/urgencia → regla_conversacional ──────
+// Lee edits de GHL del admin y detecta si alguno aporta una táctica/urgencia
+// que merece ser capturada como regla_conversacional.
+// Complementa procesarUnEdit() que ya maneja KB (faq/regla).
+async function detectarReglaDesdeEdits(db: DB): Promise<number> {
+  const { data: edits } = await db.from("ghl_approval_queue")
+    .select("mensaje_ia, mensaje_final, razon_edicion, contexto")
+    .eq("estado", "editado")
+    .eq("feedback_procesado", true)  // solo edits ya procesados por Detector 3
+    .gte("revisado_at", HACE_7_DIAS())
+    .not("mensaje_final", "is", null)
+    .limit(15);
+
+  if (!edits?.length) return 0;
+
+  // Evitar crear duplicados: si ya hay >= 2 reglas conversacionales pendientes, omitir
+  const { count: pendientes } = await db.from("kbi_sugerencias")
+    .select("id", { count: "exact", head: true })
+    .eq("tipo_recurso_nuevo", "regla_conversacional")
+    .eq("estado", "pendiente");
+  if ((pendientes ?? 0) >= 2) return 0;
+
+  const ejemplos = (edits as { mensaje_ia: string | null; mensaje_final: string | null; razon_edicion: string | null }[])
+    .slice(0, 5)
+    .map((e, i) => `[${i+1}] IA: "${e.mensaje_ia?.slice(0, 120) ?? "—"}" → Admin: "${e.mensaje_final?.slice(0, 150) ?? "—"}"${e.razon_edicion ? ` (razón: "${e.razon_edicion.slice(0, 80)}")` : ""}`)
+    .join("\n");
+
+  const res = await callClaudeIA("ANALISIS", {
+    max_tokens: 350,
+    messages: [{ role: "user", content:
+      `Analiza las siguientes correcciones de un admin a respuestas de IA de ventas para certificaciones CONOCER México.
+Detecta si hay UN patrón que merezca ser una regla conversacional (táctica, urgencia, restricción o rebate de objeción).
+Solo si hay un patrón claro. Si las correcciones son puntuales y sin patrón, responde: {}
+
+Correcciones recientes:
+${ejemplos}
+
+JSON: {
+  "tipo": "tactica|urgencia|restriccion|rebate",
+  "nombre": "nombre corto de la regla",
+  "instruccion": "instrucción en lenguaje natural para Claude (max 200 chars)",
+  "razon": "por qué detectaste este patrón"
+}` }],
+  });
+
+  const raw  = (res.content[0] as { text: string }).text;
+  const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as {
+    tipo?: string; nombre?: string; instruccion?: string; razon?: string;
+  };
+
+  if (!json.nombre?.trim() || !json.instruccion?.trim()) return 0;
+  const tiposValidos = ["tactica", "urgencia", "restriccion", "rebate"];
+  if (!tiposValidos.includes(json.tipo ?? "")) return 0;
+
+  await db.from("kbi_sugerencias").insert({
+    recurso_id:          null,
+    tipo_accion:         "crear",
+    tipo_recurso_nuevo:  "regla_conversacional",
+    titulo_propuesto:    json.nombre,
+    contenido_propuesto: json.instruccion,
+    razon:               json.razon ?? "Patrón detectado en edits del admin",
+    origen:              "detector_patron",
+    metadata:            { tipo: json.tipo, condiciones: {} },
+  });
+  return 1;
+}
+
 // ── Orquestador ───────────────────────────────────────────────────
 export async function detectarSugerencias(): Promise<{ total: number; errores: string[] }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -359,6 +426,7 @@ export async function detectarSugerencias(): Promise<{ total: number; errores: s
     ["sin_uso",          detectarSinUso],
     ["patron_ghl",       detectarPatronGHL],
     ["huecos_cobertura", detectarHuecosCobertura],
+    ["regla_desde_edits", detectarReglaDesdeEdits],
   ];
 
   for (const [nombre, fn] of detectores) {

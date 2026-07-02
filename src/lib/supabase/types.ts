@@ -196,6 +196,11 @@ export interface Database {
           arco_emocional: string | null;
           arco_emocional_score: number | null;
           arco_emocional_at: string | null;
+          // Migration 083 — MPS-21 S77
+          ghl_contact_id: string | null;
+          tags_ghl: string[];
+          tags_ghl_at: string | null;
+          is_test: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -231,6 +236,11 @@ export interface Database {
           setter_calificado?: boolean | null;
           setter_razon_descalificacion?: string | null;
           modo_revelacion?: "oculto" | "preguntando" | "revelado";
+          // Migration 083 — MPS-21
+          ghl_contact_id?: string | null;
+          tags_ghl?: string[];
+          tags_ghl_at?: string | null;
+          is_test?: boolean;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: Relationship[];
