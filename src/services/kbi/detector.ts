@@ -122,47 +122,36 @@ async function detectarSinUso(db: DB): Promise<number> {
   return creados;
 }
 
-// ── Detector 3 — Patrón de edición GHL ───────────────────────────
-// Lee el DELTA real: mensaje_ia (lo que dijo la IA) vs mensaje_final (lo que corrigió el admin).
-// Si hay recurso KB → actualizar usando la corrección como base.
-// Si no hay recurso KB → crear FAQ/Regla desde la corrección del admin.
-async function detectarPatronGHL(db: DB): Promise<number> {
-  const { data: edits } = await db.from("ghl_approval_queue")
-    .select("id, mensaje_ia, mensaje_final, razon_edicion, contexto")
-    .eq("estado", "editado")
-    .gte("revisado_at", HACE_7_DIAS())
-    .not("mensaje_final", "is", null)
-    .limit(20);
+// ── Detector 3 — núcleo compartido ───────────────────────────────
+// Procesa un único edit de ghl_approval_queue y genera la kbi_sugerencia.
+// Usado tanto por el cron batch como por el trigger event-driven por item.
+async function procesarUnEdit(db: DB, edit: {
+  mensaje_ia: string | null;
+  mensaje_final: string | null;
+  razon_edicion: string | null;
+  contexto: Record<string, unknown> | null;
+}): Promise<boolean> {
+  const mensajeFinal = edit.mensaje_final?.trim();
+  const mensajeIA    = edit.mensaje_ia?.trim();
+  const razon        = edit.razon_edicion?.trim();
+  const ids          = (edit.contexto?.recursosIds as string[] | undefined) ?? [];
 
-  if (!edits?.length) return 0;
+  if (!mensajeFinal) return false;
 
-  let creados = 0;
+  if (ids.length > 0) {
+    // ── Caso A: hay recurso KB — actualizar con la corrección del admin ──
+    const { data: recurso } = await db.from("recursos_conocimiento")
+      .select("id, titulo, contenido")
+      .eq("id", ids[0])
+      .in("tipo", ["faq", "regla"])
+      .maybeSingle() as { data: { id: string; titulo: string; contenido: string } | null };
 
-  for (const edit of edits) {
-    if (creados >= MAX_POR_TIPO) break;
+    if (!recurso || await yaExistePendiente(db, recurso.id, "actualizar")) return false;
 
-    const mensajeFinal = (edit.mensaje_final as string | null)?.trim();
-    const mensajeIA    = (edit.mensaje_ia   as string | null)?.trim();
-    const razon        = (edit.razon_edicion as string | null)?.trim();
-    const ids: string[] = (edit.contexto?.recursosIds as string[] | undefined) ?? [];
-
-    if (!mensajeFinal) continue;
-
-    if (ids.length > 0) {
-      // ── Caso A: hay recurso KB — actualizar con la corrección del admin ──
-      const { data: recurso } = await db.from("recursos_conocimiento")
-        .select("id, titulo, contenido")
-        .eq("id", ids[0])
-        .in("tipo", ["faq", "regla"])
-        .maybeSingle() as { data: { id: string; titulo: string; contenido: string } | null };
-
-      if (!recurso || await yaExistePendiente(db, recurso.id, "actualizar")) continue;
-
-      // Haiku integra la corrección del admin en el recurso KB
-      const res = await callClaudeIA("ANALISIS", {
-        max_tokens: 250,
-        messages: [{ role: "user", content:
-          `Eres editor de KB de un centro de certificaciones CONOCER México.
+    const res = await callClaudeIA("ANALISIS", {
+      max_tokens: 250,
+      messages: [{ role: "user", content:
+        `Eres editor de KB de un centro de certificaciones CONOCER México.
 El admin corrigió una respuesta de IA. Actualiza el recurso KB con la información correcta.
 
 IA respondió: "${mensajeIA?.slice(0, 250) ?? "(no disponible)"}"
@@ -174,32 +163,30 @@ Contenido: ${recurso.contenido.slice(0, 250)}
 
 Genera el contenido KB actualizado integrando la corrección.
 JSON: {"contenido_nuevo": "..."}` }],
-      });
-      const raw  = (res.content[0] as { text: string }).text;
-      const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { contenido_nuevo?: string };
+    });
+    const raw  = (res.content[0] as { text: string }).text;
+    const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { contenido_nuevo?: string };
 
-      const razonDisplay = [
-        razon ? `Feedback: "${razon}"` : null,
-        `IA: "${mensajeIA?.slice(0, 80) ?? ""}…"`,
-        `Corrección: "${mensajeFinal.slice(0, 80)}…"`,
-      ].filter(Boolean).join("\n");
+    const razonDisplay = [
+      razon ? `Feedback: "${razon}"` : null,
+      `IA: "${mensajeIA?.slice(0, 80) ?? ""}…"`,
+      `Corrección: "${mensajeFinal.slice(0, 80)}…"`,
+    ].filter(Boolean).join("\n");
 
-      await db.from("kbi_sugerencias").insert({
-        recurso_id:          recurso.id,
-        tipo_accion:         "actualizar",
-        titulo_propuesto:    recurso.titulo,
-        contenido_propuesto: json.contenido_nuevo ?? mensajeFinal,
-        razon:               razonDisplay,
-        origen:              "detector_patron",
-      });
-      creados++;
+    await db.from("kbi_sugerencias").insert({
+      recurso_id: recurso.id, tipo_accion: "actualizar",
+      titulo_propuesto: recurso.titulo,
+      contenido_propuesto: json.contenido_nuevo ?? mensajeFinal,
+      razon: razonDisplay, origen: "detector_patron",
+    });
+    return true;
 
-    } else {
-      // ── Caso B: sin recurso KB — crear FAQ/Regla desde la corrección ──
-      const res = await callClaudeIA("ANALISIS", {
-        max_tokens: 250,
-        messages: [{ role: "user", content:
-          `Eres editor de KB de un centro de certificaciones CONOCER México.
+  } else {
+    // ── Caso B: sin recurso KB — crear FAQ/Regla desde la corrección ──
+    const res = await callClaudeIA("ANALISIS", {
+      max_tokens: 250,
+      messages: [{ role: "user", content:
+        `Eres editor de KB de un centro de certificaciones CONOCER México.
 El admin corrigió una respuesta de IA que no tenía recurso KB de base.
 Extrae un recurso FAQ o Regla de la respuesta correcta del admin.
 
@@ -208,25 +195,79 @@ ${razon ? `Razón de la edición: "${razon}"` : ""}
 
 JSON: {"tipo": "faq|regla", "titulo": "...", "contenido": "..."}
 Si el contenido no amerita un recurso KB independiente, responde: {}` }],
-      });
-      const raw  = (res.content[0] as { text: string }).text;
-      const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { tipo?: string; titulo?: string; contenido?: string };
+    });
+    const raw  = (res.content[0] as { text: string }).text;
+    const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { tipo?: string; titulo?: string; contenido?: string };
 
-      if (!json.titulo?.trim() || !json.contenido?.trim()) continue;
+    if (!json.titulo?.trim() || !json.contenido?.trim()) return false;
 
-      await db.from("kbi_sugerencias").insert({
-        recurso_id:          null,
-        tipo_accion:         "crear",
-        tipo_recurso_nuevo:  json.tipo === "regla" ? "regla" : "faq",
-        titulo_propuesto:    json.titulo,
-        contenido_propuesto: json.contenido,
-        razon:               `Sin KB de base. Admin corrigió IA${razon ? ` — "${razon}"` : ""}.\nCorrección: "${mensajeFinal.slice(0, 120)}…"`,
-        origen:              "detector_patron",
-      });
-      creados++;
-    }
+    await db.from("kbi_sugerencias").insert({
+      recurso_id: null, tipo_accion: "crear",
+      tipo_recurso_nuevo: json.tipo === "regla" ? "regla" : "faq",
+      titulo_propuesto: json.titulo, contenido_propuesto: json.contenido,
+      razon: `Sin KB de base. Admin corrigió IA${razon ? ` — "${razon}"` : ""}.\nCorrección: "${mensajeFinal.slice(0, 120)}…"`,
+      origen: "detector_patron",
+    });
+    return true;
+  }
+}
+
+// ── Detector 3 — cron batch (fallback) ────────────────────────────
+// Solo procesa edits sin feedback_procesado: items no capturados por el trigger
+// event-driven (fallo en after(), deployments anteriores, etc.).
+async function detectarPatronGHL(db: DB): Promise<number> {
+  const { data: edits } = await db.from("ghl_approval_queue")
+    .select("id, mensaje_ia, mensaje_final, razon_edicion, contexto")
+    .eq("estado", "editado")
+    .is("feedback_procesado", null)
+    .gte("revisado_at", HACE_7_DIAS())
+    .not("mensaje_final", "is", null)
+    .limit(20);
+
+  if (!edits?.length) return 0;
+
+  let creados = 0;
+  for (const edit of edits) {
+    if (creados >= MAX_POR_TIPO) break;
+    if (await procesarUnEdit(db, edit)) creados++;
   }
   return creados;
+}
+
+// ── Detector 3 — trigger event-driven ────────────────────────────
+// Se llama desde editarAprobarMensajeGHLAction vía after() inmediatamente
+// tras cada edición del admin. Procesa solo ese item y lo marca como procesado.
+export async function detectarPatronGHLItem(itemId: string): Promise<void> {
+  const db = createServiceClient() as DB;
+  const traceId = crypto.randomUUID();
+
+  void logSistema({ categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "inicio", traceId, metadata: { itemId } });
+
+  try {
+    const { data: edit } = await db.from("ghl_approval_queue")
+      .select("mensaje_ia, mensaje_final, razon_edicion, contexto")
+      .eq("id", itemId)
+      .eq("estado", "editado")
+      .is("feedback_procesado", null)
+      .not("mensaje_final", "is", null)
+      .maybeSingle();
+
+    if (!edit) return;
+
+    await procesarUnEdit(db, edit);
+
+    await db.from("ghl_approval_queue")
+      .update({ feedback_procesado: true, feedback_procesado_at: new Date().toISOString() })
+      .eq("id", itemId);
+
+    void logSistema({ categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "ok", traceId, metadata: { itemId } });
+  } catch (err) {
+    void logSistema({
+      categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "error", traceId,
+      resultado: err instanceof Error ? err.message : String(err),
+      metadata: { itemId },
+    });
+  }
 }
 
 // ── Detector 4 — Huecos de cobertura ─────────────────────────────

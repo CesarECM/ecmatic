@@ -25,7 +25,7 @@ import {
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
-import { procesarFeedbackEdicion } from "@/services/ghl-feedback-edicion";
+import { detectarPatronGHLItem } from "@/services/kbi/detector";
 import { obtenerUltimoEntrante } from "@/services/mensajes";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
@@ -315,11 +315,11 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
   await actualizarStatsAprobacion(campana, "editado");
   void contarPendientes(campana).then((n) => { if (n === 0) return limpiarIntervaloDisparo(campana); }).catch(() => null);
 
-  // MPS-9 S45.3: procesar retroalimentación de edición → genera sugerencia_ia en KB.
-  // after() garantiza que el trabajo sobreviva en Vercel tras retornar el Server Action.
-  // No se llama registrarCierre aquí: una respuesta editada no debe inflar score_confianza de los recursos KB.
-  after(procesarFeedbackEdicion(itemId).catch((e) => void logSistema({
-    categoria: "ia", tipoAccion: "ghl_feedback.procesar_edicion", fase: "error",
+  // MPS-20: genera kbi_sugerencia inmediatamente tras cada edición del admin.
+  // after() garantiza que sobreviva en Vercel tras retornar el Server Action.
+  // No se llama registrarCierre: una respuesta editada no debe inflar score_confianza de los recursos KB.
+  after(detectarPatronGHLItem(itemId).catch((e) => void logSistema({
+    categoria: "ia", tipoAccion: "kbi.detector.patron_item", fase: "error",
     resultado: e instanceof Error ? e.message : String(e), metadata: { itemId },
   })));
 
