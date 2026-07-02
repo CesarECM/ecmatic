@@ -12,6 +12,7 @@ import { obtenerEtiquetasLead } from "@/services/etiquetas";
 import { obtenerContacto } from "@/lib/ghl/contacts-api";
 import { ChatWhatsAppLead } from "@/components/leads/chat-whatsapp-lead";
 import { LeadInfoPanel } from "@/components/leads/lead-info-panel";
+import { GhlContactoCard } from "@/components/leads/ghl-contacto-card";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 import { Badge } from "@/components/ui/badge";
 import { agendarLlamadaAdminAction, eliminarLlamadaAdminAction } from "./actions";
@@ -81,21 +82,35 @@ export default async function LeadPerfilPage({
 
   if (!lead) notFound();
 
-  // GHL tags: busca el ghl_contact_id más reciente de este lead en la cola de aprobación
-  const { data: qItemContacto } = await (supabase as any)
-    .from("ghl_approval_queue")
-    .select("ghl_contact_id")
-    .eq("lead_ecmatic_id", id)
-    .not("ghl_contact_id", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle() as { data: { ghl_contact_id: string } | null };
+  // GHL contact: usa ghl_contact_id del lead (migration 083); fallback a ghl_approval_queue
+  let ghlContactId: string | null = (lead as any).ghl_contact_id ?? null;
+  if (!ghlContactId) {
+    const { data: qItemContacto } = await (supabase as any)
+      .from("ghl_approval_queue")
+      .select("ghl_contact_id")
+      .eq("lead_ecmatic_id", id)
+      .not("ghl_contact_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle() as { data: { ghl_contact_id: string } | null };
+    ghlContactId = qItemContacto?.ghl_contact_id ?? null;
+  }
 
   let tagsGHL: string[] = [];
-  if (qItemContacto?.ghl_contact_id) {
+  let ghlNombre: string | null = null;
+  let ghlTelefono: string | null = null;
+  let ghlEmail: string | null = null;
+
+  if (ghlContactId) {
     try {
-      const contactoGHL = await obtenerContacto(qItemContacto.ghl_contact_id);
+      const contactoGHL = await obtenerContacto(ghlContactId);
       tagsGHL = contactoGHL.tags ?? [];
+      ghlNombre = contactoGHL.name ??
+        (contactoGHL.firstName
+          ? `${contactoGHL.firstName}${contactoGHL.lastName ? ` ${contactoGHL.lastName}` : ""}`.trim()
+          : null);
+      ghlTelefono = contactoGHL.phone ?? null;
+      ghlEmail = contactoGHL.email ?? null;
     } catch { /* falla silenciosamente si GHL no responde */ }
   }
 
@@ -176,6 +191,11 @@ export default async function LeadPerfilPage({
                   ghl: {t}
                 </span>
               ))}
+            </div>
+          )}
+          {(ghlNombre || ghlTelefono || ghlEmail) && (
+            <div className="basis-full mt-1">
+              <GhlContactoCard nombre={ghlNombre} telefono={ghlTelefono} email={ghlEmail} />
             </div>
           )}
         </div>

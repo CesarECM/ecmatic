@@ -15,14 +15,14 @@ export default async function LeadsPage({
   const vista = view === "kanban" ? "kanban" : "lista";
 
   const [leads, etapasTripwire, etapasPremium] = await Promise.all([
-    listarLeads({ activo: true }),
-    obtenerEtapas("tripwire"),
-    obtenerEtapas("premium"),
+    listarLeads({ activo: true }).catch(() => []),
+    obtenerEtapas("tripwire").catch(() => []),
+    obtenerEtapas("premium").catch(() => []),
   ]);
 
   // S13.6 — Cargar posición multi-pipeline de todos los leads en una sola query
   const pipelinesActivos = leads.length > 0
-    ? await obtenerPipelinesActivosBatch(leads.map((l) => l.id))
+    ? await obtenerPipelinesActivosBatch(leads.map((l) => l.id)).catch(() => ({}))
     : {};
 
   return (
