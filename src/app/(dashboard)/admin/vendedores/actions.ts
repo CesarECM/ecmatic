@@ -50,6 +50,20 @@ export async function agregarVendedorAction(nombre: string, email: string): Prom
   revalidatePath("/admin/vendedores");
 }
 
+// S86.1 — Guarda el ID de calendario GHL del vendedor
+export async function actualizarCalendarioGhlAction(vendedorId: string, ghlCalendarId: string): Promise<void> {
+  const trimId = ghlCalendarId.trim();
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("vendedores")
+    .update({ ghl_calendar_id: trimId || null })
+    .eq("id", vendedorId);
+  if (error) throw new Error(`[vendedores] ${error.message}`);
+  void logSistema({ categoria: "ui", tipoAccion: "vendedores.actualizar-calendario-ghl", fase: "ok",
+    metadata: { vendedor_id: vendedorId, tiene_id: !!trimId } });
+  revalidatePath(`/admin/vendedores/${vendedorId}`);
+}
+
 // S25.0b — Reenvía la invitación a un vendedor que aún no ha aceptado
 export async function reenviarInvitacionAction(email: string): Promise<void> {
   const supabase = createServiceClient();

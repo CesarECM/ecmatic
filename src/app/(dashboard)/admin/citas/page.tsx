@@ -46,16 +46,18 @@ export default async function CitasPage({ searchParams }: Props) {
               <th className="p-3 text-left">Fecha</th>
               <th className="p-3 text-center">Estado</th>
               <th className="p-3 text-center">Meet</th>
+              <th className="p-3 text-center">GHL</th>
               <th className="p-3 text-center">Transcripto</th>
             </tr>
           </thead>
           <tbody>
             {citas.length === 0 && (
-              <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Sin citas</td></tr>
+              <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">Sin citas</td></tr>
             )}
             {citas.map((c) => {
               const lead = c.leads as unknown as { nombre: string | null; telefono: string | null } | null;
               const vendedor = c.vendedores as unknown as { nombre: string } | null;
+              const ghlId = (c as unknown as { ghl_appointment_id?: string | null }).ghl_appointment_id;
               return (
                 <tr key={c.id} className="border-b hover:bg-gray-50">
                   <td className="p-3 font-medium">{lead?.nombre ?? lead?.telefono ?? "—"}</td>
@@ -71,6 +73,11 @@ export default async function CitasPage({ searchParams }: Props) {
                   <td className="p-3 text-center">
                     {c.google_meet_link
                       ? <a href={c.google_meet_link} target="_blank" className="text-blue-600 text-xs hover:underline">Abrir</a>
+                      : <span className="text-xs text-gray-400">—</span>}
+                  </td>
+                  <td className="p-3 text-center">
+                    {ghlId
+                      ? <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Sincronizado</span>
                       : <span className="text-xs text-gray-400">—</span>}
                   </td>
                   <td className="p-3 text-center">

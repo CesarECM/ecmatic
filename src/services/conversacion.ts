@@ -13,7 +13,7 @@ import { obtenerEtiquetasLead } from "./etiquetas";
 import { obtenerConfig } from "./sistema";
 import { encolarRespuesta } from "./mensajes-aprobacion";
 import { capturarContactoPasivo } from "./captura-contacto";
-import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet } from "./citas";
+import { obtenerSlotsDisponibles, asignarMejorVendedor, crearCitaConMeet, obtenerCitaProxima } from "./citas";
 import { detectarSlotSeleccionado } from "@/lib/ai/slot-matcher";
 import { logAgen } from "./log-agendamiento";
 import { logDebugIA } from "./log-ia";
@@ -99,7 +99,7 @@ export async function procesarConversacion(
   inferirTemperamento(lead.id, mensajes).catch(console.error);
 
   const supabase = createServiceClient();
-  const [{ data: leadActualizado }, estadoCagc, etiquetasLead, memoriaIA] = await Promise.all([
+  const [{ data: leadActualizado }, estadoCagc, etiquetasLead, memoriaIA, citaProxima] = await Promise.all([
     supabase
       .from("leads")
       .select("nombre, email, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, canal_origen, setter_fase_actual, setter_calificado, modo_revelacion")
@@ -109,6 +109,7 @@ export async function procesarConversacion(
     obtenerEtiquetasLead(lead.id).catch(() => []),
     supabase.from("leads").select("memoria_ia").eq("id", lead.id).single()
       .then((r) => r.data?.memoria_ia ?? null, () => null),
+    obtenerCitaProxima(lead.id).catch(() => null),
   ]);
 
   void logDebugIA("CONVERSACION", `[CAGC] fase=${estadoCagc?.fase_numero ?? "?"} etapa=${leadActualizado?.pipeline_stage}`, { pipeline_ruta: leadActualizado?.pipeline_ruta }, "debug", traceId);
@@ -117,7 +118,8 @@ export async function procesarConversacion(
   let slotsParaAI = undefined;
   let meetLinkParaAI: string | null = null;
 
-  if (intencion === "quiere_agendar") {
+  // S85.2 — Si hay cita próxima confirmada, no procesar nuevos agendamientos (evita doble cita)
+  if (intencion === "quiere_agendar" && !citaProxima) {
     try {
       const vendedorId = await asignarMejorVendedor();
       if (vendedorId) {
@@ -134,7 +136,7 @@ export async function procesarConversacion(
     }
   }
 
-  if (intencion === "confirmando_slot") {
+  if (intencion === "confirmando_slot" && !citaProxima) {
     try {
       const vendedorId = await asignarMejorVendedor();
       if (vendedorId) {
@@ -241,6 +243,9 @@ export async function procesarConversacion(
       modoRevelacion: nuevoModoRevelacion,
       leadId: lead.id,
       memoriaIA,
+      modoPreSesion: citaProxima
+        ? { fechaIso: citaProxima.fecha_inicio, meetLink: citaProxima.google_meet_link }
+        : undefined,
     }),
     procesarArcoEmocional(lead.id, mensajes, historial).catch(() => ({ triggerHandoff: false })),
   ]);

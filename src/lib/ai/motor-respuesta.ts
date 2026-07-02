@@ -85,6 +85,8 @@ interface ContextoLead {
   esAutoReply?: boolean;
   // MPS-21 — Tags GHL cacheados en leads.tags_ghl para matching de reglas
   tagsGhl?: string[];
+  // S85 — Cita confirmada próxima: activa el modo pre-sesión (bot responde solo dudas de la cita)
+  modoPreSesion?: { fechaIso: string; meetLink?: string | null };
 }
 
 export interface RespuestaIA {
@@ -322,6 +324,22 @@ export async function generarRespuesta(
     ? "\n- CONTEXTO CLAVE: El mensaje recibido es una respuesta automática de WhatsApp Business del lead (saludo o bienvenida automática, no una consulta real). NOSOTROS lo contactamos a él — él NO nos contactó. NUNCA preguntes '¿En qué puedo ayudarte?' ni '¿Para qué nos contactaste?'. Retoma el hilo de prospección explicando brevemente el motivo de nuestro contacto y abre con una pregunta de descubrimiento sobre su situación."
     : "";
 
+  // S85 — Modo pre-sesión: desactiva el flujo de ventas mientras haya cita confirmada próxima
+  let preSessionLinea = "";
+  if (contexto.modoPreSesion) {
+    const d = new Date(contexto.modoPreSesion.fechaIso);
+    const fechaPs = d.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
+    const horaPs  = d.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+    const meetLinkPs = contexto.modoPreSesion.meetLink
+      ? `\n• Link de Google Meet: ${contexto.modoPreSesion.meetLink}` : "";
+    preSessionLinea = `\nMODO PRE-SESIÓN ACTIVO — PRIORIDAD MÁXIMA. Anula cualquier instrucción de ventas:
+El lead tiene una cita confirmada para el ${fechaPs} a las ${horaPs} (hora del Centro de México).${meetLinkPs}
+SOLO puedes responder dudas sobre la sesión: hora, cómo conectarse al Meet, qué preparar, cuánto dura.
+Si el lead muestra dudas sobre asistir: revalida el valor de la sesión brevemente, confirma el horario y no abras más conversación después.
+NO puedes: hacer preguntas de cierre de ventas, ofrecer pagos o inscripción, continuar el flujo de prospección, ni terminar con preguntas que inviten a seguir conversando sobre temas distintos a la cita.
+Tono: informativo, cálido y muy breve.`;
+  }
+
   const canal = contexto.canal_origen;
   const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
     ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
@@ -358,8 +376,8 @@ INSTRUCCIONES:
 - Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
 - Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
 ${instruccionCanal}${autoReplyLinea}
-${instruccionVenta}
-${instruccionReglaOroCierre()}`;
+${contexto.modoPreSesion ? preSessionLinea : instruccionVenta}
+${contexto.modoPreSesion ? "" : instruccionReglaOroCierre()}`;
 
   const response = await callClaudeIA("RESPUESTA", {
     max_tokens: 400,

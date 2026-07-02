@@ -39,6 +39,7 @@ const MANUALES = [
   { label: "DNS de ceecm.mx apuntando a Vercel (A/CNAME)", grupo: "Producción" },
   { label: "Aviso de Privacidad publicado y accesible en PRIVACY_URL", grupo: "Legal" },
   { label: "Al menos 1 vendedor con OAuth de Google Calendar activo", grupo: "Agendamiento" },
+  { label: "ID Calendario GHL asignado a todos los vendedores activos (admin/vendedores/[id])", grupo: "Agendamiento" },
   { label: "Flujo WA de punta a punta probado (mensaje → respuesta IA)", grupo: "WhatsApp" },
   { label: "Pago de prueba completado en Stripe Test Mode", grupo: "Pagos" },
   { label: "SmartBuilderEC: API documentada y SMARTBUILDER_API_KEY configurada", grupo: "Integración" },

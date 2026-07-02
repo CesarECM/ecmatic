@@ -1,6 +1,7 @@
 // S25.4 — Notifica al lead y al vendedor cuando una cita queda confirmada con link de Meet
+// S84.3 — WA al lead desactivado: el workflow de GHL envía la confirmación automáticamente.
+//          Email al lead y email al vendedor se mantienen en ECMatic.
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendTextMessageWithRetry } from "@/lib/whatsapp/client";
 import { enviarEmail } from "@/lib/email/resend";
 import { logAgen } from "@/services/log-agendamiento";
 
@@ -29,15 +30,9 @@ export async function notificarCitaConfirmada(
   const { fecha, hora } = formatearFechaHora(cita.fecha_inicio);
   const nombreLead = lead?.nombre ?? "ahí";
 
-  // WhatsApp al lead
-  if (lead?.telefono) {
-    const msg = `¡Hola ${nombreLead}! Tu cita de asesoría está confirmada.\n\n📅 ${fecha} a las ${hora}\n🎥 ${meetLink}\n\nTe esperamos. Cualquier duda, escríbenos aquí.`;
-    await sendTextMessageWithRetry(lead.telefono, msg)
-      .then(() => void logAgen({ paso: "notificacion_wa", citaId, leadId, vendedorId,
-        detalle: `WhatsApp enviado a ${lead.telefono}`, metadata: { fecha, hora } }))
-      .catch((err: unknown) => void logAgen({ paso: "notificacion_wa", nivel: "error", citaId, leadId, vendedorId,
-        detalle: err instanceof Error ? err.message : String(err) }));
-  }
+  // WhatsApp al lead: omitido — el workflow de GHL dispara la confirmación automáticamente
+  void logAgen({ paso: "wa_omitido_ghl_workflow", citaId, leadId, vendedorId,
+    detalle: "WA de confirmación delegado al workflow de GHL", metadata: { fecha, hora } });
 
   // Email al lead
   if (lead?.email) {

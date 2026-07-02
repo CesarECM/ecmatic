@@ -8,8 +8,11 @@ export type PasoAgendamiento =
   | "cita_creada"
   | "estado_confirmado"
   | "notificacion_wa"
+  | "wa_omitido_ghl_workflow"
   | "notificacion_email_lead"
   | "notificacion_email_vendedor"
+  | "ghl_appointment_creado"
+  | "ghl_appointment_omitido"
   | "error";
 
 export type NivelLog = "info" | "warn" | "error";

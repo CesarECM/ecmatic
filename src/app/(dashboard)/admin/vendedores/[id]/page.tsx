@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/service";
 import { calcularMetricasVendedor, generarCoachingIA } from "@/services/vendedor-metricas";
 import { listarTranscriptos } from "@/services/transcriptos";
+import { CalendarioGhlInput } from "@/components/vendedores/calendario-ghl-input";
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -10,7 +11,7 @@ export const revalidate = 0;
 export default async function VendedorDetallePage({ params }: Props) {
   const { id } = await params;
   const supabase = createServiceClient();
-  const { data: vendedor } = await supabase.from("vendedores").select("id, nombre, email").eq("id", id).single();
+  const { data: vendedor } = await supabase.from("vendedores").select("id, nombre, email, ghl_calendar_id").eq("id", id).single();
   if (!vendedor) notFound();
 
   const [metricas, coaching, transcriptos] = await Promise.all([
@@ -59,6 +60,18 @@ export default async function VendedorDetallePage({ params }: Props) {
           </ul>
         </div>
       )}
+
+      {/* Configuración GHL */}
+      <div className="rounded border p-4 space-y-2">
+        <p className="text-sm font-medium">Configuración GHL — Calendario de disponibilidad</p>
+        <p className="text-xs text-muted-foreground">
+          ID del calendario de GHL de este vendedor. Cópialo desde GHL → Calendarios → selecciona el calendario → ajustes → URL o ID.
+        </p>
+        <CalendarioGhlInput
+          vendedorId={vendedor.id}
+          calendarIdInicial={(vendedor as { ghl_calendar_id?: string | null }).ghl_calendar_id ?? null}
+        />
+      </div>
 
       {/* Transcriptos */}
       <div>

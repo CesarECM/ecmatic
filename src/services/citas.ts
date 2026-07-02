@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { isConfigured, getFreeBusy, refreshAccessToken, createCalendarEvent } from "@/lib/google/calendar";
+import { obtenerSlotsGHL, crearAppointmentGHL } from "@/lib/ghl/calendar";
 import { notificarCitaConfirmada } from "@/services/notificaciones-cita";
 import { logAgen } from "@/services/log-agendamiento";
 import type { EstadoCita, ResultadoCita } from "@/lib/supabase/types";
@@ -51,8 +52,8 @@ async function sincronizarConCalendar(
     const supabase = createServiceClient();
     const [{ data: tokenRow }, { data: lead }, { data: vendedor }] = await Promise.all([
       supabase.from("vendedor_tokens").select("*").eq("vendedor_id", vendedorId).maybeSingle(),
-      supabase.from("leads").select("nombre, email, telefono").eq("id", leadId).single(),
-      supabase.from("vendedores").select("nombre, email").eq("id", vendedorId).single(),
+      supabase.from("leads").select("nombre, email, telefono, ghl_contact_id").eq("id", leadId).single(),
+      supabase.from("vendedores").select("nombre, email, ghl_calendar_id").eq("id", vendedorId).single(),
     ]);
     if (!tokenRow || !vendedor) return null;
 
@@ -87,6 +88,30 @@ async function sincronizarConCalendar(
     }
 
     await supabase.from("citas").update({ google_event_id: eventId, google_meet_link: meetLink }).eq("id", citaId);
+
+    // S84.1 — Registrar appointment en GHL con el Meet link embebido.
+    // No bloqueante: si GHL falla la cita queda en BD con Meet link disponible.
+    const ghlCalendarId = (vendedor as { ghl_calendar_id?: string | null } | null)?.ghl_calendar_id ?? null;
+    const ghlContactId  = (lead as { ghl_contact_id?: string | null } | null)?.ghl_contact_id ?? null;
+    if (ghlCalendarId && ghlContactId) {
+      const appointmentId = await crearAppointmentGHL({
+        calendarId: ghlCalendarId,
+        contactId:  ghlContactId,
+        inicio, fin,
+        titulo:   `Asesoría CONOCER | ${nombreLead}`,
+        meetLink: meetLink ?? undefined,
+        notas:    "Cita de asesoría para certificación CONOCER agendada desde ECMatic",
+      });
+      if (appointmentId) {
+        await supabase.from("citas").update({ ghl_appointment_id: appointmentId }).eq("id", citaId);
+        void logAgen({ paso: "ghl_appointment_creado", citaId, leadId, vendedorId,
+          detalle: `GHL appointment: ${appointmentId}`, metadata: { appointmentId, tieneMeetLink: !!meetLink } });
+      } else {
+        void logAgen({ paso: "ghl_appointment_omitido", nivel: "warn", citaId, leadId, vendedorId,
+          detalle: "crearAppointmentGHL retornó null — cita en BD y Meet link disponibles" });
+      }
+    }
+
     if (notificar && meetLink) {
       void notificarCitaConfirmada(citaId, leadId, vendedorId, meetLink);
     }
@@ -157,16 +182,36 @@ export async function asignarMejorVendedor(): Promise<string | null> {
   return conDeficit[0].id;
 }
 
-// S25.1 — Slots disponibles con Google Calendar como fuente de verdad para bloqueos manuales
+// S25.1 / S83.3 — Slots disponibles.
+// Si el vendedor tiene ghl_calendar_id → usa GHL como fuente de verdad (más preciso,
+// el vendedor controla su disponibilidad directamente en GHL).
+// Fallback: Google Calendar freebusy + candidatos fijos (lógica original).
 export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotDisponible[]> {
   const supabase = createServiceClient();
   const [{ data: vendedor }, { data: citasExistentes }] = await Promise.all([
-    supabase.from("vendedores").select("nombre").eq("id", vendedorId).single(),
+    supabase.from("vendedores").select("nombre, ghl_calendar_id").eq("id", vendedorId).single(),
     supabase.from("citas")
       .select("fecha_inicio, fecha_fin")
       .eq("vendedor_id", vendedorId)
       .in("estado", ["pendiente", "confirmada"]),
   ]);
+
+  // Rama GHL: si el vendedor tiene calendario GHL configurado, lo usa como fuente única
+  if (vendedor?.ghl_calendar_id) {
+    try {
+      return await obtenerSlotsGHL(
+        vendedor.ghl_calendar_id,
+        vendedorId,
+        vendedor.nombre ?? "Asesor",
+      );
+    } catch (err) {
+      void logAgen({
+        paso: "error", nivel: "warn", vendedorId,
+        detalle: `GHL free-slots falló, usando fallback Google Calendar: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      // Cae al flujo original si GHL falla
+    }
+  }
 
   // Bloques de la BD
   const ocupados: { inicio: string | Date; fin: string | Date }[] =
@@ -230,6 +275,25 @@ export async function obtenerSlotsDisponibles(vendedorId: string): Promise<SlotD
   void logAgen({ paso: "slots_consultados", vendedorId, detalle: `${slots.length} slots disponibles generados`,
     metadata: { slots_encontrados: slots.length, dias_revisados: diasRevisados } });
   return slots;
+}
+
+// S85.1 — Devuelve la próxima cita confirmada/pendiente del lead, o null si no hay ninguna.
+// Usada por el motor de conversación para activar el modo pre-sesión del bot.
+export async function obtenerCitaProxima(leadId: string): Promise<{
+  fecha_inicio: string;
+  google_meet_link: string | null;
+} | null> {
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from("citas")
+    .select("fecha_inicio, google_meet_link")
+    .eq("lead_id", leadId)
+    .in("estado", ["pendiente", "confirmada"])
+    .gt("fecha_inicio", new Date().toISOString())
+    .order("fecha_inicio", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
 }
 
 export async function listarCitas(filtros?: { vendedorId?: string; estado?: EstadoCita }) {

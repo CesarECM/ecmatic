@@ -145,6 +145,7 @@ export interface Database {
           telefono: string | null;
           activo: boolean;
           peso: number;
+          ghl_calendar_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -156,6 +157,7 @@ export interface Database {
           telefono?: string | null;
           activo?: boolean;
           peso?: number;
+          ghl_calendar_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["vendedores"]["Insert"]>;
         Relationships: Relationship[];
@@ -670,6 +672,7 @@ export interface Database {
           id: string; lead_id: string; vendedor_id: string | null;
           fecha_inicio: string; fecha_fin: string; estado: EstadoCita;
           google_event_id: string | null; google_meet_link: string | null;
+          ghl_appointment_id: string | null;
           notas_previas: string | null; notas_vendedor: string | null;
           resultado: ResultadoCita | null; compromisos: string | null;
           recordatorio_24h: boolean; recordatorio_2h: boolean; recordatorio_vendedor_30m: boolean;
@@ -679,6 +682,7 @@ export interface Database {
           id?: string; lead_id: string; vendedor_id?: string | null;
           fecha_inicio: string; fecha_fin: string; estado?: EstadoCita;
           google_event_id?: string | null; google_meet_link?: string | null;
+          ghl_appointment_id?: string | null;
           notas_previas?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["citas"]["Insert"] & {
