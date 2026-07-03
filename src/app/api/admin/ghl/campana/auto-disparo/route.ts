@@ -28,12 +28,19 @@ function horaCDMX(): number {
 export async function GET() {
   const stats = await obtenerStatsAprobacion(CAMPANA);
 
+  if (!stats) {
+    void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "error", resultado: `sin stats para campaña: ${CAMPANA}` });
+    return NextResponse.json({ ok: true, motivo: "sin_stats" });
+  }
+
   if (!stats?.activa) {
+    void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "warn", resultado: "campaña inactiva — early exit" });
     return NextResponse.json({ ok: true, motivo: "campana_inactiva" });
   }
 
   const hora = horaCDMX();
   if (hora < HORA_INICIO || hora >= HORA_FIN) {
+    void logSistema({ categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "debug", resultado: `fuera de horario — hora CDMX: ${hora.toFixed(0)} min` });
     return NextResponse.json({ ok: true, motivo: "fuera_de_horario", hora });
   }
 
