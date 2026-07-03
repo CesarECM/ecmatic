@@ -15,6 +15,13 @@ const CATEGORIAS_ELEGIBLES: CategoriaSBC[] = [
   "ecm_sbc_sin_hist",
 ];
 
+// GHL fetch size: desacoplado del lote a enviar.
+// Cuántos contactos traer por llamada a la API de GHL (máximo recomendado = 100).
+const GHL_FETCH_SIZE = 100;
+
+// Presupuesto de tiempo por run del cron (maxDuration=300s — dejamos 60s de margen).
+const MAX_MS = 240_000;
+
 export interface LoteResultado {
   procesados: number;
   enviados:   number;
@@ -24,162 +31,160 @@ export interface LoteResultado {
   totalGHL:   number;
 }
 
+// Recorre páginas de GHL hasta enviar maxEnvios leads elegibles o agotar el tiempo/pool.
+// Cada página trae GHL_FETCH_SIZE contactos; el check de yaLog se hace en batch (1 query por página).
 export async function procesarLoteCampana(
-  page: number,
-  pageLimit = 20
+  paginaInicial: number,
+  maxEnvios: number,
 ): Promise<LoteResultado> {
   const workflowA = process.env.GHL_WORKFLOW_A_ID ?? "";
   const workflowB = process.env.GHL_WORKFLOW_B_ID ?? "";
-
   if (!workflowA || !workflowB) {
     throw new Error("GHL_WORKFLOW_A_ID y GHL_WORKFLOW_B_ID deben estar configurados");
   }
 
-  const supabase = createServiceClient();
-
-  // Buscar contactos con tag ecm_b_caliente en GHL
-  const { contacts, total } = await buscarContactosPorTag(TAG_FUENTE, page, pageLimit);
+  const supabase     = createServiceClient();
+  const umbral7dias  = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const iniciadoEn   = Date.now();
 
   let enviados  = 0;
   let excluidos = 0;
   let errores   = 0;
+  let procesados = 0;
+  let nextPage: number | null = null;
+  let totalGHL = 0;
+  let page = paginaInicial;
 
-  const umbral7dias = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  while (enviados < maxEnvios) {
+    // Presupuesto de tiempo para no exceder maxDuration de Vercel
+    if (Date.now() - iniciadoEn > MAX_MS) break;
 
-  for (const contacto of contacts) {
-    try {
-      // Excluir contactos creados hace menos de 7 días
-      if (contacto.dateAdded) {
-        const fechaCreacion = new Date(contacto.dateAdded).getTime();
-        if (fechaCreacion > umbral7dias) {
-          await agregarTagsContacto(contacto.id, ["est_nuevo"]).catch(() => null);
+    const { contacts, total } = await buscarContactosPorTag(TAG_FUENTE, page, GHL_FETCH_SIZE);
+    totalGHL = total;
+
+    if (contacts.length === 0) { nextPage = null; break; }
+
+    // Batch check: un solo SELECT IN en lugar de N queries secuenciales
+    const ids = contacts.map((c) => c.id);
+    const { data: logsExistentes } = await (supabase as any)
+      .from("ghl_campana_logs")
+      .select("ghl_contact_id, enviado")
+      .eq("campana", CAMPANA_ACTIVA)
+      .in("ghl_contact_id", ids) as { data: { ghl_contact_id: string; enviado: boolean }[] | null };
+    const yaEnviadoMap = new Map((logsExistentes ?? []).map((l) => [l.ghl_contact_id, l.enviado]));
+
+    for (const contacto of contacts) {
+      if (enviados >= maxEnvios) break;
+      procesados++;
+
+      try {
+        // Fast path — sin IA ni GHL API (microsegundos)
+        if (contacto.dateAdded && new Date(contacto.dateAdded).getTime() > umbral7dias) {
+          void agregarTagsContacto(contacto.id, ["est_nuevo"]).catch(() => null);
           excluidos++;
           continue;
         }
-      }
 
-      // Verificar si ya fue procesado en esta campaña
-      const { data: yaLog } = await (supabase as any)
-        .from("ghl_campana_logs")
-        .select("id, enviado")
-        .eq("ghl_contact_id", contacto.id)
-        .eq("campana", CAMPANA_ACTIVA)
-        .maybeSingle() as { data: { id: string; enviado: boolean } | null };
-
-      if (yaLog?.enviado) {
-        excluidos++;
-        continue;
-      }
-
-      // Leer historial WA del contacto
-      let historialTexto = "";
-      try {
-        const conv = await buscarConversacionWA(contacto.id);
-        if (conv) {
-          const mensajes = await obtenerMensajes(conv.id, 30);
-          historialTexto = formatearHistorialGHL(mensajes);
+        if (yaEnviadoMap.get(contacto.id) === true) {
+          excluidos++;
+          continue;
         }
-      } catch {
-        // Sin historial — continúa con string vacío → ecm_sbc_sin_hist
-      }
 
-      // Clasificar con Haiku
-      const { categoria, razon } = await calificarContactoGHL(historialTexto, contacto.id);
+        // Slow path — historial WA + Haiku + workflow
+        let historialTexto = "";
+        try {
+          const conv = await buscarConversacionWA(contacto.id);
+          if (conv) {
+            const mensajes = await obtenerMensajes(conv.id, 30);
+            historialTexto = formatearHistorialGHL(mensajes);
+          }
+        } catch { /* sin historial → ecm_sbc_sin_hist */ }
 
-      // Aplicar tag SBC en GHL
-      await agregarTagsContacto(contacto.id, [categoria]).catch(() => null);
+        const { categoria, razon } = await calificarContactoGHL(historialTexto, contacto.id);
+        void agregarTagsContacto(contacto.id, [categoria]).catch(() => null);
 
-      // Excluir si ya compró o descartó
-      if (categoria === "ecm_sbc_ya_compro" || categoria === "ecm_sbc_descartado") {
-        const tagExtra = categoria === "ecm_sbc_descartado" ? ["ecm_blacklist"] : [];
-        if (tagExtra.length) await agregarTagsContacto(contacto.id, tagExtra).catch(() => null);
+        if (categoria === "ecm_sbc_ya_compro" || categoria === "ecm_sbc_descartado") {
+          if (categoria === "ecm_sbc_descartado") {
+            void agregarTagsContacto(contacto.id, ["ecm_blacklist"]).catch(() => null);
+          }
+          await upsertLog(supabase, {
+            ghl_contact_id: contacto.id,
+            nombre:         nombreContacto(contacto),
+            categoria_sbc:  categoria,
+            enviado:        false,
+            metadata:       { razon },
+          });
+          excluidos++;
+          continue;
+        }
+
+        if (!CATEGORIAS_ELEGIBLES.includes(categoria)) {
+          excluidos++;
+          continue;
+        }
+
+        const variante   = await elegirVarianteWorkflow(CAMPANA_ACTIVA);
+        const workflowId = variante === "a" ? workflowA : workflowB;
+
+        await (supabase as any).from("leads").upsert(
+          {
+            telefono:            `ghl_${contacto.id}`,
+            canal_origen:        "whatsapp",
+            privacidad_aceptada: true,
+            nombre:              nombreContacto(contacto),
+          },
+          { onConflict: "telefono" }
+        );
+
+        await inscribirEnWorkflow(contacto.id, workflowId);
 
         await upsertLog(supabase, {
           ghl_contact_id: contacto.id,
-          nombre:        nombreContacto(contacto),
-          categoria_sbc: categoria,
-          enviado:       false,
-          metadata:      { razon },
+          nombre:         nombreContacto(contacto),
+          categoria_sbc:  categoria,
+          workflow_id:    workflowId,
+          variante,
+          enviado:        true,
+          enviado_at:     new Date().toISOString(),
+          metadata:       { razon },
         });
-        excluidos++;
-        continue;
+
+        enviados++;
+        await delay(2000);
+      } catch (err) {
+        errores++;
+        void logSistema({
+          categoria:  "servicio",
+          tipoAccion: "ghl_campana.error",
+          fase:       "error",
+          resultado:  err instanceof Error ? err.message.slice(0, 200) : "Error",
+          metadata:   { ghl_contact_id: contacto.id, campana: CAMPANA_ACTIVA },
+        });
       }
-
-      if (!CATEGORIAS_ELEGIBLES.includes(categoria)) {
-        excluidos++;
-        continue;
-      }
-
-      // Thompson Sampling → elegir workflow A o B
-      const variante  = await elegirVarianteWorkflow(CAMPANA_ACTIVA);
-      const workflowId = variante === "a" ? workflowA : workflowB;
-
-      // Pre-crear lead en ECMatic antes del workflow (patrón idéntico a usuarios de prueba —
-      // el webhook SBC necesita que el lead ya exista cuando llegue la respuesta del contacto)
-      await (supabase as any).from("leads").upsert(
-        {
-          telefono:            `ghl_${contacto.id}`,
-          canal_origen:        "whatsapp",
-          privacidad_aceptada: true,
-          nombre:              nombreContacto(contacto),
-        },
-        { onConflict: "telefono" }
-      );
-
-      // Inscribir en workflow (GHL envía el template automáticamente)
-      await inscribirEnWorkflow(contacto.id, workflowId);
-
-      await upsertLog(supabase, {
-        ghl_contact_id: contacto.id,
-        nombre:        nombreContacto(contacto),
-        categoria_sbc: categoria,
-        workflow_id:   workflowId,
-        variante,
-        enviado:       true,
-        enviado_at:    new Date().toISOString(),
-        metadata:      { razon },
-      });
-
-      enviados++;
-
-      // Rate limit: 1 contacto cada 2 s para no saturar GHL
-      await delay(2000);
-    } catch (err) {
-      errores++;
-      void logSistema({
-        categoria:  "servicio",
-        tipoAccion: "ghl_campana.error",
-        fase:       "error",
-        resultado:  err instanceof Error ? err.message.slice(0, 200) : "Error",
-        metadata:   { ghl_contact_id: contacto.id, campana: CAMPANA_ACTIVA },
-      });
     }
+
+    // Calcular siguiente página con el tamaño de fetch real
+    const totalPaginas = Math.ceil(total / GHL_FETCH_SIZE);
+    nextPage = page < totalPaginas ? page + 1 : null;
+
+    if (enviados >= maxEnvios || nextPage === null) break;
+    page = nextPage; // seguir al siguiente bloque de GHL_FETCH_SIZE contactos
   }
 
-  const totalPaginas = Math.ceil(total / pageLimit);
-  const nextPage     = page < totalPaginas ? page + 1 : null;
-
-  return {
-    procesados: contacts.length,
-    enviados,
-    excluidos,
-    errores,
-    nextPage,
-    totalGHL: total,
-  };
+  return { procesados, enviados, excluidos, errores, nextPage, totalGHL };
 }
 
 async function upsertLog(
   supabase: ReturnType<typeof createServiceClient>,
   data: {
     ghl_contact_id: string;
-    nombre?: string;
-    categoria_sbc: string;
-    workflow_id?: string;
-    variante?: "a" | "b";
-    enviado: boolean;
-    enviado_at?: string;
-    metadata?: Record<string, unknown>;
+    nombre?:        string;
+    categoria_sbc:  string;
+    workflow_id?:   string;
+    variante?:      "a" | "b";
+    enviado:        boolean;
+    enviado_at?:    string;
+    metadata?:      Record<string, unknown>;
   }
 ): Promise<void> {
   await (supabase as any)
