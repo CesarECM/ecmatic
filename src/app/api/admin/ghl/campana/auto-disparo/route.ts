@@ -4,7 +4,7 @@ import {
   obtenerStatsAprobacion, calcularNivel,
   contarEnviadosHoy, contarPendientes,
   actualizarAcumulador, actualizarPaginaCampana,
-  contarResolucionesRecientes, obtenerUltimoEncoladoAt,
+  contarResolucionesRecientes, contarAutoAprobacionesRecientes, obtenerUltimoEncoladoAt,
 } from "@/services/ghl-aprobacion";
 import {
   calcularFactorFreno, calcularFactorMomento, calcularFactorTurbo, CRON_INTERVAL_MIN,
@@ -58,8 +58,12 @@ export async function GET() {
 
   const velocidadEfectiva = nivel.velocidadLeadsPorMin * factorFreno;
 
-  // ── MPS-24 S87: Impulso por ritmo de aprobación reciente ─────────────────
-  const resolucionesRecientes = await contarResolucionesRecientes(CAMPANA).catch(() => 0);
+  // ── MPS-24 S87 + MPS-27 S101: Momentum = humanas + 0.5 × auto-aprobadas ──
+  const [resolucionesHumanas, resolucionesAuto] = await Promise.all([
+    contarResolucionesRecientes(CAMPANA).catch(() => 0),
+    contarAutoAprobacionesRecientes(CAMPANA).catch(() => 0),
+  ]);
+  const resolucionesRecientes = resolucionesHumanas + Math.floor(resolucionesAuto * 0.5);
   const factorMomento         = calcularFactorMomento(resolucionesRecientes);
 
   // ── MPS-24 S87-T: Turbo — cola vacía + admin a ritmo máximo ───────────────
@@ -69,7 +73,8 @@ export async function GET() {
     const ultimoEncoladoAt = await obtenerUltimoEncoladoAt(CAMPANA).catch(() => null);
     if (ultimoEncoladoAt) {
       minutosSinEncolar = (Date.now() - ultimoEncoladoAt.getTime()) / 60_000;
-      factorTurbo = calcularFactorTurbo(minutosSinEncolar, pendientes, resolucionesRecientes);
+      // Turbo requiere ritmo humano — pasa solo resolucionesHumanas (no el combinado con IA)
+      factorTurbo = calcularFactorTurbo(minutosSinEncolar, pendientes, resolucionesHumanas);
     }
   }
 
@@ -97,7 +102,7 @@ export async function GET() {
 
   void logSistema({
     categoria: "cron", tipoAccion: "ghl_campana.auto", fase: "inicio",
-    resultado: `nivel:${nivel.nivel} vel:${velocidadEfectiva.toFixed(2)}/min momentum:+${Math.round(factorMomento * 100)}% turbo:+${Math.round(factorTurbo * 100)}% (${Math.round(minutosSinEncolar)}min) freno:${Math.round(factorFreno * 100)}% lote:${loteEfectivo}`,
+    resultado: `nivel:${nivel.nivel} vel:${velocidadEfectiva.toFixed(2)}/min momentum:+${Math.round(factorMomento * 100)}% (h:${resolucionesHumanas}+a:${resolucionesAuto}→${resolucionesRecientes}) turbo:+${Math.round(factorTurbo * 100)}% (${Math.round(minutosSinEncolar)}min) freno:${Math.round(factorFreno * 100)}% lote:${loteEfectivo}`,
   });
 
   const resultado = await procesarLoteCampana(paginaActual, loteEfectivo).catch((e) => {

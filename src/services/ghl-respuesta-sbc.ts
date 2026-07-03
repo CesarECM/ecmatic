@@ -247,6 +247,20 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
         void registrarSenales("cierre", recursosIds, { leadId }).catch(() => null);
       }
       void actualizarStatsAprobacion(CAMPANA_ACTIVA, "aprobado").catch(() => null);
+      // MPS-27 S101 — registrar en queue como auto-aprobada para que el cron de auto-disparo
+      // la cuente en factorMomento (peso 0.5× vs resolución humana).
+      void encolarMensajeGHL({
+        campana:        CAMPANA_ACTIVA,
+        ghlContactId:   contactId,
+        convId,
+        leadEcmaticId:  leadId,
+        nombre,
+        mensajeLead:    cuerpo,
+        mensajeIA:      texto,
+        scoreIA:        score,
+        razonScore:     razon,
+        autoaprobada:   true,
+      }).catch(() => null);
     }
 
     // Invariante: si el envío directo falló, encolar para que siempre llegue al admin o al lead

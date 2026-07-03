@@ -82,8 +82,11 @@ export async function encolarMensajeGHL(params: {
   seguimientoId?: string | null;  // MPS-5: para avanzarNivel al aprobar
   requiereTemplate?: boolean;     // MPS-19: lead fuera de ventana WA 24h
   templateId?: string | null;     // MPS-26: template reutilizado (Sugerido/Aprobado)
+  autoaprobada?: boolean;         // MPS-27: IA auto-aprobó sin intervención humana
 }): Promise<string | null> {
   const supabase = createServiceClient();
+  const ahora = new Date().toISOString();
+  const esAuto = params.autoaprobada === true;
   const { data, error } = await (supabase as any)
     .from("ghl_approval_queue")
     .insert({
@@ -100,6 +103,8 @@ export async function encolarMensajeGHL(params: {
       seguimiento_id:    params.seguimientoId ?? null,
       requiere_template: params.requiereTemplate ?? false,
       template_id:       params.templateId ?? null,
+      autoaprobada:      esAuto,
+      ...(esAuto && { estado: "aprobado", revisado_at: ahora, enviado_at: ahora }),
     })
     .select("id")
     .single() as { data: { id: string } | null; error: unknown };
@@ -421,8 +426,7 @@ export async function reiniciarNivelesCampana(campana: string): Promise<void> {
     .eq("campana_key", campana);
 }
 
-// MPS-24 S87 — Cuenta revisiones (aprobado|editado) en la ventana de momentum.
-// Se usa en auto-disparo para calcular el impulso temporal de velocidad.
+// MPS-24 S87 — Cuenta revisiones HUMANAS (aprobado|editado, no autoaprobadas) en la ventana de momentum.
 export async function contarResolucionesRecientes(
   campana: string,
   windowH: number = MOMENTUM_WINDOW_H,
@@ -433,7 +437,25 @@ export async function contarResolucionesRecientes(
     .from("ghl_approval_queue")
     .select("id", { count: "exact", head: true })
     .eq("campana", campana)
+    .eq("autoaprobada", false)
     .in("estado", ["aprobado", "editado"])
+    .gte("revisado_at", desde) as { count: number | null };
+  return count ?? 0;
+}
+
+// MPS-27 S101 — Cuenta auto-aprobaciones de IA en la ventana de momentum.
+// Se usa en auto-disparo para sumar 0.5× al factorMomento cuando no hay revisión humana.
+export async function contarAutoAprobacionesRecientes(
+  campana: string,
+  windowH: number = MOMENTUM_WINDOW_H,
+): Promise<number> {
+  const supabase = createServiceClient();
+  const desde = new Date(Date.now() - windowH * 60 * 60 * 1000).toISOString();
+  const { count } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("id", { count: "exact", head: true })
+    .eq("campana", campana)
+    .eq("autoaprobada", true)
     .gte("revisado_at", desde) as { count: number | null };
   return count ?? 0;
 }
