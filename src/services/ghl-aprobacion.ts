@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 import {
   calcularTrustScore, updateDecisionsWindow, parametrosDesdeScore,
-  UMBRAL_AUTO_FIJO, TRUST_NIVEL4,
+  UMBRAL_AUTO_FIJO, TRUST_NIVEL4, MOMENTUM_WINDOW_H,
 } from "@/lib/ghl/trust-score";
 
 export interface ItemAprobacionGHL {
@@ -417,6 +417,37 @@ export async function reiniciarNivelesCampana(campana: string): Promise<void> {
       updated_at:             new Date().toISOString(),
     })
     .eq("campana_key", campana);
+}
+
+// MPS-24 S87 — Cuenta revisiones (aprobado|editado) en la ventana de momentum.
+// Se usa en auto-disparo para calcular el impulso temporal de velocidad.
+export async function contarResolucionesRecientes(
+  campana: string,
+  windowH: number = MOMENTUM_WINDOW_H,
+): Promise<number> {
+  const supabase = createServiceClient();
+  const desde = new Date(Date.now() - windowH * 60 * 60 * 1000).toISOString();
+  const { count } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("id", { count: "exact", head: true })
+    .eq("campana", campana)
+    .in("estado", ["aprobado", "editado"])
+    .gte("revisado_at", desde) as { count: number | null };
+  return count ?? 0;
+}
+
+// MPS-24 S87-T — Timestamp del último mensaje encolado (para calcular turbo).
+// Retorna null si la cola nunca tuvo entradas para esta campaña.
+export async function obtenerUltimoEncoladoAt(campana: string): Promise<Date | null> {
+  const supabase = createServiceClient();
+  const { data } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("created_at")
+    .eq("campana", campana)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { created_at: string } | null };
+  return data ? new Date(data.created_at) : null;
 }
 
 // Marca notificación SLA enviada e incrementa contador

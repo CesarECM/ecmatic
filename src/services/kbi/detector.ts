@@ -138,9 +138,10 @@ async function procesarUnEdit(db: DB, edit: {
 
   if (!mensajeFinal) return false;
 
+  // ── Caso A: hay recurso faq/regla en el contexto — actualizarlo ──
+  // Solo aplica si entre los IDs hay un recurso de tipo faq o regla.
+  // Si todos los IDs son de tipo servicio, cae directo a Caso B.
   if (ids.length > 0) {
-    // ── Caso A: hay recurso KB — actualizar con la corrección del admin ──
-    // Busca el primer recurso entre todos los ids que sea faq/regla y sin duplicado pendiente.
     const { data: recursos } = await db.from("recursos_conocimiento")
       .select("id, titulo, contenido")
       .in("id", ids)
@@ -151,12 +152,11 @@ async function procesarUnEdit(db: DB, edit: {
       if (!await yaExistePendiente(db, r.id, "actualizar")) { recurso = r; break; }
     }
 
-    if (!recurso) return false;
-
-    const res = await callClaudeIA("ANALISIS", {
-      max_tokens: 250,
-      messages: [{ role: "user", content:
-        `Eres editor de KB de un centro de certificaciones CONOCER México.
+    if (recurso) {
+      const res = await callClaudeIA("ANALISIS", {
+        max_tokens: 250,
+        messages: [{ role: "user", content:
+          `Eres editor de KB de un centro de certificaciones CONOCER México.
 El admin corrigió una respuesta de IA. Actualiza el recurso KB con la información correcta.
 
 IA respondió: "${mensajeIA?.slice(0, 250) ?? "(no disponible)"}"
@@ -168,26 +168,30 @@ Contenido: ${recurso.contenido.slice(0, 250)}
 
 Genera el contenido KB actualizado integrando la corrección.
 JSON: {"contenido_nuevo": "..."}` }],
-    });
-    const raw  = (res.content[0] as { text: string }).text;
-    const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { contenido_nuevo?: string };
+      });
+      const raw  = (res.content[0] as { text: string }).text;
+      const json = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as { contenido_nuevo?: string };
 
-    const razonDisplay = [
-      razon ? `Feedback: "${razon}"` : null,
-      `IA: "${mensajeIA?.slice(0, 80) ?? ""}…"`,
-      `Corrección: "${mensajeFinal.slice(0, 80)}…"`,
-    ].filter(Boolean).join("\n");
+      const razonDisplay = [
+        razon ? `Feedback: "${razon}"` : null,
+        `IA: "${mensajeIA?.slice(0, 80) ?? ""}…"`,
+        `Corrección: "${mensajeFinal.slice(0, 80)}…"`,
+      ].filter(Boolean).join("\n");
 
-    await db.from("kbi_sugerencias").insert({
-      recurso_id: recurso.id, tipo_accion: "actualizar",
-      titulo_propuesto: recurso.titulo,
-      contenido_propuesto: json.contenido_nuevo ?? mensajeFinal,
-      razon: razonDisplay, origen: "detector_patron",
-    });
-    return true;
+      await db.from("kbi_sugerencias").insert({
+        recurso_id: recurso.id, tipo_accion: "actualizar",
+        titulo_propuesto: recurso.titulo,
+        contenido_propuesto: json.contenido_nuevo ?? mensajeFinal,
+        razon: razonDisplay, origen: "detector_patron",
+      });
+      return true;
+    }
+    // No se encontró faq/regla (solo servicios entre los IDs) → cae a Caso B
+  }
 
-  } else {
-    // ── Caso B: sin recurso KB — crear FAQ/Regla desde la corrección ──
+  // ── Caso B: sin recurso faq/regla — extraer FAQ/Regla de la corrección del admin ──
+  // Cubre: (a) respuesta sin IDs de KB, (b) respuesta basada solo en servicios.
+  {
     const res = await callClaudeIA("ANALISIS", {
       max_tokens: 250,
       messages: [{ role: "user", content:

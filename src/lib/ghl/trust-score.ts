@@ -20,6 +20,36 @@ const ANCLAS_VELOCIDAD = [0.167, 0.667, 1.5, 3.333, 10] as const;
 export const MAX_PENDIENTES_FRENO = 10;   // 10 pendientes → velocidad 0
 export const CRON_INTERVAL_MIN    = 5;    // cron auto-disparo corre cada 5 min
 
+// MPS-24 S87 — Approval Momentum Boost
+// Cuándo el admin resuelve la cola activamente, la campaña recibe un impulso temporal proporcional.
+export const MOMENTUM_WINDOW_H  = 2;    // ventana deslizante de actividad (horas)
+export const MOMENTUM_CAP       = 10;   // revisiones en ventana para boost máximo
+export const MAX_MOMENTUM_BOOST = 2.0;  // multiplicador aditivo máximo → velocidad hasta 3×
+
+// Retorna factor [0, MAX_MOMENTUM_BOOST] proporcional a las revisiones recientes.
+export function calcularFactorMomento(resolucionesRecientes: number): number {
+  return Math.min(resolucionesRecientes / MOMENTUM_CAP, 1.0) * MAX_MOMENTUM_BOOST;
+}
+
+// MPS-24 S87-T — Turbo de cola vacía
+// Se activa cuando la cola está vacía Y el admin tiene ritmo máximo (MOMENTUM_CAP revisiones).
+// La velocidad crece con √(tiempo sin encolar) hasta alcanzar MAX_TURBO_BOOST a los TURBO_RAMP_MIN.
+// Techo total del sistema: 1 + MAX_MOMENTUM_BOOST + MAX_TURBO_BOOST = 5×.
+export const TURBO_MIN_RESOLUCIONES = MOMENTUM_CAP; // requiere ritmo máximo del admin
+export const TURBO_RAMP_MIN         = 20;           // minutos con cola vacía para turbo máximo
+export const MAX_TURBO_BOOST        = 2.0;          // multiplicador aditivo máximo → hasta 5× total
+
+// Retorna factor [0, MAX_TURBO_BOOST]. Cero si hay pendientes o el admin no tiene ritmo máximo.
+export function calcularFactorTurbo(
+  minutosSinEncolar: number,
+  pendientes: number,
+  resolucionesRecientes: number,
+): number {
+  if (pendientes > 0) return 0;
+  if (resolucionesRecientes < TURBO_MIN_RESOLUCIONES) return 0;
+  return Math.min(Math.sqrt(minutosSinEncolar / TURBO_RAMP_MIN), 1.0) * MAX_TURBO_BOOST;
+}
+
 // ── Wilson lower bound ────────────────────────────────────────────────────────
 
 // Límite inferior conservador del intervalo de confianza de Wilson.

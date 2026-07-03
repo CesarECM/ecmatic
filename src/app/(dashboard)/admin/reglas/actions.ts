@@ -24,7 +24,7 @@ export async function crearReglaAction(formData: FormData) {
 
   const { error } = await db()
     .from("reglas_conversacionales")
-    .insert({ nombre, tipo, instruccion, descripcion, prioridad, condiciones, origen: "manual" });
+    .insert({ nombre, tipo, instruccion, descripcion, prioridad, condiciones, origen: "manual", aprobada: true, aprobada_at: new Date().toISOString() });
 
   if (error) {
     void logSistema({ categoria: "ui", tipoAccion: "reglas.crear", fase: "error", resultado: error.message });

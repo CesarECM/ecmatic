@@ -4,7 +4,13 @@ import {
   obtenerStatsAprobacion, calcularNivel,
   contarEnviadosHoy, contarPendientes,
   obtenerEstadosLeadsCampana, contarLogsCampana,
+  contarResolucionesRecientes, obtenerUltimoEncoladoAt,
 } from "@/services/ghl-aprobacion";
+import {
+  calcularFactorMomento, calcularFactorTurbo,
+  MOMENTUM_WINDOW_H, MOMENTUM_CAP, MAX_MOMENTUM_BOOST,
+  TURBO_RAMP_MIN, MAX_TURBO_BOOST, TURBO_MIN_RESOLUCIONES,
+} from "@/lib/ghl/trust-score";
 import { buscarContactosPorTag } from "@/lib/ghl/contacts-api";
 import {
   obtenerKPIsMonitor, obtenerAtascados,
@@ -92,7 +98,8 @@ export default async function GHLCampaignPage() {
   const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0, demo_agendado: 0 } };
 
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
-    monitorKPIs, atascados, proximos, escalados, claudeEstado, historialEnvios] =
+    monitorKPIs, atascados, proximos, escalados, claudeEstado, historialEnvios, resolucionesRecientes,
+    ultimoEncoladoAt] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
       obtenerStatsAprobacion(CAMPANA),
@@ -107,6 +114,8 @@ export default async function GHLCampaignPage() {
       obtenerEscalados().catch(() => []),
       obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null })),
       obtenerHistorialEnvios(db).catch(() => [] as number[]),
+      contarResolucionesRecientes(CAMPANA).catch(() => 0),
+      obtenerUltimoEncoladoAt(CAMPANA).catch(() => null),
     ]);
 
   // ── Diagnóstico de errores silenciosos ────────────────────────────────────
@@ -149,6 +158,14 @@ export default async function GHLCampaignPage() {
   const nivel             = calcularNivel(aprobacionStats ?? { trust_score: 0, automatizado: false });
   const factorFreno       = Math.max(0, (10 - pendientes) / 10);
   const velocidadEfectiva = nivel.velocidadLeadsPorMin * factorFreno;
+  const factorMomento     = calcularFactorMomento(resolucionesRecientes);
+  const minutosSinEncolar = ultimoEncoladoAt
+    ? (Date.now() - ultimoEncoladoAt.getTime()) / 60_000
+    : 0;
+  const factorTurbo       = calcularFactorTurbo(minutosSinEncolar, pendientes, resolucionesRecientes);
+  const velocidadFinal    = velocidadEfectiva * (1 + factorMomento + factorTurbo);
+  const hayMomento        = factorMomento > 0;
+  const hayTurbo          = factorTurbo > 0;
   const leadsPerRun       = Math.max(1, Math.round(nivel.velocidadLeadsPorMin * 5));
   const accActual         = aprobacionStats?.leads_acumulados ?? 0;
 
@@ -345,12 +362,80 @@ export default async function GHLCampaignPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <MiniStat label="Velocidad base"     value={formatVelocidad(nivel.velocidadLeadsPorMin)} />
-          {/* R10: naranja en lugar de rojo para freno=0 */}
-          <MiniStat label="Velocidad efectiva" value={formatVelocidad(velocidadEfectiva)}
-            color={factorFreno < 1 ? (factorFreno === 0 ? "text-orange-500" : "text-yellow-500") : ""} />
+          <MiniStat
+            label="Velocidad final"
+            value={formatVelocidad(velocidadFinal)}
+            color={
+              hayMomento           ? "text-emerald-500" :
+              factorFreno === 0    ? "text-orange-500"  :
+              factorFreno < 1      ? "text-yellow-500"  : ""
+            }
+          />
           <MiniStat label="Aprobados"          value={(aprobacionStats?.aprobados ?? 0).toString()} />
           <MiniStat label="Umbral IA"          value={`${Math.round((aprobacionStats?.umbral_auto ?? 0.92) * 100)}%`} />
         </div>
+
+        {/* MPS-24 S87: Banner de impulso por actividad reciente */}
+        {hayMomento && (
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/8 px-3 py-2 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                Impulso activo — {resolucionesRecientes} revisión{resolucionesRecientes !== 1 ? "es" : ""} en las últimas {MOMENTUM_WINDOW_H}h
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                +{Math.round(factorMomento * 100)}% de velocidad
+                {" · "}
+                {formatVelocidad(velocidadEfectiva)} → <span className="text-emerald-600 dark:text-emerald-400 font-medium">{formatVelocidad(velocidadFinal)}</span>
+              </p>
+            </div>
+            <div className="shrink-0 flex flex-col items-end gap-1">
+              <div className="w-24 bg-muted rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-1.5 rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${Math.round((factorMomento / MAX_MOMENTUM_BOOST) * 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                {Math.round(resolucionesRecientes)}/{MOMENTUM_CAP} para impulso máx
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* MPS-24 S87-T: Banner de turbo — cola vacía + admin a ritmo máximo */}
+        {hayTurbo && (
+          <div className="rounded-md border border-orange-500/40 bg-orange-500/8 px-3 py-2 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">
+                ⚡ Turbo activo — cola vacía hace {Math.round(minutosSinEncolar)} min
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                +{Math.round(factorTurbo * 100)}% adicional
+                {" · "}
+                velocidad final{" "}
+                <span className="text-orange-600 dark:text-orange-400 font-medium">{formatVelocidad(velocidadFinal)}</span>
+                {" "}({(1 + factorMomento + factorTurbo).toFixed(1)}× base)
+              </p>
+            </div>
+            <div className="shrink-0 flex flex-col items-end gap-1">
+              <div className="w-24 bg-muted rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-1.5 rounded-full bg-orange-500 transition-all"
+                  style={{ width: `${Math.round((factorTurbo / MAX_TURBO_BOOST) * 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                {Math.round(minutosSinEncolar)}/{TURBO_RAMP_MIN} min para turbo máx
+              </span>
+            </div>
+          </div>
+        )}
+        {/* Turbo disponible pero esperando ritmo máximo */}
+        {!hayTurbo && pendientes === 0 && resolucionesRecientes > 0 && resolucionesRecientes < TURBO_MIN_RESOLUCIONES && (
+          <p className="text-[11px] text-muted-foreground">
+            Turbo disponible con {TURBO_MIN_RESOLUCIONES - resolucionesRecientes} revisión{TURBO_MIN_RESOLUCIONES - resolucionesRecientes !== 1 ? "es" : ""} más en las últimas {MOMENTUM_WINDOW_H}h
+          </p>
+        )}
 
         {/* Barra de freno */}
         {pendientes > 0 && pendientes < 10 && (

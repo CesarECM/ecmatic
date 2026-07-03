@@ -12,8 +12,11 @@ const PASO_LABEL: Record<string, string> = {
   cita_creada:                 "Cita creada en BD",
   estado_confirmado:           "Estado → confirmada",
   notificacion_wa:             "WhatsApp al lead",
+  wa_omitido_ghl_workflow:     "WA delegado a GHL workflow",
   notificacion_email_lead:     "Email al lead",
   notificacion_email_vendedor: "Email al vendedor",
+  ghl_appointment_creado:      "Appointment GHL creado",
+  ghl_appointment_omitido:     "Appointment GHL omitido",
   error:                       "Error",
 };
 
@@ -25,8 +28,11 @@ const PASO_EMOJI: Record<string, string> = {
   cita_creada:                 "✅",
   estado_confirmado:           "🔄",
   notificacion_wa:             "💬",
+  wa_omitido_ghl_workflow:     "🤖",
   notificacion_email_lead:     "📧",
   notificacion_email_vendedor: "📬",
+  ghl_appointment_creado:      "📅",
+  ghl_appointment_omitido:     "⚠️",
   error:                       "🔴",
 };
 
