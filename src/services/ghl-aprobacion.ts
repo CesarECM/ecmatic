@@ -81,6 +81,7 @@ export async function encolarMensajeGHL(params: {
   razonScore?: string;
   seguimientoId?: string | null;  // MPS-5: para avanzarNivel al aprobar
   requiereTemplate?: boolean;     // MPS-19: lead fuera de ventana WA 24h
+  templateId?: string | null;     // MPS-26: template reutilizado (Sugerido/Aprobado)
 }): Promise<string | null> {
   const supabase = createServiceClient();
   const { data, error } = await (supabase as any)
@@ -98,6 +99,7 @@ export async function encolarMensajeGHL(params: {
       razon_score:       params.razonScore ?? null,
       seguimiento_id:    params.seguimientoId ?? null,
       requiere_template: params.requiereTemplate ?? false,
+      template_id:       params.templateId ?? null,
     })
     .select("id")
     .single() as { data: { id: string } | null; error: unknown };

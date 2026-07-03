@@ -101,6 +101,8 @@ src/
 │   └── nurturing/                  # SecuenciasList, LeadsNurturing
 ├── services/                       # Lógica de negocio — solo servidor
 │   ├── followup-config.ts          # Parámetros de backoff por tipo (lee BD, fallback a defaults)
+│   ├── followup-templates.ts       # MPS-26: biblioteca templates (guardar/cascade/promover/conectar)
+│   ├── seguimiento-procesador.ts   # MPS-26: procesarSeguimiento() con cascade + ángulo bayesiano
 │   ├── leads.ts                    # obtenerOCrearLead, inferirDISC, inferirEtapa
 │   ├── mensajes.ts                 # procesarMensajeEntrante, buffer 8s (canal Meta WA)
 │   ├── ghl-message-buffer.ts       # resolverCuerpoGHL, encolarEnBuffer, obtenerYMarcarPendientes
@@ -149,7 +151,10 @@ src/
     │   ├── motor-respuesta.ts      # búsqueda semántica + generación de respuesta
     │   ├── clasificar-cobertura.ts # MPS-13: Haiku clasifica tipo de seguimiento para leads sin cobertura
     │   ├── kb-search.ts            # búsqueda semántica + re-ranking Haiku (MPS-17 S65)
-    │   └── guardrails-precio.ts    # MPS-17 S67: detecta descuentos no autorizados e inyección (función pura)
+    │   ├── guardrails-precio.ts    # MPS-17 S67: detecta descuentos no autorizados e inyección (función pura)
+    │   ├── generar-followup-ghl.ts # MPS-26: genera copy de follow-up con ángulo dinámico externo
+    │   ├── seleccionar-angulo.ts   # MPS-26: Thompson Sampling sobre global_angle_prior + lead_angle_posterior
+    │   └── evaluar-continuacion.ts # MPS-26: Haiku decide continuar/pausar/escalar el ciclo de follow-up
     ├── whatsapp/                   # sendTextMessage, sendTextMessageWithRetry, parseWebhook
     ├── email/                      # resend.ts, brevo.ts, transaccional.ts, campanas.ts
     ├── stripe/                     # createCheckoutSession, client
@@ -436,3 +441,4 @@ Lead (WA/formulario/anuncio) → GHL → webhook GHL → ECMatic (upsert + proce
 | MPS-17 S66 | Arco emocional del lead + HITL hot/frustrado | ✅ Completo |
 | MPS-17 S67 | Guardrails de precio (descuento/inyección → cola) | ✅ Completo |
 | MPS-22 S82 | Velocidad continua leads/min + freno proporcional por pendientes | ✅ Completo |
+| MPS-26 S93–S100 | Templates dinámicos + ángulos adaptativos bayesianos + cascade + /admin/templates | ✅ Completo |

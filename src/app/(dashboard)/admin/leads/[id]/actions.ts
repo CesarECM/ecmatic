@@ -23,6 +23,7 @@ import {
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
+import { promoverTemplate } from "@/services/followup-templates";
 import { detectarPatronGHLItem } from "@/services/kbi/detector";
 import { obtenerUltimoEntrante } from "@/services/mensajes";
 
@@ -257,7 +258,7 @@ export const aprobarMensajeGHLAction = safeAction(async (
   // Registrar cierre en los recursos KB que generaron esta respuesta
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
-    .from("ghl_approval_queue").select("contexto, seguimiento_id").eq("id", itemId).maybeSingle();
+    .from("ghl_approval_queue").select("contexto, seguimiento_id, template_id").eq("id", itemId).maybeSingle();
   const recursosIds = (qItem?.contexto as Record<string, unknown> | null)?.recursosIds as string[] | undefined;
   if (recursosIds?.length) await registrarCierre(recursosIds).catch(() => null);
 
@@ -271,6 +272,10 @@ export const aprobarMensajeGHLAction = safeAction(async (
       "ia_sugerido"
     ).catch(() => null);
   }
+
+  // MPS-26 S98: promover template Sugerido → Aprobado al aprobar el item
+  const templateId = qItem?.template_id as string | null | undefined;
+  if (templateId) await promoverTemplate(templateId).catch(() => null);
 
   // MPS-5 S39.4: avanzarNivel al aprobar (no al encolar)
   const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
@@ -321,7 +326,11 @@ export const editarAprobarMensajeGHLAction = safeAction(async (
 
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
-    .from("ghl_approval_queue").select("contexto, seguimiento_id").eq("id", itemId).maybeSingle();
+    .from("ghl_approval_queue").select("contexto, seguimiento_id, template_id").eq("id", itemId).maybeSingle();
+
+  // MPS-26 S98: promover template con el texto editado (regenera embedding async)
+  const templateIdEdit = qItem?.template_id as string | null | undefined;
+  if (templateIdEdit) await promoverTemplate(templateIdEdit, textoFinal).catch(() => null);
 
   // MPS-5 S39.4: avanzarNivel al editar/aprobar (no al encolar)
   const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
