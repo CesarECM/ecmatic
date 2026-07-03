@@ -58,7 +58,12 @@ export async function callClaudeIA(
   const leadId    = meta?.leadId ?? null;
   const traceId   = meta?.traceId;
 
-  const systemRaw = typeof params.system === "string" ? params.system : "";
+  const systemRaw = typeof params.system === "string"
+    ? params.system
+    : Array.isArray(params.system)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? (params.system as Array<{ text?: string }>).map(b => b.text ?? "").join("")
+      : "";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const msgs: any[] = Array.isArray(params.messages) ? params.messages : [];
   const charsEst  = systemRaw.length + msgs.reduce(
@@ -134,11 +139,15 @@ export async function callClaudeIA(
       : null,
     metadata: {
       model,
-      tokens_input:  response.usage.input_tokens,
-      tokens_output: response.usage.output_tokens,
-      duracion_ms:   Date.now() - inicio,
-      stop_reason:   response.stop_reason,
-      request_id:    requestId,
+      tokens_input:           response.usage.input_tokens,
+      tokens_output:          response.usage.output_tokens,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tokens_cache_read:      (response.usage as any).cache_read_input_tokens    ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tokens_cache_creation:  (response.usage as any).cache_creation_input_tokens ?? 0,
+      duracion_ms:            Date.now() - inicio,
+      stop_reason:            response.stop_reason,
+      request_id:             requestId,
     },
   });
 

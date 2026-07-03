@@ -2,103 +2,40 @@ import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
 import { registrarSenales } from "@/services/kbi/senales";
-import { obtenerGatillosActivos, formatearGatillosParaPrompt } from "@/services/gatillos";
+import { obtenerGatillosActivos } from "@/services/gatillos";
 import { registrarUsoIA } from "@/services/alertas-ia";
 import { inferirRespuestaMatriz } from "@/services/matriz-ia";
-import { obtenerIdentidad, formatearIdentidadParaPrompt } from "@/services/identidad-marca";
+import { obtenerIdentidad } from "@/services/identidad-marca";
 import { seleccionarPagoServicio } from "@/lib/ai/selector-pago";
 import { listarPagosServicio } from "@/services/servicio-pagos";
-import { listarCuentasActivas, formatearCuentaParaPrompt } from "@/services/cuentas-bancarias";
-import { instruccionReglaOroCierre } from "./regla-oro-cierre";
-import { generarBloqueEstrategiaPrecio, type DatosPrecioServicio, type LinkPago } from "./estrategia-precio";
-import type { ModoRevelacion } from "./detector-revelacion";
-import { formatearRolDinamicoParaPrompt, type RolPorServicio } from "@/services/rol-dinamico";
-import { buscarRecursosKBI, calcularScore, formatearRecursoKB } from "./kb-search";
+import { listarCuentasActivas } from "@/services/cuentas-bancarias";
+import { buscarRecursosKBI, calcularScore } from "./kb-search";
 import { calcularScoreRespuesta } from "@/services/kbi/scores";
-import { obtenerContextoPipeline, formatearContextoPipelineParaPrompt } from "./contexto-pipeline";
+import { obtenerContextoPipeline } from "./contexto-pipeline";
 import { obtenerRelacionesParaPrompt } from "@/services/servicio-relaciones";
 import { obtenerHintCalidadLead } from "@/services/calidad-conversacional";
+import { obtenerHistorialMultiTurn } from "./historial-adaptativo";
+import { calcularContextoAdaptativo, type ContextoTokens } from "./token-budget";
 import { obtenerVariantePrompt } from "@/services/prompt-experimentos";
-import { obtenerReglasAplicables, formatearReglasParaPrompt } from "@/services/reglas-conversacionales";
-import type { PipelineRuta, DimensionesMatriz } from "@/lib/supabase/types";
-import type { SlotDisponible } from "@/services/citas";
-import type { EstadoSetter } from "./setter-protocol";
-import type { ProtocoloObjecion } from "./protocolo-objecion";
+import { obtenerReglasAplicables } from "@/services/reglas-conversacionales";
+import { construirSystemPrompt } from "./prompt-builder";
+import type { ContextoLead } from "./prompt-builder";
+import { normalizarRespuesta } from "./normalizar-respuesta";
+import type { DimensionesMatriz } from "@/lib/supabase/types";
 
+export type { ContextoLead };
 export { necesitaHandoff } from "./handoff";
 
-// MPS-16 S60 — Selecciona las prácticas de venta más relevantes para el contexto actual.
-// Prioridad: match de temperamento (+2) + match de etapa (+1) > universales (0).
-// Dentro de la misma prioridad, respeta el orden por score_confianza del query.
-function seleccionarPracticasContextuales(
-  practicas: { contenido: string; contextos_aplica: { temperamento?: string[]; pipeline_stage?: string[] } | null }[],
-  temperamento: string | null,
-  pipelineStage: string,
-  limite = 3
-): { contenido: string }[] {
-  const scored = practicas.map((p, idx) => {
-    const ctx = p.contextos_aplica;
-    let match = 0;
-    if (ctx) {
-      if (temperamento && ctx.temperamento?.includes(temperamento)) match += 2;
-      if (ctx.pipeline_stage?.includes(pipelineStage)) match += 1;
-    }
-    return { p, match, idx };
-  });
-  scored.sort((a, b) => b.match - a.match || a.idx - b.idx);
-  return scored.slice(0, limite).map(({ p }) => ({ contenido: p.contenido }));
-}
-
-function normalizarRespuesta(texto: string): string {
-  return texto
-    .replace(/^[—–] /gm, "")      // viñeta con raya al inicio de línea → quitar
-    .replace(/ [—–]$/gm, ".")     // raya al final de oración → punto
-    .replace(/ [—–] /g, ", ")     // raya entre dos frases → coma
-    .replace(/[—–]/g, ", ")       // cualquier raya restante → coma
-    .replace(/\*\*(.+?)\*\*/g, "*$1*"); // markdown bold → WhatsApp bold
-}
-
-interface ContextoLead {
-  nombre: string | null;
-  temperamento: string | null;
-  pipelineStage: string;
-  compraPreviaa: boolean;
-  historial: string;
-  pipelineRuta?: PipelineRuta;
-  faseCAGC?: number;
-  etiquetas?: string[];
-  slotsDisponibles?: SlotDisponible[];
-  meetLink?: string | null;
-  canal_origen?: string | null;
-  imagen_activa_url?: string | null;
-  // S31 — Arquitectura de Objeciones
-  setterEstado?: EstadoSetter | null;
-  protocoloObjecion?: ProtocoloObjecion | null;
-  rolesDinamicos?: RolPorServicio[];
-  // Revelación de producto
-  modoRevelacion?: ModoRevelacion;
-  // S62 — Hint de calidad conversacional histórica
-  leadId?: string;
-  // S63 — Resumen comprimido de conversaciones anteriores
-  memoriaIA?: string | null;
-  // Auto-reply de WA Business: el lead tiene un saludo automático, no es una consulta real
-  esAutoReply?: boolean;
-  // MPS-21 — Tags GHL cacheados en leads.tags_ghl para matching de reglas
-  tagsGhl?: string[];
-  // S85 — Cita confirmada próxima: activa el modo pre-sesión (bot responde solo dudas de la cita)
-  modoPreSesion?: { fechaIso: string; meetLink?: string | null };
-}
-
 export interface RespuestaIA {
-  texto: string;
+  texto:          string;
   scoreConfianza: number;
-  imagenUrl: string | null;  // S32.8
-  recursosIds: string[];
+  imagenUrl:      string | null;
+  recursosIds:    string[];
 }
 
 export async function generarRespuesta(
   mensajes: string[],
-  contexto: ContextoLead
+  contexto: ContextoLead,
 ): Promise<RespuestaIA> {
   const queryParaBusqueda = mensajes.join(" ");
 
@@ -109,7 +46,14 @@ export async function generarRespuesta(
     ...(contexto.faseCAGC !== undefined && { fase_cagc: contexto.faseCAGC }),
   };
 
-  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt, reglasAplicables] = await Promise.all([
+  const ctxTokens: ContextoTokens = {
+    tieneSlotsDisponibles:  (contexto.slotsDisponibles?.length ?? 0) > 0,
+    tieneProtocoloObjecion: !!contexto.protocoloObjecion,
+    tieneMeetLink:          !!contexto.meetLink,
+    modoRevelacion:         contexto.modoRevelacion ?? "oculto",
+  };
+
+  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt, reglasAplicables, adaptativo] = await Promise.all([
     buscarRecursosKBI(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
@@ -118,45 +62,40 @@ export async function generarRespuesta(
       .catch(() => ({ servicio: null, etapa: null })),
     contexto.leadId ? obtenerHintCalidadLead(contexto.leadId).catch(() => null) : Promise.resolve(null),
     contexto.leadId
-      ? obtenerVariantePrompt(contexto.leadId, {
-          pipeline_stage: contexto.pipelineStage,
-          temperamento: contexto.temperamento,
-        }).catch(() => null)
+      ? obtenerVariantePrompt(contexto.leadId, { pipeline_stage: contexto.pipelineStage, temperamento: contexto.temperamento }).catch(() => null)
       : Promise.resolve(null),
-    obtenerReglasAplicables({
-      tagsGhl:       contexto.tagsGhl ?? [],
-      temperamento:  contexto.temperamento,
-      pipelineStage: contexto.pipelineStage,
-    }).catch(() => []),
+    obtenerReglasAplicables({ tagsGhl: contexto.tagsGhl ?? [], temperamento: contexto.temperamento, pipelineStage: contexto.pipelineStage }).catch(() => []),
+    contexto.leadId
+      ? calcularContextoAdaptativo(contexto.leadId, ctxTokens)
+      : Promise.resolve({ limiteHistorial: 8, maxTokens: 500 }),
   ]);
+
+  const { limiteHistorial, maxTokens } = adaptativo;
+
+  const historialMultiTurn = contexto.leadId
+    ? await obtenerHistorialMultiTurn(contexto.leadId, limiteHistorial)
+    : [];
 
   const { servicios: serviciosSemánticos, kb } = resultadosBusqueda;
 
-  // Servicio garantizado por pipeline FK (prioridad 1) + hasta 2 adicionales semánticos sin duplicados
   const serviciosPipeline = contextoPipeline.servicio ? [contextoPipeline.servicio] : [];
-  const idsPipeline = new Set(serviciosPipeline.map(s => s.id));
-  const serviciosExtra = serviciosSemánticos.filter(s => !idsPipeline.has(s.id)).slice(0, 2);
-  const serviciosAncla = [...serviciosPipeline, ...serviciosExtra];
+  const idsPipeline       = new Set(serviciosPipeline.map((s) => s.id));
+  const serviciosExtra    = serviciosSemánticos.filter((s) => !idsPipeline.has(s.id)).slice(0, 2);
+  const serviciosAncla    = [...serviciosPipeline, ...serviciosExtra];
+  const todosRecursos     = [...serviciosSemánticos, ...kb];
 
-  const todosRecursos = [...serviciosSemánticos, ...kb];
   void registrarUso(todosRecursos.map((r) => r.id));
   if (todosRecursos.length === 0) {
     void sugerirRecursoDesdeQuery(queryParaBusqueda);
-    // KBI S75.3 — trigger inline: 0 resultados KB → sugerencia de tipo "crear"
     void import("@/services/kbi/detector").then(({ crearSugerenciaHueco }) =>
       crearSugerenciaHueco(queryParaBusqueda).catch(() => null)
     );
   }
-
-  // KBI S73.4 — señal 'uso' para el pool KB (faq/regla); sesionId agrupa la conversación
   if (kb.length > 0) {
-    void registrarSenales("uso", kb.map((r) => r.id), {
-      leadId:    contexto.leadId,
-      sesionId:  crypto.randomUUID(),
-    });
+    void registrarSenales("uso", kb.map((r) => r.id), { leadId: contexto.leadId, sesionId: crypto.randomUUID() });
   }
 
-  // S32.8 — Seleccionar imagen activa del canal para el servicio principal
+  // Imagen activa del servicio principal para el canal
   const canalParaImagen = (contexto.canal_origen === "email" ? "email"
     : contexto.canal_origen === "landing" ? "landing" : "whatsapp") as "whatsapp" | "email" | "landing";
   const imagenActivaUrl: string | null = await (async () => {
@@ -169,7 +108,7 @@ export async function generarRespuesta(
     return contexto.imagen_activa_url ?? null;
   })();
 
-  // Pagos, cuentas bancarias, relaciones y datos de precio/modo_venta
+  // Pagos, cuentas y relaciones
   const [pagosServicios, cuentasActivas, relacionesLinea] = await Promise.all([
     serviciosAncla.length > 0
       ? Promise.all(serviciosAncla.map(async (s) => {
@@ -178,68 +117,18 @@ export async function generarRespuesta(
             seleccionarPagoServicio(s.id, contexto.faseCAGC).catch(() => null),
             supabase.from("servicios" as "recursos_conocimiento")
               .select("precio_centavos, precio_descuento_centavos, precio_apartado_centavos, modo_venta, url_landing_propia")
-              .eq("id", s.id).single()
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              .then((r: any) => r.data ?? null, () => null),
+              .eq("id", s.id).single().then((r: any) => r.data ?? null, () => null),
             listarPagosServicio(s.id).catch(() => []),
           ]);
           return { titulo: s.titulo, id: s.id, pago, svc: svcRow, todosLinks };
         }))
       : Promise.resolve([]),
     listarCuentasActivas().catch(() => []),
-    serviciosAncla.length > 0
-      ? obtenerRelacionesParaPrompt(serviciosAncla[0].id).catch(() => "")
-      : Promise.resolve(""),
+    serviciosAncla.length > 0 ? obtenerRelacionesParaPrompt(serviciosAncla[0].id).catch(() => "") : Promise.resolve(""),
   ]);
-  const pagosConLink = pagosServicios.filter((p) => p.pago !== null);
-  const serviciosConPrecio = pagosServicios.filter((p) => p.svc?.precio_centavos != null);
 
-  const cuentasBancariasLinea = (cuentasActivas.length > 0 && serviciosAncla.length > 0)
-    ? ["\nTRANSFERENCIA BANCARIA (solo ofrécela si el lead no puede usar los links de pago):",
-        ...cuentasActivas.map((c) => `• ${formatearCuentaParaPrompt(c)}`),
-        serviciosConPrecio.length > 0
-          ? `Montos: ${serviciosConPrecio.map((s) => `${s.titulo}: $${((s.svc?.precio_centavos ?? 0) / 100).toLocaleString("es-MX")} MXN`).join(" | ")}` : "",
-      ].filter(Boolean).join("\n")
-    : "";
-
-  const modoRevelacion = contexto.modoRevelacion ?? "oculto";
-
-  // Cuando el producto está revelado → ficha completa con nombre, precio y links
-  // Cuando oculto/preguntando → solo beneficios internos, sin nombre ni código EC
-  const serviciosTextoCompleto = serviciosAncla.map(formatearRecursoKB).join("\n\n");
-  const serviciosTextoInterno = serviciosAncla.map((r) => {
-    const partes: string[] = [];
-    if (r.caracteristicas) partes.push(`Características: ${r.caracteristicas}`);
-    if (r.beneficios)      partes.push(`Beneficios: ${r.beneficios}`);
-    if (r.ventajas)        partes.push(`Ventajas competitivas: ${r.ventajas}`);
-    if (r.para_quien_es)   partes.push(`Perfil ideal: ${r.para_quien_es}`);
-    return partes.join("\n") || r.contenido;
-  }).join("\n\n");
-
-  // Estrategia de cierre (solo cuando producto revelado y hay servicio)
-  // Usa todosLinks del servicio principal para incluir tipo=apartado en la estrategia
-  const svcPrincipal = pagosServicios[0]?.svc as DatosPrecioServicio | null ?? null;
-  const linksParaEstrategia: LinkPago[] = (pagosServicios[0]?.todosLinks ?? []).map((p) => ({
-    tipo: p.tipo, url: p.url, nombre: p.nombre,
-  }));
-  const bloqueEstrategia = (modoRevelacion === "revelado" && svcPrincipal)
-    ? generarBloqueEstrategiaPrecio(svcPrincipal, linksParaEstrategia, contexto.historial)
-    : "";
-
-  const anclaLinea = serviciosAncla.length > 0
-    ? modoRevelacion === "revelado"
-      ? [`\nSERVICIO(S) QUE ESTÁS VENDIENDO — revisa esta información antes de responder:\n${serviciosTextoCompleto}\nToda tu respuesta debe estar orientada a vender este/estos servicio(s).`,
-          pagosConLink.length > 0 && !bloqueEstrategia
-            ? `\nLINKS DE PAGO:\n${pagosConLink.map((p) => `• ${p.titulo}: ${p.pago!.url}`).join("\n")}` : "",
-          cuentasBancariasLinea, bloqueEstrategia].filter(Boolean).join("\n")
-      : `\nCONTEXTO INTERNO DEL SERVICIO (CONFIDENCIAL — no revelar nombre, código EC ni precio):\n${serviciosTextoInterno}`
-    : "";
-
-  // Protocolo y plantillas de la etapa actual del pipeline
-  const pipelineContextoLinea = formatearContextoPipelineParaPrompt(contextoPipeline, contexto.pipelineStage);
-
-  // MPS-16 S60 — Prácticas contextuales: filtra por temperamento y etapa del lead.
-  // Carga hasta 20, selecciona top-3 con mayor relevancia contextual + score_confianza.
+  // Prácticas de venta (fetch + filtrado contextual)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: todasPracticas } = await (createServiceClient() as any)
     .from("recursos_conocimiento")
@@ -247,159 +136,36 @@ export async function generarRespuesta(
     .eq("tipo", "practica_venta").eq("aprobado", true).eq("activo", true)
     .order("score_confianza", { ascending: false })
     .limit(20);
-  const practicas = seleccionarPracticasContextuales(
-    todasPracticas ?? [], contexto.temperamento, contexto.pipelineStage
-  );
+  const { estable, dinamico } = construirSystemPrompt({
+    identidad, serviciosAncla, pagosServicios, cuentasActivas, relacionesLinea,
+    kb, todasPracticas: todasPracticas ?? [], gatillos, sugerenciaMatriz,
+    contextoPipeline, hintCalidad, variantePrompt, reglasAplicables,
+    imagenActivaUrl, contexto,
+  });
 
-  // KB: solo FAQs y recursos genéricos — los servicios ya están en anclaLinea
-  const recursosTexto = kb.length > 0
-    ? kb.map(formatearRecursoKB).join("\n\n")
-    : "No se encontraron recursos específicos en la KB. Responde con información general del Centro ECM.";
-  const practicasTexto = practicas?.length
-    ? `\nMEJORES PRÁCTICAS DE VENTA APLICABLES:\n${practicas.map((p) => `• ${p.contenido}`).join("\n")}` : "";
-  const faseCagcLinea = contexto.faseCAGC !== undefined
-    ? `- Fase de compra CAGC: ${contexto.faseCAGC} — guía el tono y objetivo de tu respuesta según este momento del comprador` : "";
-  const etiquetasLinea = contexto.etiquetas?.length
-    ? `- Etiquetas del lead: ${contexto.etiquetas.join(", ")}` : "";
-  const matrizLinea = sugerenciaMatriz
-    ? `\nSUGERENCIA DE MATRIZ (usa como guía, adapta a la conversación):\n${sugerenciaMatriz}` : "";
-  const brandLinea = identidad ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
-  const imagenLinea = imagenActivaUrl
-    ? `\nIMAGEN DEL SERVICIO DISPONIBLE:\nURL: ${imagenActivaUrl}\nEsta imagen puede acompañar tu respuesta si el canal lo permite. No la menciones como "imagen"; úsala para enriquecer tu argumento visual.` : "";
-  const meetLinkLinea = contexto.meetLink
-    ? ["\nCITA CREADA — COMPARTE EL LINK CON ENTUSIASMO:",
-        `El sistema generó este enlace de Google Meet: ${contexto.meetLink}`,
-        "Compártelo de forma cálida y natural. Menciona la fecha y hora en horario del Centro de México.",
-        "Dile al lead que su solicitud ya está registrada y que en breve el equipo la confirma. Usa tono entusiasta y cercano."].join("\n") : "";
-  const tz = "America/Mexico_City";
-  const slotsLinea = contexto.slotsDisponibles?.length
-    ? ["\nHORARIOS DISPONIBLES — preséntaselos de forma conversacional, no como lista rígida:",
-        ...contexto.slotsDisponibles.map((s, i) => {
-          const fecha = s.inicio.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
-          const hora  = s.inicio.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
-          return `${i + 1}. ${fecha} a las ${hora}`;
-        }),
-        "\nREGLAS DE ZONA HORARIA (seguir siempre):",
-        "• Todos los horarios son en horario del Centro de México — usa exactamente esa expresión, nunca abrevies a 'CDMX' ni 'hora local'.",
-        "• Si el lead menciona estar en otra ciudad, estado o país con huso horario diferente, convierte el horario y acláraselo de forma natural.",
-        "• Cuando el lead elija un horario, confírmalo con calidez y entusiasmo."].join("\n") : "";
-  const setterLinea = contexto.setterEstado
-    ? [`\nPROTOCOLO SETTER — FASE ${contexto.setterEstado.faseNueva}: ${contexto.setterEstado.nombreFase}`,
-        `Objetivo: ${contexto.setterEstado.descripcionFase}`,
-        contexto.setterEstado.preguntaGuia
-          ? `Pregunta guía (úsala de forma natural, nunca como interrogatorio): "${contexto.setterEstado.preguntaGuia}"` : "",
-      ].filter(Boolean).join("\n") : "";
-  const objecionLinea = contexto.protocoloObjecion?.instruccion ? `\n${contexto.protocoloObjecion.instruccion}` : "";
-  const rolLinea = contexto.rolesDinamicos?.length ? formatearRolDinamicoParaPrompt(contexto.rolesDinamicos) : "";
-  // Instrucción de venta adaptada al estado de revelación del producto
-  const instruccionVenta = modoRevelacion === "oculto"
+  // Activar prompt caching solo si el bloque estable supera el mínimo de Sonnet (1024 tokens ≈ 4096 chars).
+  const CACHE_MIN_CHARS = 4096;
+  const system = estable.length >= CACHE_MIN_CHARS
     ? [
-        "\nPROTOCOLO DE DESCUBRIMIENTO — REGLA ABSOLUTA (se revisa primero que cualquier otra instrucción):",
-        "NO menciones el nombre del servicio, código de estándar (EC...) ni precio en ningún mensaje.",
-        "Usa la sección CONTEXTO INTERNO para conocer los beneficios, pero habla de TRANSFORMACIÓN y SOLUCIÓN sin revelar el nombre del producto.",
-        "1. Haz UNA pregunta abierta que profundice en la situación del lead.",
-        "2. Cuando confirme un problema concreto, muéstrale el impacto de NO resolverlo.",
-        "3. Cuando el lead muestre apertura a resolver, haz EXACTAMENTE esta pregunta (UNA sola vez): \"¿Te gustaría saber qué puede ayudarte a lograrlo?\"",
-        "4. No avances más allá de esa pregunta en este turno. Espera la respuesta.",
-      ].join("\n")
-    : modoRevelacion === "preguntando"
-    ? [
-        "\nPROTOCOLO ESPERANDO RESPUESTA — REGLA ABSOLUTA:",
-        "Ya le preguntaste al lead si quiere saber qué puede ayudarle. NO repitas la pregunta.",
-        "- Si responde con interés (\"sí\", \"claro\", \"dime\", \"¿cuál?\"): revela el nombre del servicio y presenta sus beneficios.",
-        "- Si evade, niega o cambia el tema: confronta de forma directa pero respetuosa.",
-        "  Ejemplo: \"Entiendo que algo te detiene. ¿Qué es lo que te genera duda sobre dar este paso?\"",
-        "  Trabaja la resistencia de fondo antes de revelar el producto.",
-      ].join("\n")
-    : ""; // revelado → el bloqueEstrategia ya contiene las instrucciones de cierre
+        { type: "text" as const, text: estable, cache_control: { type: "ephemeral" as const } },
+        { type: "text" as const, text: dinamico },
+      ]
+    : `${estable}\n${dinamico}`;
 
-  const hintCalidadLinea = hintCalidad
-    ? `\nHINT DE CALIDAD HISTÓRICA (basado en conversaciones previas con este lead):\n${hintCalidad}` : "";
-  const memoriaLinea = contexto.memoriaIA
-    ? `\nMEMORIA DE SESIONES ANTERIORES CON ESTE LEAD:\n${contexto.memoriaIA}` : "";
-  const varianteLinea = variantePrompt
-    ? `\nINSTRUCCIÓN ADICIONAL (experimento activo — variante ${variantePrompt.variante.toUpperCase()}):\n${variantePrompt.texto}` : "";
-  const reglasLinea = formatearReglasParaPrompt(reglasAplicables);
-  const autoReplyLinea = contexto.esAutoReply
-    ? "\n- CONTEXTO CLAVE: El mensaje recibido es una respuesta automática de WhatsApp Business del lead (saludo o bienvenida automática, no una consulta real). NOSOTROS lo contactamos a él — él NO nos contactó. NUNCA preguntes '¿En qué puedo ayudarte?' ni '¿Para qué nos contactaste?'. Retoma el hilo de prospección explicando brevemente el motivo de nuestro contacto y abre con una pregunta de descubrimiento sobre su situación."
-    : "";
-
-  // S85 — Modo pre-sesión: desactiva el flujo de ventas mientras haya cita confirmada próxima
-  let preSessionLinea = "";
-  if (contexto.modoPreSesion) {
-    const d = new Date(contexto.modoPreSesion.fechaIso);
-    const fechaPs = d.toLocaleDateString("es-MX", { timeZone: tz, weekday: "long", day: "numeric", month: "long" });
-    const horaPs  = d.toLocaleTimeString("es-MX", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
-    const meetLinkPs = contexto.modoPreSesion.meetLink
-      ? `\n• Link de Google Meet: ${contexto.modoPreSesion.meetLink}` : "";
-    preSessionLinea = `\nMODO PRE-SESIÓN ACTIVO — PRIORIDAD MÁXIMA. Anula cualquier instrucción de ventas:
-El lead tiene una cita confirmada para el ${fechaPs} a las ${horaPs} (hora del Centro de México).${meetLinkPs}
-SOLO puedes responder dudas sobre la sesión: hora, cómo conectarse al Meet, qué preparar, cuánto dura.
-Si el lead muestra dudas sobre asistir: revalida el valor de la sesión brevemente, confirma el horario y no abras más conversación después.
-NO puedes: hacer preguntas de cierre de ventas, ofrecer pagos o inscripción, continuar el flujo de prospección, ni terminar con preguntas que inviten a seguir conversando sobre temas distintos a la cita.
-Tono: informativo, cálido y muy breve.`;
-  }
-
-  const canal = contexto.canal_origen;
-  const instruccionCanal = canal === "whatsapp" || canal === "sandbox"
-    ? "- El número de teléfono del lead ya está registrado desde WhatsApp — NUNCA lo solicites."
-    : canal === "email"
-    ? "- El correo electrónico del lead ya está registrado desde el email de contacto — NUNCA lo solicites."
-    : "";
-
-  const systemPrompt = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${relacionesLinea}${pipelineContextoLinea}${imagenLinea}${meetLinkLinea}${slotsLinea}${setterLinea}${objecionLinea}${rolLinea}${hintCalidadLinea}${varianteLinea}
-
-CONTEXTO DEL LEAD:
-- Nombre: ${contexto.nombre ?? "desconocido"}
-- Etapa en pipeline: ${contexto.pipelineStage}
-- Temperamento inferido: ${contexto.temperamento ?? "no determinado"}
-- Cliente previo: ${contexto.compraPreviaa ? "SÍ — trata con familiaridad" : "NO — es nuevo lead"}
-${faseCagcLinea}
-${etiquetasLinea}
-
-HISTORIAL RECIENTE:
-${contexto.historial || "(primera interacción)"}${memoriaLinea}
-
-BASE DE CONOCIMIENTO — FAQs y recursos adicionales:
-${recursosTexto}
-${practicasTexto}
-${formatearGatillosParaPrompt(gatillos)}${matrizLinea}${reglasLinea}
-
-INSTRUCCIONES:
-- Responde en español, tono cálido y profesional
-- Máximo 3 oraciones por mensaje; si necesitas más, divide en bloques
-- NO expliques que eres IA
-- Si no tienes información suficiente para responder, pregunta por más detalles
-- Si detectas intención de compra, ofrece el link de pago de forma natural; si el lead no puede usarlo, proporciona los datos de transferencia bancaria del contexto
-- Si la pregunta está completamente fuera de tu alcance, indica que un asesor se pondrá en contacto
-- Para argumentar a favor de un servicio, usa sus beneficios y ventajas disponibles
-- Si el lead no encaja en "NO recomendado para" de un servicio, sé honesto y redirige con amabilidad
-${instruccionCanal}${autoReplyLinea}
-${contexto.modoPreSesion ? preSessionLinea : instruccionVenta}
-${contexto.modoPreSesion ? "" : instruccionReglaOroCierre()}`;
-
-  const response = await callClaudeIA("RESPUESTA", {
-    max_tokens: 400,
-    system: systemPrompt,
-    messages: [{ role: "user", content: mensajes.join("\n") }],
+  const response = await callClaudeIA("RESPUESTA_GHL_SBC", {
+    max_tokens: maxTokens,
+    system,
+    messages:   [...historialMultiTurn, { role: "user", content: mensajes.join("\n") }],
   });
 
   void registrarUsoIA("anthropic", response.usage.input_tokens, response.usage.output_tokens).catch(() => {});
 
-  const raw  = (response.content[0] as { text: string }).text.trim();
-  const texto = normalizarRespuesta(raw);
+  const texto = normalizarRespuesta((response.content[0] as { text: string }).text.trim());
 
-  // KBI S74.3 — score de respuesta Bayesiano (async, no bloquea el retorno)
   const kbIds = kb.map((r) => r.id);
   const scoreConfianza = kbIds.length > 0
     ? await calcularScoreRespuesta(kbIds, texto).catch(() => calcularScore(todosRecursos, sugerenciaMatriz, texto))
     : calcularScore(todosRecursos, sugerenciaMatriz, texto);
 
-  return {
-    texto,
-    scoreConfianza,
-    imagenUrl: imagenActivaUrl,
-    recursosIds: todosRecursos.map((r) => r.id),
-  };
+  return { texto, scoreConfianza, imagenUrl: imagenActivaUrl, recursosIds: todosRecursos.map((r) => r.id) };
 }
