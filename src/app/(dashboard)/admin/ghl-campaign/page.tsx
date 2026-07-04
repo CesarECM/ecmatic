@@ -18,14 +18,17 @@ import { EstadosChart } from "./EstadosChart";
 import { FollowupMonitor } from "./FollowupMonitor";
 import { LogTable, type LogRow } from "./LogTable";
 import { NivelesRoadmap } from "./NivelesRoadmap";
+import { AuditoriaEntregas } from "./AuditoriaEntregas";
+import { contarCandidatosAuditoria } from "@/services/ghl-auditoria-entregas";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
 
 type MotivoItem = string | { texto: string; href: string };
 export const revalidate = 0;
 
-const CAMPANA     = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
-const TAG_FUENTE  = process.env.GHL_TAG_FUENTE     ?? "ecm_b_caliente";
+const CAMPANA         = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
+const TAG_FUENTE      = process.env.GHL_TAG_FUENTE     ?? "ecm_b_caliente";
+const SINCE_AUDITORIA = "2026-06-28T00:00:00Z"; // inicio campaña sbc_jun26
 const CAP_DIA     = 10_000;
 const HRS_OP      = 10; // 9:30–19:30 CDMX
 
@@ -96,7 +99,7 @@ export default async function GHLCampaignPage() {
 
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
     monitorKPIs, claudeEstado, historialEnvios, resolucionesRecientes,
-    ultimoEncoladoAt] =
+    ultimoEncoladoAt, candidatosAuditoria] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
       obtenerStatsAprobacion(CAMPANA),
@@ -110,6 +113,7 @@ export default async function GHLCampaignPage() {
       obtenerHistorialEnvios(db).catch(() => [] as number[]),
       contarResolucionesRecientes(CAMPANA).catch(() => 0),
       obtenerUltimoEncoladoAt(CAMPANA).catch(() => null),
+      contarCandidatosAuditoria(SINCE_AUDITORIA).catch(() => 0),
     ]);
 
   // ── Diagnóstico de errores silenciosos ────────────────────────────────────
@@ -548,6 +552,9 @@ export default async function GHLCampaignPage() {
 
       {/* ── Monitor de seguimientos ─────────────────────────────── */}
       <FollowupMonitor kpis={monitorKPIs} />
+
+      {/* ── Auditoría de entregas ───────────────────────────────── */}
+      <AuditoriaEntregas totalCandidatos={candidatosAuditoria} since={SINCE_AUDITORIA} />
 
       {/* ── Log — colapsable en LogTable ───────────────────────── */}
       <LogTable logs={logs ?? []} />

@@ -89,9 +89,11 @@ src/
 │               ├── seguimiento/    # Cron 30min: ejecuta follow-ups vencidos + detecta silencios
 │               ├── followup-learning/ # Cron 1h: cierra ventanas bayesianas, actualiza α/β
 │               ├── procesar-buffer/   # Cron 1min: drena ghl_message_buffer (debounce 15s)
-│               └── reclasificar-cobertura/ # Manual/cron: leads sin seguimiento activo → Haiku asigna tipo
+│               ├── reclasificar-cobertura/ # Manual/cron: leads sin seguimiento activo → Haiku asigna tipo
+│               └── campana/auditoria-entregas/ # MPS-29: GET audita entregas vs GHL; POST repara fallidos
 ├── services/
 │   ├── aplicar-sugerencia-kb.ts    # MPS-14: aplica sugerencias kb_calidad al KB real (actualizar/crear/desactivar)
+│   ├── ghl-auditoria-entregas.ts   # MPS-29: auditarEntregasBatch + repararEntregasFallidas + contarCandidatosAuditoria
 ├── components/
 │   ├── ui/                         # shadcn/ui — no modificar directamente
 │   ├── auth/                       # LoginForm

@@ -5,6 +5,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { activarCampana, desactivarCampana, reiniciarNivelesCampana } from "@/services/ghl-aprobacion";
 import { logSistema } from "@/services/log-sistema";
 import { reclasificarCobertura } from "@/services/reclasificar-cobertura";
+import {
+  auditarEntregasBatch,
+  repararEntregasFallidas,
+  type AuditoriaBatchResult,
+} from "@/services/ghl-auditoria-entregas";
 
 const CAMPANA = process.env.GHL_CAMPANA_ACTIVA ?? "sbc_jun26";
 
@@ -41,6 +46,23 @@ export async function auditarCoberturaAction(): Promise<{ creados: number; proce
   });
   revalidatePath("/admin/ghl-campaign");
   return { creados: resultado.creados, procesados: resultado.procesados };
+}
+
+export async function auditarEntregasAction(
+  since: string,
+  page: number,
+  pageSize: number,
+): Promise<AuditoriaBatchResult> {
+  return auditarEntregasBatch(since, page, pageSize);
+}
+
+export async function repararEntregasAction(
+  contactIds: string[],
+  dryRun = false,
+): Promise<{ reparados: number; omitidos: number }> {
+  const resultado = await repararEntregasFallidas(contactIds, dryRun);
+  if (!dryRun) revalidatePath("/admin/ghl-campaign");
+  return resultado;
 }
 
 export async function toggleCampanaAction(activa: boolean): Promise<void> {
