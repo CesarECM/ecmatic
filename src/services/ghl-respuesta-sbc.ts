@@ -96,17 +96,27 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     .maybeSingle() as { data: { id: string; variante: "a" | "b"; enviado: boolean; respuesta_tipo: string | null } | null };
 
   void logSistema({
-    categoria: "webhook", tipoAccion: "ghl_sbc.lookup", fase: log?.enviado ? "ok" : "error",
+    categoria: "webhook", tipoAccion: "ghl_sbc.lookup", fase: log?.enviado ? "ok" : "warn",
     resultado: log ? (log.enviado ? "en campaña" : "no enviado") : "no encontrado",
     metadata:  { contactId, campana: CAMPANA_ACTIVA, respuesta_tipo: log?.respuesta_tipo ?? null, enviado: log?.enviado ?? null },
   });
 
-  if (!log?.enviado) return;
-
   // Contacto ya blacklisteado en turno previo — ignorar
-  if (log.respuesta_tipo === "negativo") {
+  if (log?.respuesta_tipo === "negativo") {
     void logSistema({ categoria: "webhook", tipoAccion: "ghl_sbc.blacklist", fase: "ok", resultado: "ignorado", metadata: { contactId } });
     return;
+  }
+
+  // Sin entrada en campaña o enviado=false: el lead llegó fuera del flujo de campaña
+  // (mensaje directo en GHL, entrada borrada por reparación, etc.)
+  // Se procesa igual pero nunca auto-envía — siempre va a cola de aprobación humana.
+  const forzarCola = !log?.enviado;
+  if (forzarCola) {
+    void logSistema({
+      categoria: "webhook", tipoAccion: "ghl_sbc.fuera_campana", fase: "warn",
+      resultado: log ? "enviado=false — cola forzada" : "sin registro en campaña — cola forzada",
+      metadata:  { contactId, campana: CAMPANA_ACTIVA },
+    });
   }
 
   const convId = conversationId || await obtenerOCrearConversacionWA(contactId).catch(() => null);
@@ -228,7 +238,7 @@ export async function procesarMensajeEntranteSBC(payload: any): Promise<void> {
     metadata: { contactId },
   });
 
-  if (pasaUmbral) {
+  if (!forzarCola && pasaUmbral) {
     // Score suficiente — intentar enviar directo sin revisión humana
     let enviado = false;
     try {

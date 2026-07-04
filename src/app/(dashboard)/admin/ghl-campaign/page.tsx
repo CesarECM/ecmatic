@@ -20,6 +20,7 @@ import { LogTable, type LogRow } from "./LogTable";
 import { NivelesRoadmap } from "./NivelesRoadmap";
 import { AuditoriaEntregas } from "./AuditoriaEntregas";
 import { contarCandidatosAuditoria } from "@/services/ghl-auditoria-entregas";
+import { AlertasWebhook, type AlertasWebhookData } from "./AlertasWebhook";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
 
@@ -76,6 +77,43 @@ async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAP
   return { estado: "error", hace };
 }
 
+async function obtenerAlertasWebhook(db: any, enHorarioOp: boolean): Promise<AlertasWebhookData> {
+  const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [
+    { count: errBuf },
+    { count: errMotor },
+    { count: fueraCamp },
+    { count: cuerpoVacio },
+    { data: ultimoWh },
+  ] = await Promise.all([
+    db.from("log_sistema").select("*", { count: "exact", head: true })
+      .eq("tipo_accion", "ghl_buffer.procesar").eq("fase", "error").gte("created_at", desde24h),
+    db.from("log_sistema").select("*", { count: "exact", head: true })
+      .eq("tipo_accion", "ghl_sbc.motor").eq("fase", "error").gte("created_at", desde24h),
+    db.from("log_sistema").select("*", { count: "exact", head: true })
+      .eq("tipo_accion", "ghl_sbc.fuera_campana").gte("created_at", desde24h),
+    db.from("log_sistema").select("*", { count: "exact", head: true })
+      .eq("tipo_accion", "ghl_buffer.cuerpo_vacio").gte("created_at", desde24h),
+    db.from("log_sistema").select("created_at")
+      .eq("tipo_accion", "webhook.ghl.raw")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
+  const minutosDesdeWebhook = ultimoWh?.created_at
+    ? Math.floor((Date.now() - new Date(ultimoWh.created_at).getTime()) / 60_000)
+    : null;
+
+  return {
+    erroresBuffer24h:    errBuf    ?? 0,
+    erroresMotorIA24h:   errMotor  ?? 0,
+    fueraCampana24h:     fueraCamp ?? 0,
+    cuerpoVacio24h:      cuerpoVacio ?? 0,
+    minutosDesdeWebhook,
+    enHorarioOperativo:  enHorarioOp,
+  };
+}
+
 // S7: últimos N envíos exitosos del cron auto-disparo
 async function obtenerHistorialEnvios(db: any): Promise<number[]> {
   const { data } = await db
@@ -97,9 +135,11 @@ export default async function GHLCampaignPage() {
 
   const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0, demo_agendado: 0 } };
 
+  const enHorarioOperativo = hora >= 9.5 && hora < 22;
+
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
     monitorKPIs, claudeEstado, historialEnvios, resolucionesRecientes,
-    ultimoEncoladoAt, candidatosAuditoria] =
+    ultimoEncoladoAt, candidatosAuditoria, alertasWebhook] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
       obtenerStatsAprobacion(CAMPANA),
@@ -114,6 +154,11 @@ export default async function GHLCampaignPage() {
       contarResolucionesRecientes(CAMPANA).catch(() => 0),
       obtenerUltimoEncoladoAt(CAMPANA).catch(() => null),
       contarCandidatosAuditoria(SINCE_AUDITORIA).catch(() => 0),
+      obtenerAlertasWebhook(db, enHorarioOperativo).catch(() => ({
+        erroresBuffer24h: 0, erroresMotorIA24h: 0,
+        fueraCampana24h: 0, cuerpoVacio24h: 0,
+        minutosDesdeWebhook: null, enHorarioOperativo,
+      } satisfies AlertasWebhookData)),
     ]);
 
   // ── Diagnóstico de errores silenciosos ────────────────────────────────────
@@ -267,6 +312,9 @@ export default async function GHLCampaignPage() {
           </p>
         </div>
       )}
+
+      {/* ── Alertas de webhook / procesamiento de mensajes ─────────── */}
+      <AlertasWebhook datos={alertasWebhook} />
 
       {/* S6: Banner de pendientes prominente ──────────────────────────────── */}
       {pendientes > 0 && (

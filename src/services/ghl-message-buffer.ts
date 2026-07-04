@@ -37,7 +37,16 @@ export async function encolarEnBuffer(params: {
 }): Promise<void> {
   const { contactId, conversationId, cuerpo, campana = CAMPANA_ACTIVA } = params;
 
-  if (!cuerpo) return;
+  if (!cuerpo) {
+    void logSistema({
+      categoria:  "webhook",
+      tipoAccion: "ghl_buffer.cuerpo_vacio",
+      fase:       "warn",
+      resultado:  "mensaje sin cuerpo resuelto — no se encola",
+      metadata:   { contactId, conversationId: conversationId ?? null, campana },
+    });
+    return;
+  }
 
   const supabase     = createServiceClient();
   const nuevoMensaje = { cuerpo, received_at: new Date().toISOString() };
