@@ -288,6 +288,28 @@ export async function incrementarRespuesta(templateId: string): Promise<void> {
   await db().rpc("increment_template_respuesta", { p_template_id: templateId });
 }
 
+// S107 — Elimina un template solo si aún está en estado "sugerido".
+// Templates aprobados/conectados no se tocan: tienen valor validado de otras aprobaciones.
+export async function eliminarTemplateSiSugerido(templateId: string): Promise<void> {
+  const { error } = await db()
+    .from("followup_templates")
+    .delete()
+    .eq("id", templateId)
+    .eq("estado", "sugerido");
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "followup_templates.eliminar_sugerido", fase: "error",
+      resultado: String(error), metadata: { templateId },
+    });
+    return;
+  }
+  void logSistema({
+    categoria: "servicio", tipoAccion: "followup_templates.eliminar_sugerido", fase: "ok",
+    metadata: { templateId },
+  });
+}
+
 // Listado para panel /admin/templates
 export async function listarTemplates(filtros?: {
   tipo?: TipoFollowup;

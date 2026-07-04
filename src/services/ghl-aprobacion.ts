@@ -26,6 +26,7 @@ export interface ItemAprobacionGHL {
   revisado_at: string | null;
   enviado_at: string | null;
   requiere_template: boolean;
+  seguimiento_id: string | null;
 }
 
 export interface StatsAprobacionGHL {

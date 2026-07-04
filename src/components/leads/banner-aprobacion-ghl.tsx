@@ -58,10 +58,10 @@ function BannerTemplate({ item, leadId, telefonoLead }: Props) {
 
   function rechazar() {
     startTransition(async () => {
-      const id = toast.loading("Rechazando…");
+      const id = toast.loading("Posponiendo…");
       const r = await rechazarMensajeGHLAction(item.id, item.campana, leadId);
       if (r.error) toast.error(r.error, { id });
-      else toast.success("Seguimiento rechazado", { id });
+      else toast.success(item.seguimiento_id ? "Seguimiento pospuesto 4h" : "Seguimiento rechazado", { id });
     });
   }
 
@@ -72,6 +72,11 @@ function BannerTemplate({ item, leadId, telefonoLead }: Props) {
         <span className="font-semibold text-orange-800 text-xs uppercase tracking-wide">
           ⚠️ Fuera de ventana WA — Requiere template
         </span>
+        {item.seguimiento_id && (
+          <span className="text-xs bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded-full font-medium">
+            🔄 Seguimiento
+          </span>
+        )}
       </div>
 
       {/* Instrucción */}
@@ -129,7 +134,7 @@ function BannerTemplate({ item, leadId, telefonoLead }: Props) {
           disabled={pending}
           className="rounded bg-gray-100 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
         >
-          ✗ Omitir este seguimiento
+          {item.seguimiento_id ? "🔄 Posponer 4h" : "✗ Omitir"}
         </button>
       </div>
     </div>
@@ -193,6 +198,11 @@ function BannerAprobacionLibre({ item, leadId }: Props) {
         <span className="font-semibold text-violet-800 text-xs uppercase tracking-wide">
           ⏳ Respuesta IA pendiente
         </span>
+        {item.seguimiento_id && (
+          <span className="text-xs bg-violet-200 text-violet-800 px-1.5 py-0.5 rounded-full font-medium">
+            🔄 Seguimiento
+          </span>
+        )}
         {item.score_ia !== null && <ScoreChip score={item.score_ia} />}
         {item.razon_score && (
           <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={item.razon_score}>
@@ -240,7 +250,9 @@ function BannerAprobacionLibre({ item, leadId }: Props) {
       ) : modo === "rechazar" ? (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            El lead no recibirá respuesta. ¿Confirmas el rechazo?
+            {item.seguimiento_id
+              ? "El mensaje no se enviará. El seguimiento se reintentará en 4h al mismo nivel."
+              : "El lead no recibirá respuesta. ¿Confirmas el rechazo?"}
           </p>
           <div className="flex gap-1">
             <button
@@ -248,7 +260,7 @@ function BannerAprobacionLibre({ item, leadId }: Props) {
               disabled={pending}
               className="rounded bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-600 disabled:opacity-50"
             >
-              Confirmar rechazo
+              {item.seguimiento_id ? "Posponer 4h" : "Confirmar rechazo"}
             </button>
             <button onClick={() => setModo("ver")} className="rounded bg-gray-100 px-3 py-1 text-xs hover:bg-gray-200">
               Cancelar
@@ -280,7 +292,7 @@ function BannerAprobacionLibre({ item, leadId }: Props) {
               disabled={pending}
               className="rounded bg-gray-100 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              ✗ Rechazar
+              {item.seguimiento_id ? "🔄 Posponer 4h" : "✗ Rechazar"}
             </button>
           </div>
         </>

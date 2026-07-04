@@ -22,8 +22,8 @@ import {
   obtenerStatsAprobacion,
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
-import { avanzarNivel, obtenerPorId } from "@/services/seguimiento-lead";
-import { promoverTemplate } from "@/services/followup-templates";
+import { avanzarNivel, obtenerPorId, posponerSeguimiento4h } from "@/services/seguimiento-lead";
+import { promoverTemplate, eliminarTemplateSiSugerido } from "@/services/followup-templates";
 import { detectarPatronGHLItem } from "@/services/kbi/detector";
 import { obtenerUltimoEntrante } from "@/services/mensajes";
 
@@ -380,30 +380,38 @@ export const marcarEnviadoManualmenteGHLAction = safeAction(async (
   revalidatePath("/admin/aprobaciones");
 });
 
-// GHL-5.9 — Rechaza el mensaje (no se envía nada al lead)
+// S107 — Rechaza el mensaje desde la ficha del lead.
+// Para seguimientos: pospone 4h en el mismo nivel (no consume intento) y elimina el template sugerido.
+// Para items de campaña sin seguimiento: solo rechaza sin efecto en seguimiento.
 export const rechazarMensajeGHLAction = safeAction(async (
   itemId: string,
   campana: string,
   leadId: string
 ) => {
-  // MPS-5 S39.4: leer seguimientoId antes de resolver
   const supabase = createServiceClient();
   const { data: qItem } = await (supabase as any)
-    .from("ghl_approval_queue").select("seguimiento_id").eq("id", itemId).maybeSingle();
+    .from("ghl_approval_queue").select("seguimiento_id, template_id").eq("id", itemId).maybeSingle();
 
   await resolverItemAprobacion({ id: itemId, estado: "rechazado" });
   await actualizarStatsAprobacion(campana, "rechazado");
 
-  // avanzarNivel también al rechazar: el recordatorio no se envió, pero el nivel pasa
   const seguimientoId = qItem?.seguimiento_id as string | null | undefined;
+  const templateId    = qItem?.template_id    as string | null | undefined;
+
   if (seguimientoId) {
-    const seg = await obtenerPorId(seguimientoId).catch(() => null);
-    if (seg?.estado === "activo") await avanzarNivel(seg).catch(() => null);
+    // Posponer 4h sin avanzar nivel — el admin dice "no ahora", no "este mensaje no sirve"
+    await posponerSeguimiento4h(seguimientoId).catch(() => null);
+  }
+
+  if (templateId) {
+    // Eliminar el template si aún es sugerido — no fue validado por el admin
+    await eliminarTemplateSiSugerido(templateId).catch(() => null);
   }
 
   void logSistema({
-    categoria: "ui", tipoAccion: "ghl_aprobacion.rechazar", fase: "ok",
+    categoria: "ui", tipoAccion: "ghl_aprobacion.posponer_4h", fase: "ok",
     leadId, resultado: `item:${itemId}`,
+    metadata: { seguimiento_id: seguimientoId ?? null, template_id: templateId ?? null },
   });
 
   revalidatePath(`/admin/leads/${leadId}`);

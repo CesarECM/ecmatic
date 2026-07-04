@@ -255,6 +255,29 @@ export async function obtenerPorId(seguimientoId: string): Promise<SeguimientoLe
   return data ?? null;
 }
 
+// S107 — Pospone el seguimiento 4h en el mismo nivel (sin consumir intento).
+// Llamado al rechazar desde la ficha del lead, en contraste con avanzarNivel (desde aprobaciones).
+export async function posponerSeguimiento4h(seguimientoId: string): Promise<void> {
+  const proximo = new Date(Date.now() + 4 * 3_600_000);
+  const { error } = await db()
+    .from("seguimiento_lead")
+    .update({ proximo_at: proximo.toISOString() })
+    .eq("id", seguimientoId)
+    .eq("estado", "activo");
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "seguimiento.posponer_4h", fase: "error",
+      resultado: String(error), metadata: { seguimientoId },
+    });
+    return;
+  }
+  void logSistema({
+    categoria: "servicio", tipoAccion: "seguimiento.posponer_4h", fase: "ok",
+    resultado: `proximo:${proximo.toISOString()}`, metadata: { seguimientoId },
+  });
+}
+
 // Notificación WA al admin cuando payment o demo_agendado agotan intentos sin respuesta.
 async function notificarEscalacion(seg: SeguimientoLead): Promise<void> {
   const adminWa = process.env.ADMIN_WHATSAPP;
