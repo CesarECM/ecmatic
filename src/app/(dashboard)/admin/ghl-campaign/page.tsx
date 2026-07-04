@@ -12,10 +12,7 @@ import {
   TURBO_RAMP_MIN, MAX_TURBO_BOOST, TURBO_MIN_RESOLUCIONES,
 } from "@/lib/ghl/trust-score";
 import { buscarContactosPorTag } from "@/lib/ghl/contacts-api";
-import {
-  obtenerKPIsMonitor, obtenerAtascados,
-  obtenerProximosSeguimientos, obtenerEscalados,
-} from "@/services/seguimiento-monitor";
+import { obtenerKPIsMonitor } from "@/services/seguimiento-monitor";
 import { CampanaControls } from "./CampanaControls";
 import { EstadosChart } from "./EstadosChart";
 import { FollowupMonitor } from "./FollowupMonitor";
@@ -98,7 +95,7 @@ export default async function GHLCampaignPage() {
   const KPIS_FALLBACK = { activos: 0, atascados: 0, escalados: 0, intentos_24h: 0, por_tipo: { nurturing: 0, conversational: 0, payment: 0, demo_agendado: 0 } };
 
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
-    monitorKPIs, atascados, proximos, escalados, claudeEstado, historialEnvios, resolucionesRecientes,
+    monitorKPIs, claudeEstado, historialEnvios, resolucionesRecientes,
     ultimoEncoladoAt] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
@@ -109,9 +106,6 @@ export default async function GHLCampaignPage() {
       contarLogsCampana(CAMPANA),
       buscarContactosPorTag(TAG_FUENTE, 1, 1).catch(() => ({ contacts: [], total: 0 })),
       obtenerKPIsMonitor().catch(() => KPIS_FALLBACK),
-      obtenerAtascados().catch(() => []),
-      obtenerProximosSeguimientos().catch(() => []),
-      obtenerEscalados().catch(() => []),
       obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null })),
       obtenerHistorialEnvios(db).catch(() => [] as number[]),
       contarResolucionesRecientes(CAMPANA).catch(() => 0),
@@ -553,7 +547,7 @@ export default async function GHLCampaignPage() {
       </div>
 
       {/* ── Monitor de seguimientos ─────────────────────────────── */}
-      <FollowupMonitor kpis={monitorKPIs} atascados={atascados} proximos={proximos} escalados={escalados} />
+      <FollowupMonitor kpis={monitorKPIs} />
 
       {/* ── Log — colapsable en LogTable ───────────────────────── */}
       <LogTable logs={logs ?? []} />
