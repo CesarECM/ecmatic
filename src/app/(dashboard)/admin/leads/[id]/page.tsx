@@ -124,7 +124,7 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
 
   // URLs externas
   const ghlUrl = ghlContactId && process.env.GHL_LOCATION_ID
-    ? `https://app.gohighlevel.com/v2/location/${process.env.GHL_LOCATION_ID}/contacts/detail/${ghlContactId}`
+    ? `https://app.relief.academy/v2/location/${process.env.GHL_LOCATION_ID}/contacts/detail/${ghlContactId}`
     : null;
   const waUrl = lead.telefono
     ? `https://wa.me/${lead.telefono.replace(/\D/g, "")}`
