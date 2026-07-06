@@ -60,7 +60,8 @@ export async function analizarRendimientoNurturing(
   });
 
   try {
-    const texto = (response.content[0] as { text: string }).text.trim();
+    const texto = (response.content[0] as { text: string }).text.trim()
+      .replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     const parsed = JSON.parse(texto) as { ajustes: AjusteSugerido[] };
     return Array.isArray(parsed.ajustes) ? parsed.ajustes.slice(0, 6) : [];
   } catch {

@@ -56,7 +56,8 @@ ${muestrasConversacion.map((m, i) => `--- Lead ${i + 1} ---\n${m}`).join("\n\n")
   });
 
   try {
-    const texto = (response.content[0] as { text: string }).text.trim();
+    const texto = (response.content[0] as { text: string }).text.trim()
+      .replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     const parsed = JSON.parse(texto) as { sugerencias: BrochureSugerido[] };
     return Array.isArray(parsed.sugerencias) ? parsed.sugerencias.slice(0, 3) : [];
   } catch {

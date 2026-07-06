@@ -59,7 +59,8 @@ export async function detectarSenalesSituacionales(
     system: SYSTEM,
   });
 
-  const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "[]";
+  const raw = (response.content[0]?.type === "text" ? response.content[0].text.trim() : "[]")
+    .replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 
   try {
     const parsed: unknown[] = JSON.parse(raw);

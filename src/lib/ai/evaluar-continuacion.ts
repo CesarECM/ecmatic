@@ -76,7 +76,8 @@ ${historial ?? "(sin mensajes registrados)"}`;
 
     if (!block?.text) return { decision: "continuar", razon: "sin_respuesta_ia" };
 
-    const parsed = JSON.parse(block.text.trim()) as {
+    const raw = block.text.trim().replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+    const parsed = JSON.parse(raw) as {
       decision?: string;
       razon?: string;
     };

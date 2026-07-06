@@ -49,7 +49,8 @@ export async function detectarCustomFieldsSugeridos(
   });
 
   try {
-    const texto = (response.content[0] as { text: string }).text.trim();
+    const texto = (response.content[0] as { text: string }).text.trim()
+      .replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     const parsed = JSON.parse(texto) as { campos: CampoSugerido[] };
     return Array.isArray(parsed.campos) ? parsed.campos.slice(0, 5) : [];
   } catch {

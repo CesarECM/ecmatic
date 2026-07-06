@@ -49,7 +49,8 @@ JSON requerido:
     }],
   });
 
-  const raw = (response.content[0] as { text: string }).text.trim();
+  const raw = (response.content[0] as { text: string }).text.trim()
+    .replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   try {
     const parsed = JSON.parse(raw) as BriefDiseno;
     return { ...parsed, canal_uso: canal };
