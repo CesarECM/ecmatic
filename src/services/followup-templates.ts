@@ -30,11 +30,53 @@ interface TemplateConScore extends FollowupTemplate {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createServiceClient() as any;
 
+// ── Genericización ────────────────────────────────────────────────────────────
+
+// Convierte un mensaje específico (con nombre/contexto del lead) en una plantilla
+// reutilizable que funcione para cualquier prospecto. Usa Haiku como transformador.
+// Fallback: devuelve el texto original si la llamada falla.
+async function genericizarTexto(texto: string): Promise<string> {
+  const system = `Eres un editor de plantillas de mensajes de ventas para WhatsApp.
+Tu tarea: convierte este mensaje en una plantilla reutilizable eliminando lo que lo hace único a un lead específico.
+
+ELIMINA O REEMPLAZA:
+- Nombres propios del contacto
+- Empleos, cargos, especialidades o empresas específicas del contacto
+- Situaciones particulares únicas de ese lead
+- Frases que solo tienen sentido para esa persona en ese contexto concreto
+
+CONSERVA:
+- El tono y estilo conversacional
+- La estructura y longitud del mensaje
+- Los links de pago si los hay
+- La intención y el ángulo de ventas
+- Todo lo relacionado con los servicios de certificación CONOCER
+
+Si el mensaje ya es genérico, devuélvelo sin cambios.
+
+FORMATO: Solo el texto del template. Sin notas, sin explicaciones.`;
+
+  try {
+    const resp = await callClaudeIA(
+      "GENERICIZAR_TEMPLATE",
+      { max_tokens: 300, system, messages: [{ role: "user", content: texto }] },
+    );
+    const block = resp.content.find((b) => b.type === "text") as
+      | { type: "text"; text: string }
+      | undefined;
+    const resultado = block?.text?.trim() ?? "";
+    return resultado.length >= 20 ? resultado : texto;
+  } catch {
+    return texto;
+  }
+}
+
 // ── S95: Auto-guardado ────────────────────────────────────────────────────────
 
 // Guarda el texto generado como template Sugerido.
-// El embedding se genera de forma async (no bloquea el cron).
-// Retorna el id del template creado o null si ya existe texto idéntico.
+// Genericiza el texto antes de persistir: elimina nombres y contextos específicos
+// del lead para que el template sea reutilizable con cualquier prospecto.
+// El mensaje específico que el admin aprueba no se altera — solo la biblioteca.
 export async function guardarTemplateSugerido(params: {
   tipo: TipoFollowup;
   anguloId: string | null;
@@ -42,12 +84,16 @@ export async function guardarTemplateSugerido(params: {
 }): Promise<string | null> {
   if (params.texto.length < 20) return null;
 
-  // Evitar duplicados exactos de texto por tipo
+  // Genericizar antes de persistir (elimina nombre, empleo, situación particular)
+  const textoGenerico = await genericizarTexto(params.texto).catch(() => params.texto);
+  if (textoGenerico.length < 20) return null;
+
+  // Evitar duplicados exactos de texto genérico por tipo
   const { data: existente } = await db()
     .from("followup_templates")
     .select("id")
     .eq("tipo", params.tipo)
-    .eq("texto", params.texto)
+    .eq("texto", textoGenerico)
     .maybeSingle() as { data: { id: string } | null };
 
   if (existente) return existente.id;
@@ -57,7 +103,7 @@ export async function guardarTemplateSugerido(params: {
     .insert({
       tipo:      params.tipo,
       angulo_id: params.anguloId ?? null,
-      texto:     params.texto,
+      texto:     textoGenerico,
       estado:    "sugerido",
     })
     .select("id")
@@ -73,10 +119,10 @@ export async function guardarTemplateSugerido(params: {
 
   const templateId = data.id;
 
-  // Generar embedding de forma async (no bloquea la respuesta al lead)
+  // Embedding del texto genérico (no del original con nombre del lead)
   after(async () => {
     try {
-      const embedding = await generarEmbedding(params.texto);
+      const embedding = await generarEmbedding(textoGenerico);
       await db()
         .from("followup_templates")
         .update({ embedding: `[${embedding.join(",")}]` })

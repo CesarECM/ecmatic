@@ -38,7 +38,8 @@ export type TareaIA =
   | "ARCO_EMOCIONAL"               // MPS-17 S66: clasifica estado emocional del lead en la conversación
   | "SELECCIONAR_TEMPLATE"         // MPS-26 S96: Haiku elige el mejor template candidato según historial
   | "EVALUAR_CONTINUACION"         // MPS-26 S100: Haiku decide continuar/pausar/escalar el ciclo
-  | "GENERAR_RESPUESTA_CONV";      // MPS-31: genera respuesta personalizada basada en conversación real
+  | "GENERAR_RESPUESTA_CONV"       // MPS-31: genera respuesta personalizada basada en conversación real
+  | "GENERICIZAR_TEMPLATE";       // MPS-31: convierte mensaje específico en plantilla reutilizable
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -86,6 +87,7 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   SELECCIONAR_TEMPLATE:   "haiku",
   EVALUAR_CONTINUACION:   "haiku",
   GENERAR_RESPUESTA_CONV: "sonnet", // personalizada necesita más calidad contextual
+  GENERICIZAR_TEMPLATE:  "haiku",  // transformación simple de texto
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.
