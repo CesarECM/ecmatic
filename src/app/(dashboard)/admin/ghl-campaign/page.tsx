@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { anthropic } from "@/lib/ai/client";
 import { obtenerStatsAB } from "@/services/ab-workflows-ghl";
 import {
   obtenerStatsAprobacion, calcularNivel,
@@ -69,14 +70,25 @@ interface DiagnosticoIA {
 }
 
 async function obtenerEstadoClaudeAPI(db: any): Promise<DiagnosticoIA> {
-  const [{ data }, { data: errores }] = await Promise.all([
-    db.from("log_sistema")
-      .select("fase, resultado, created_at, tipo_accion, metadata")
-      .eq("categoria", "ia")
-      .in("fase", ["respuesta", "error", "timeout"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle() as Promise<{ data: { fase: string; resultado: string | null; created_at: string; tipo_accion: string; metadata: Record<string, unknown> } | null }>,
+  // Ping real a la API — verde solo si responde AHORA, rojo si falla AHORA
+  const [pingResult, { data: errores }] = await Promise.all([
+    (async () => {
+      try {
+        await Promise.race([
+          anthropic.messages.create({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1,
+            messages: [{ role: "user", content: "ok" }],
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("TIMEOUT_5000ms")), 5_000)
+          ),
+        ]);
+        return { ok: true, error: null as string | null };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    })(),
     db.from("log_sistema")
       .select("tipo_accion, resultado, created_at, metadata")
       .eq("categoria", "ia")
@@ -85,14 +97,6 @@ async function obtenerEstadoClaudeAPI(db: any): Promise<DiagnosticoIA> {
       .limit(5) as Promise<{ data: Array<{ tipo_accion: string; resultado: string | null; created_at: string; metadata: Record<string, unknown> }> | null }>,
   ]);
 
-  const fallback: DiagnosticoIA = { estado: "sin_datos", hace: null, mensaje: null, tarea: null, errorCompleto: null, ultimosErrores: [] };
-  if (!data) return fallback;
-
-  const hace = new Date(data.created_at).toLocaleTimeString("es-MX", {
-    timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
-  });
-  const tarea        = data.tipo_accion ?? null;
-  const errorCompleto = (data.metadata?.error_message as string | null) ?? null;
   const ultimosErrores = (errores ?? []).map(e => ({
     tarea:     e.tipo_accion,
     resultado: e.resultado,
@@ -102,16 +106,15 @@ async function obtenerEstadoClaudeAPI(db: any): Promise<DiagnosticoIA> {
     }),
   }));
 
-  // Error/timeout con más de 2 h de antigüedad = sistema en reposo, no error activo
-  const VENTANA_ERROR_MS = 2 * 60 * 60 * 1000;
-  const esReciente = Date.now() - new Date(data.created_at).getTime() < VENTANA_ERROR_MS;
+  if (pingResult.ok) {
+    return { estado: "operativa", hace: null, mensaje: null, tarea: null, errorCompleto: null, ultimosErrores: [] };
+  }
 
-  if (data.fase === "respuesta") return { estado: "operativa", hace, mensaje: null, tarea, errorCompleto: null, ultimosErrores: [] };
-  if (!esReciente)               return { estado: "sin_datos", hace: null, mensaje: null, tarea: null, errorCompleto: null, ultimosErrores: [] };
-  if (data.fase === "timeout")   return { estado: "timeout",   hace, mensaje: data.resultado ?? null, tarea, errorCompleto, ultimosErrores };
-  if (data.fase === "error" && data.resultado?.includes("credit balance"))
-    return { estado: "sin_creditos", hace, mensaje: null, tarea, errorCompleto, ultimosErrores };
-  return { estado: "error", hace, mensaje: data.resultado ?? null, tarea, errorCompleto, ultimosErrores };
+  const msg = pingResult.error ?? "Error desconocido";
+  const isTimeout = msg.includes("TIMEOUT");
+  if (isTimeout)                           return { estado: "timeout",      hace: null, mensaje: msg, tarea: "ping", errorCompleto: msg, ultimosErrores };
+  if (msg.toLowerCase().includes("credit")) return { estado: "sin_creditos", hace: null, mensaje: null, tarea: "ping", errorCompleto: msg, ultimosErrores };
+  return { estado: "error", hace: null, mensaje: msg, tarea: "ping", errorCompleto: msg, ultimosErrores };
 }
 
 function interpretarError(mensaje: string | null, errorCompleto: string | null): string | null {
