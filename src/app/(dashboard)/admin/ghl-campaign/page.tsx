@@ -21,6 +21,8 @@ import { NivelesRoadmap } from "./NivelesRoadmap";
 import { AuditoriaEntregas } from "./AuditoriaEntregas";
 import { contarCandidatosAuditoria } from "@/services/ghl-auditoria-entregas";
 import { AlertasWebhook, type AlertasWebhookData } from "./AlertasWebhook";
+import { obtenerConfig } from "@/services/sistema";
+import { IAToggle } from "./IAToggle";
 
 export const metadata = { title: "Campaña SBC · ECMatic" };
 
@@ -139,7 +141,7 @@ export default async function GHLCampaignPage() {
 
   const [stats, aprobacionStats, enviadosHoy, pendientes, estadosLeads, logsInfo, ghlResult,
     monitorKPIs, claudeEstado, historialEnvios, resolucionesRecientes,
-    ultimoEncoladoAt, candidatosAuditoria, alertasWebhook] =
+    ultimoEncoladoAt, candidatosAuditoria, alertasWebhook, sistemaCfg] =
     await Promise.all([
       obtenerStatsAB(CAMPANA).catch(() => null),
       obtenerStatsAprobacion(CAMPANA),
@@ -159,7 +161,10 @@ export default async function GHLCampaignPage() {
         fueraCampana24h: 0, cuerpoVacio24h: 0,
         minutosDesdeWebhook: null, enHorarioOperativo,
       } satisfies AlertasWebhookData)),
+      obtenerConfig().catch(() => ({ modo_operacion: "seguro_automatico" as const, umbral_confianza: 0.9, id: "", updated_at: "", updated_by: null })),
     ]);
+
+  const iaConectada = sistemaCfg.modo_operacion !== "seguro";
 
   // ── Diagnóstico de errores silenciosos ────────────────────────────────────
   // Verifica env vars y los últimos logs del cron para detectar fallos que no
@@ -279,7 +284,10 @@ export default async function GHLCampaignPage() {
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <ClaudeBadge estado={claudeEstado.estado} hace={claudeEstado.hace} mensaje={claudeEstado.mensaje} />
+          <div className="flex flex-col items-end gap-1">
+            <ClaudeBadge estado={claudeEstado.estado} hace={claudeEstado.hace} mensaje={claudeEstado.mensaje} />
+            <IAToggle iaConectada={iaConectada} />
+          </div>
           <CampanaControls activa={activa} pendientes={pendientes} />
         </div>
       </div>

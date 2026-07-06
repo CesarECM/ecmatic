@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { activarCampana, desactivarCampana, reiniciarNivelesCampana } from "@/services/ghl-aprobacion";
 import { logSistema } from "@/services/log-sistema";
 import { reclasificarCobertura } from "@/services/reclasificar-cobertura";
+import { actualizarModo } from "@/services/sistema";
 import {
   auditarEntregasBatch,
   repararEntregasFallidas,
@@ -63,6 +64,17 @@ export async function repararEntregasAction(
   const resultado = await repararEntregasFallidas(contactIds, dryRun);
   if (!dryRun) revalidatePath("/admin/ghl-campaign");
   return resultado;
+}
+
+export async function toggleModoIAAction(desconectar: boolean): Promise<void> {
+  const modo = desconectar ? "seguro" : "seguro_automatico";
+  await actualizarModo(modo);
+  void logSistema({
+    categoria: "ui", tipoAccion: "sistema.cambiar-modo", fase: "ok",
+    resultado: desconectar ? "IA desconectada (modo seguro)" : "IA reconectada (modo seguro_automatico)",
+    metadata:  { modo_nuevo: modo, origen: "ghl_campaign_panel" },
+  });
+  revalidatePath("/admin/ghl-campaign");
 }
 
 export async function toggleCampanaAction(activa: boolean): Promise<void> {

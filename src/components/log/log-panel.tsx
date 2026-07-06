@@ -40,6 +40,7 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
   const [copiadoTodo,   setCopiadoTodo]  = useState(false);
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [copiadoSel,    setCopiadoSel]   = useState(false);
+  const [busqueda,      setBusqueda]      = useState("");
 
   // Mezcla eventos con trace y registros sueltos en una sola lista ordenada por tiempo
   const todosEventos = useMemo<EventoLog[]>(() => {
@@ -54,6 +55,22 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
     return [...eventos, ...sueltos]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [eventos, legacy]);
+
+  const eventosFiltrados = useMemo<EventoLog[]>(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (q.length < 2) return todosEventos;
+    return todosEventos.filter(e => {
+      if (e.tipo_accion.toLowerCase().includes(q)) return true;
+      if (e.categoria.toLowerCase().includes(q))  return true;
+      for (const log of e.logs) {
+        if (log.resultado?.toLowerCase().includes(q))        return true;
+        if (log.leads?.nombre?.toLowerCase().includes(q))    return true;
+        if (log.leads?.telefono?.includes(q))                return true;
+        if (JSON.stringify(log.metadata ?? {}).toLowerCase().includes(q)) return true;
+      }
+      return false;
+    });
+  }, [todosEventos, busqueda]);
 
   const toggleEvento = useCallback((id: string) => {
     setAbiertos(prev => {
@@ -81,6 +98,7 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
   }, []);
 
   const copiarTodo = useCallback(() => {
+    const q = busqueda.trim();
     const lineas: string[] = [
       `=== Log de sistema · Exportado: ${new Date().toLocaleString("es-MX")} ===`,
       filtros.categoria ? `Categoría: ${filtros.categoria}` : "",
@@ -88,14 +106,15 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
       filtros.fase      ? `Fase: ${filtros.fase}`           : "",
       filtros.desde     ? `Desde: ${filtros.desde}`         : "",
       filtros.hasta     ? `Hasta: ${filtros.hasta}`         : "",
+      q.length >= 2     ? `Búsqueda: "${q}"`                : "",
       "",
     ].filter(Boolean);
-    lineas.push(...todosEventos.map(textoEventoExport));
+    lineas.push(...eventosFiltrados.map(textoEventoExport));
     navigator.clipboard.writeText(lineas.join("\n")).then(() => {
       setCopiadoTodo(true);
       setTimeout(() => setCopiadoTodo(false), 2000);
     });
-  }, [todosEventos, filtros]);
+  }, [eventosFiltrados, filtros, busqueda]);
 
   const copiarSeleccionados = useCallback(() => {
     const lineas = todosEventos
@@ -109,6 +128,7 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
 
   const filtrosActivos = [filtros.categoria, filtros.tipo, filtros.fase, filtros.desde, filtros.hasta].filter(Boolean).length;
   const soloIA         = filtros.categoria === "ia";
+  const hayBusqueda    = busqueda.trim().length >= 2;
 
   return (
     <div className="space-y-4">
@@ -117,7 +137,9 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
         <div>
           <h1 className="text-xl font-semibold">Log de sistema</h1>
           <p className="text-sm text-muted-foreground">
-            {todosEventos.length} entradas · {totalRegistros} registros
+            {hayBusqueda
+              ? <><span className="font-medium">{eventosFiltrados.length}</span> de {todosEventos.length} entradas</>
+              : <>{todosEventos.length} entradas · {totalRegistros} registros</>}
             {soloIA && tokensTotal > 0 && (
               <> · <span className="font-medium">{tokensTotal.toLocaleString("es-MX")} tokens IA</span></>
             )}
@@ -157,17 +179,38 @@ export function LogPanel({ eventos, legacy, totalRegistros, tokensTotal, filtros
       {/* Filtros */}
       <LogFiltros {...filtros} />
 
+      {/* Buscador de texto libre */}
+      <div className="relative">
+        <input
+          type="search"
+          placeholder="Buscar en logs… (tipo acción, resultado, metadata, nombre lead)"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          className="w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white pr-24"
+        />
+        {hayBusqueda && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+            {eventosFiltrados.length} resultado{eventosFiltrados.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
       {/* Sin resultados */}
       {todosEventos.length === 0 && (
         <div className="rounded border border-dashed p-8 text-center text-sm text-muted-foreground">
           Sin registros. Las acciones del sistema aparecerán aquí conforme se ejecuten.
         </div>
       )}
+      {todosEventos.length > 0 && hayBusqueda && eventosFiltrados.length === 0 && (
+        <div className="rounded border border-dashed p-8 text-center text-sm text-muted-foreground">
+          Sin resultados para <span className="font-medium">"{busqueda.trim()}"</span>
+        </div>
+      )}
 
       {/* Lista unificada */}
-      {todosEventos.length > 0 && (
+      {eventosFiltrados.length > 0 && (
         <div className="space-y-1.5">
-          {todosEventos.map(e => (
+          {eventosFiltrados.map(e => (
             <LogGrupo
               key={e.traceId}
               evento={e}
