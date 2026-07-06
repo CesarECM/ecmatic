@@ -57,26 +57,29 @@ const FASE_BG: Record<string, string> = {
 
 function textoLog(log: LogSistemaRow): string {
   const fecha = new Date(log.created_at).toLocaleString("es-MX");
-  const m = log.metadata ?? {};
-  const lines = [`[${fecha}] ${log.tipo_accion} · ${log.fase ?? "?"}`];
-  if (log.fase === "llamado")    lines.push(`Modelo: ${m.model_seleccionado} | Mensajes: ${m.messages_count} | System: "${String(m.system_prompt_extract ?? "").slice(0, 400)}"`);
-  else if (log.fase === "peticion")   lines.push(`Modelo: ${m.model} | max_tokens: ${m.max_tokens} | chars est: ${m.chars_total_est}`);
-  else if (log.fase === "respuesta")  lines.push(`Tokens: ${m.tokens_input ?? 0}+${m.tokens_output ?? 0} | ${m.duracion_ms}ms | stop: ${m.stop_reason}`);
-  else if (log.resultado) lines.push(`Estado: ${log.resultado}`);
-  if ((log.fase === "timeout" || log.fase === "error") && m.error_message) lines.push(`Error: ${m.error_message}`);
-  return lines.join("\n");
+  const parts: string[] = [
+    `[${fecha}] ${log.tipo_accion} · fase: ${log.fase ?? "?"}`,
+  ];
+  if (log.resultado) parts.push(`resultado: ${log.resultado}`);
+  if (log.lead_id)   parts.push(`lead_id: ${log.lead_id}`);
+  if (log.trace_id)  parts.push(`trace_id: ${log.trace_id}`);
+  if (log.metadata && Object.keys(log.metadata).length > 0)
+    parts.push(`metadata:\n${JSON.stringify(log.metadata, null, 2)}`);
+  return parts.join("\n");
 }
 
 function textoEvento(evento: EventoLog): string {
   const fecha = new Date(evento.timestamp).toLocaleString("es-MX");
-  const lines = [`=== [${evento.categoria.toUpperCase()}] ${TIPO_LABEL[evento.tipo_accion] ?? evento.tipo_accion} · ${fecha} [trace: ${evento.traceId.slice(0, 8)}] ===`];
+  const lines = [
+    `=== [${evento.categoria.toUpperCase()}] ${TIPO_LABEL[evento.tipo_accion] ?? evento.tipo_accion} · ${fecha} [trace: ${evento.traceId.slice(0, 8)}] ===`,
+  ];
   for (const log of evento.logs) {
-    const m = log.metadata ?? {};
-    let det = log.resultado ?? "";
-    if (log.fase === "llamado")   det = `model: ${m.model_seleccionado} | msgs: ${m.messages_count} | system: "${String(m.system_prompt_extract ?? "").slice(0, 80)}..."`;
-    else if (log.fase === "peticion")  det = `model: ${m.model} | max_tokens: ${m.max_tokens} | chars: ${m.chars_total_est}`;
-    else if (log.fase === "respuesta") det = `${log.resultado ?? ""} | tokens: ${m.tokens_input}+${m.tokens_output} | ${m.duracion_ms}ms`;
-    lines.push(`  [${log.fase ?? "?"}] ${det}`);
+    lines.push(`  [${log.fase ?? "?"}] ${log.resultado ?? "—"}`);
+    if (log.metadata && Object.keys(log.metadata).length > 0) {
+      const indented = JSON.stringify(log.metadata, null, 2)
+        .split("\n").map(l => "    " + l).join("\n");
+      lines.push(indented);
+    }
   }
   return lines.join("\n");
 }

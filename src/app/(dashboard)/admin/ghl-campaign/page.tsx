@@ -57,7 +57,7 @@ function formatVelocidad(v: number): string {
 
 type EstadoClaudeAPI = "operativa" | "sin_creditos" | "error" | "timeout" | "sin_datos";
 
-async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAPI; hace: string | null }> {
+async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAPI; hace: string | null; mensaje: string | null }> {
   const { data } = await db
     .from("log_sistema")
     .select("fase, resultado, created_at")
@@ -66,15 +66,15 @@ async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAP
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle() as { data: { fase: string; resultado: string | null; created_at: string } | null };
-  if (!data) return { estado: "sin_datos", hace: null };
+  if (!data) return { estado: "sin_datos", hace: null, mensaje: null };
   const hace = new Date(data.created_at).toLocaleTimeString("es-MX", {
     timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
   });
-  if (data.fase === "respuesta") return { estado: "operativa", hace };
-  if (data.fase === "timeout")   return { estado: "timeout",   hace };
+  if (data.fase === "respuesta") return { estado: "operativa", hace, mensaje: null };
+  if (data.fase === "timeout")   return { estado: "timeout",   hace, mensaje: data.resultado ?? null };
   if (data.fase === "error" && data.resultado?.includes("credit balance"))
-    return { estado: "sin_creditos", hace };
-  return { estado: "error", hace };
+    return { estado: "sin_creditos", hace, mensaje: null };
+  return { estado: "error", hace, mensaje: data.resultado ?? null };
 }
 
 async function obtenerAlertasWebhook(db: any, enHorarioOp: boolean): Promise<AlertasWebhookData> {
@@ -149,7 +149,7 @@ export default async function GHLCampaignPage() {
       contarLogsCampana(CAMPANA),
       buscarContactosPorTag(TAG_FUENTE, 1, 1).catch(() => ({ contacts: [], total: 0 })),
       obtenerKPIsMonitor().catch(() => KPIS_FALLBACK),
-      obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null })),
+      obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null, mensaje: null })),
       obtenerHistorialEnvios(db).catch(() => [] as number[]),
       contarResolucionesRecientes(CAMPANA).catch(() => 0),
       obtenerUltimoEncoladoAt(CAMPANA).catch(() => null),
@@ -279,7 +279,7 @@ export default async function GHLCampaignPage() {
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <ClaudeBadge estado={claudeEstado.estado} hace={claudeEstado.hace} />
+          <ClaudeBadge estado={claudeEstado.estado} hace={claudeEstado.hace} mensaje={claudeEstado.mensaje} />
           <CampanaControls activa={activa} pendientes={pendientes} />
         </div>
       </div>
@@ -639,7 +639,7 @@ function NivelBadge({ nivel }: { nivel: 0 | 1 | 2 | 3 | 4 }) {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors[nivel]}`}>{labels[nivel]}</span>;
 }
 
-function ClaudeBadge({ estado, hace }: { estado: EstadoClaudeAPI; hace: string | null }) {
+function ClaudeBadge({ estado, hace, mensaje }: { estado: EstadoClaudeAPI; hace: string | null; mensaje?: string | null }) {
   const cfg: Record<EstadoClaudeAPI, { label: string; color: string; dot: string; href?: string }> = {
     operativa:    { label: "IA operativa",  color: "bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/30",     dot: "bg-green-500" },
     sin_creditos: { label: "Sin créditos",  color: "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30",             dot: "bg-red-500",  href: "https://console.anthropic.com/settings/billing" },
@@ -648,13 +648,25 @@ function ClaudeBadge({ estado, hace }: { estado: EstadoClaudeAPI; hace: string |
     sin_datos:    { label: "IA sin datos",  color: "bg-muted text-muted-foreground border border-border",                               dot: "bg-muted-foreground" },
   };
   const { label, color, dot, href } = cfg[estado];
-  const inner = (
+  const pill = (
     <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${color}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dot} ${estado === "operativa" ? "animate-pulse" : ""}`} />
       {label}
       {hace && <span className="font-normal opacity-70">· {hace}</span>}
     </span>
   );
+  const showMsg = mensaje && (estado === "error" || estado === "timeout");
+  const inner = showMsg ? (
+    <div className="flex flex-col items-end gap-0.5">
+      {pill}
+      <span
+        className="text-[10px] text-orange-700 dark:text-orange-400 max-w-[260px] truncate"
+        title={mensaje}
+      >
+        {mensaje.slice(0, 90)}
+      </span>
+    </div>
+  ) : pill;
   return href
     ? <a href={href} target="_blank" rel="noopener noreferrer" title="Ir a Anthropic Billing">{inner}</a>
     : inner;

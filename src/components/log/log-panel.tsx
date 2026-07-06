@@ -10,14 +10,16 @@ import { LogGrupo } from "./log-grupo";
 function textoEventoExport(evento: EventoLog): string {
   const fecha = new Date(evento.timestamp).toLocaleString("es-MX");
   const traceLabel = evento.sinTrace ? "sin-trace" : evento.traceId.slice(0, 8);
-  const lines = [`=== [${evento.categoria.toUpperCase()}] ${evento.tipo_accion} · ${fecha} [trace: ${traceLabel}] ===`];
+  const lines = [
+    `=== [${evento.categoria.toUpperCase()}] ${evento.tipo_accion} · ${fecha} [trace: ${traceLabel}] ===`,
+  ];
   for (const log of evento.logs) {
-    const m = log.metadata ?? {};
-    let det = log.resultado ?? "";
-    if (log.fase === "llamado")         det = `model: ${m.model_seleccionado} | msgs: ${m.messages_count}`;
-    else if (log.fase === "peticion")   det = `model: ${m.model} | max_tokens: ${m.max_tokens}`;
-    else if (log.fase === "respuesta")  det = `${log.resultado ?? ""} | tokens: ${m.tokens_input}+${m.tokens_output} | ${m.duracion_ms}ms`;
-    lines.push(`  [${log.fase ?? "?"}] ${det}`);
+    lines.push(`  [${log.fase ?? "?"}] ${log.resultado ?? "—"}`);
+    if (log.metadata && Object.keys(log.metadata).length > 0) {
+      const indented = JSON.stringify(log.metadata, null, 2)
+        .split("\n").map(l => "    " + l).join("\n");
+      lines.push(indented);
+    }
   }
   return lines.join("\n");
 }
