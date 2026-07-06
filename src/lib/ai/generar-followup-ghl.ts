@@ -19,6 +19,16 @@ export interface ContextoFollowup {
   historial?: string | null;
 }
 
+function limpiarSalida(texto: string): string {
+  return texto
+    .replace(/^\s*\[.+?\]\s*\n?/gm, "")
+    .replace(/^\s*\(.+?\)\s*\n/gm, "")
+    .replace(/^(aquí (está|te (dejo|presento))|mensaje(:|$)|seguimiento:|recordatorio:).*/gim, "")
+    .replace(/^\s*nota:.*/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function generarFollowupGHL(
   ctx: ContextoFollowup,
   meta?: { leadId?: string; traceId?: string },
@@ -60,16 +70,6 @@ FORMATO DE SALIDA — OBLIGATORIO:
 Responde ÚNICAMENTE con el texto del mensaje listo para enviar al lead. Sin notas internas, sin explicaciones, sin encabezados como "Aquí está el mensaje:", sin etiquetas entre corchetes, sin comentarios sobre lo que hiciste. El texto que escribas se enviará directamente al lead.`;
 
   const userContent = `CONTEXTO:\n${contextoTexto}`;
-
-  function limpiarSalida(texto: string): string {
-    return texto
-      .replace(/^\s*\[.+?\]\s*\n?/gm, "")
-      .replace(/^\s*\(.+?\)\s*\n/gm, "")
-      .replace(/^(aquí (está|te (dejo|presento))|mensaje(:|$)|seguimiento:|recordatorio:).*/gim, "")
-      .replace(/^\s*nota:.*/gim, "")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  }
 
   const HISTORIAL_CAP = 30;
 
@@ -162,6 +162,72 @@ Responde ÚNICAMENTE con el texto del mensaje listo para enviar al lead. Sin not
       (b) => b.type === "text",
     ) as { type: "text"; text: string } | undefined;
     return limpiarSalida(fallback?.text ?? "");
+  } catch {
+    return "";
+  }
+}
+
+// ── MPS-31: Respuesta conversacional (sin ángulo fijo, foco en el hilo real) ──
+
+export interface ContextoRespuestaConv {
+  nombre: string | null;
+  tipo: TipoSeguimiento;
+  nivel: number;
+  historial: string | null;
+  gatilloSnapshot?: string | null;
+  linkPago?: string | null;
+  linkApartado?: string | null;
+}
+
+export async function generarRespuestaConversacional(
+  ctx: ContextoRespuestaConv,
+  meta?: { leadId?: string; traceId?: string },
+): Promise<string> {
+  const historialLinea = ctx.historial
+    ? `HISTORIAL RECIENTE:\n${ctx.historial}`
+    : "HISTORIAL: (sin conversación previa registrada)";
+
+  const linksDisponibles =
+    ctx.tipo === "payment" && (ctx.linkPago || ctx.linkApartado)
+      ? [
+          "\nLINKS DISPONIBLES (inclúyelos si refuerzan el mensaje):",
+          ctx.linkPago     ? `• Pago completo: ${ctx.linkPago}`     : "",
+          ctx.linkApartado ? `• Apartar lugar: ${ctx.linkApartado}` : "",
+        ].filter(Boolean).join("\n")
+      : "";
+
+  const system = `Eres la IA de ventas de Centro ECM (ceecm.mx), centro de certificación CONOCER en México.
+Escribes mensajes de seguimiento para WhatsApp. Estilo: cálido, profesional, conversacional.
+Reglas: sin saludos formales de correo, sin emojis de negocios, máximo 4 oraciones. Español mexicano natural.
+
+${historialLinea}${linksDisponibles}
+${ctx.gatilloSnapshot ? `\nGatillo de urgencia activo: ${ctx.gatilloSnapshot}` : ""}
+
+Tu tarea: escribe el siguiente mensaje de seguimiento (tipo ${ctx.tipo}, intento ${ctx.nivel}).
+El mensaje debe:
+- Retomar el hilo exacto de la conversación (referencia algo específico que dijo el lead)
+- Ser natural y personalizado, no genérico ni formulaico
+- Empujar suavemente hacia el siguiente paso
+
+FORMATO DE SALIDA — OBLIGATORIO:
+Responde ÚNICAMENTE con el texto del mensaje listo para enviar. Sin notas, sin encabezados.`;
+
+  const userContent = ctx.nombre ? `Nombre del lead: ${ctx.nombre}` : "(lead sin nombre registrado)";
+
+  try {
+    const resp = await callClaudeIA(
+      "GENERAR_RESPUESTA_CONV",
+      {
+        max_tokens: 300,
+        system,
+        messages: [{ role: "user", content: userContent }],
+      },
+      meta,
+    );
+    const block = resp.content.find((b) => b.type === "text") as
+      | { type: "text"; text: string }
+      | undefined;
+    return limpiarSalida(block?.text ?? "");
   } catch {
     return "";
   }

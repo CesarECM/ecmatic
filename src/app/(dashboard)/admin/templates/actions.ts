@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { logSistema } from "@/services/log-sistema";
-import { promoverTemplate, conectarWorkflow } from "@/services/followup-templates";
+import { promoverTemplate, conectarWorkflow, actualizarTextoTemplate } from "@/services/followup-templates";
 import { createServiceClient } from "@/lib/supabase/service";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,6 +72,19 @@ export async function degradarEstadoAction(formData: FormData) {
   void logSistema({
     categoria: "ui", tipoAccion: "templates.degradar", fase: "ok",
     resultado: `${templateId} ${estadoActual} → ${updates.estado}`,
+  });
+  revalidatePath("/admin/templates");
+}
+
+// MPS-31 S114.1 — Actualiza el texto de un template Aprobado/Conectado sin cambiar su estado.
+export async function actualizarTextoTemplateAction(formData: FormData) {
+  const templateId = formData.get("templateId") as string;
+  const nuevoTexto = (formData.get("texto") as string)?.trim();
+  if (!templateId || !nuevoTexto || nuevoTexto.length < 20) return;
+  await actualizarTextoTemplate(templateId, nuevoTexto);
+  void logSistema({
+    categoria: "ui", tipoAccion: "templates.actualizar_texto", fase: "ok",
+    resultado: templateId,
   });
   revalidatePath("/admin/templates");
 }

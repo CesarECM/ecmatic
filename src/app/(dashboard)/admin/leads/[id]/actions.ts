@@ -23,9 +23,16 @@ import {
 } from "@/services/ghl-aprobacion";
 import { crearRecurso, registrarCierre } from "@/services/conocimiento";
 import { avanzarNivel, obtenerPorId, posponerSeguimiento4h } from "@/services/seguimiento-lead";
-import { promoverTemplate, eliminarTemplateSiSugerido } from "@/services/followup-templates";
+import {
+  promoverTemplate, eliminarTemplateSiSugerido,
+  buscarTemplateCascada, guardarTemplateSugerido, registrarUsoTemplate,
+} from "@/services/followup-templates";
 import { detectarPatronGHLItem } from "@/services/kbi/detector";
-import { obtenerUltimoEntrante } from "@/services/mensajes";
+import { obtenerHistorial, obtenerUltimoEntrante } from "@/services/mensajes";
+import { obtenerNombreLead, obtenerLinksLead } from "@/services/seguimiento-procesador";
+import { generarFollowupGHL, generarRespuestaConversacional } from "@/lib/ai/generar-followup-ghl";
+import { seleccionarAngulo } from "@/lib/ai/seleccionar-angulo";
+import { getFollowupConfig } from "@/services/followup-config";
 
 export async function moverLeadDesdePerfilAction(formData: FormData) {
   const leadId = formData.get("leadId") as string;
@@ -416,4 +423,229 @@ export const rechazarMensajeGHLAction = safeAction(async (
 
   revalidatePath(`/admin/leads/${leadId}`);
   revalidatePath("/admin/aprobaciones");
+});
+
+// MPS-31 S113.2 — Genera lazily el mensaje IA para un item pendiente en cola.
+// Se llama desde BannerAprobacionGHL cuando mensaje_ia === "".
+// Idempotente: si el mensaje ya fue generado, retorna el valor existente.
+export const generarMensajeColaAction = safeAction(async (
+  itemId: string,
+): Promise<{ texto: string }> => {
+  const supabase = createServiceClient();
+
+  const { data: qItem } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("mensaje_ia, seguimiento_id, lead_ecmatic_id, requiere_template")
+    .eq("id", itemId)
+    .eq("estado", "pendiente")
+    .maybeSingle() as {
+      data: {
+        mensaje_ia: string;
+        seguimiento_id: string | null;
+        lead_ecmatic_id: string | null;
+        requiere_template: boolean;
+      } | null;
+    };
+
+  if (!qItem) throw new Error("Item no encontrado o ya procesado");
+
+  // Idempotente: ya fue generado por una llamada concurrente
+  if (qItem.mensaje_ia) return { texto: qItem.mensaje_ia };
+
+  const leadId = qItem.lead_ecmatic_id;
+  if (!leadId || !qItem.seguimiento_id) {
+    throw new Error("Item sin contexto de seguimiento — no se puede generar");
+  }
+
+  const { data: seg } = await (supabase as any)
+    .from("seguimiento_lead")
+    .select("tipo, nivel, gatillo_snapshot, horario_prometido")
+    .eq("id", qItem.seguimiento_id)
+    .maybeSingle() as {
+      data: {
+        tipo: string;
+        nivel: number;
+        gatillo_snapshot: string | null;
+        horario_prometido: string | null;
+      } | null;
+    };
+
+  if (!seg) throw new Error("Seguimiento no encontrado");
+
+  const nivel = seg.nivel + 1;
+
+  const config = await getFollowupConfig(seg.tipo as never).catch(() => null);
+  const historialLimite = config?.historial_limite ?? 10;
+
+  const [nombre, links, historialRaw] = await Promise.all([
+    obtenerNombreLead(leadId),
+    seg.tipo === "payment"
+      ? obtenerLinksLead(leadId).catch(() => ({ linkPago: null, linkApartado: null }))
+      : Promise.resolve({ linkPago: null, linkApartado: null }),
+    obtenerHistorial(leadId, historialLimite).catch(() => ""),
+  ]);
+
+  const historialResumen = historialRaw || null;
+  const labelContexto = `Recordatorio ${seg.tipo} · nivel ${nivel}${seg.gatillo_snapshot ? ` · ${seg.gatillo_snapshot}` : ""}`;
+
+  // Cascade fresco — usa los templates vigentes en este momento
+  const cascade = await buscarTemplateCascada({
+    leadId,
+    tipo: seg.tipo as never,
+    historialResumen,
+  }).catch(() => null);
+
+  let texto: string;
+  let templateId: string | null = null;
+  let scoreIA: number;
+  let razonScore: string;
+
+  if (cascade && (cascade.estado === "aprobado" || cascade.estado === "sugerido")) {
+    texto      = cascade.template.texto;
+    templateId = cascade.template.id;
+    scoreIA    = 0.85;
+    razonScore = `Template ${cascade.estado} reutilizado — ${labelContexto}`;
+  } else {
+    const angulo = await seleccionarAngulo({
+      tipo:   seg.tipo as never,
+      nivel,
+      leadId,
+    }).catch(() => null);
+
+    if (!angulo) throw new Error("No hay ángulos disponibles para este tipo de seguimiento");
+
+    const horarioPrometido = seg.horario_prometido
+      ? new Date(seg.horario_prometido).toLocaleTimeString("es-MX", {
+          hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City",
+        })
+      : null;
+
+    texto = await generarFollowupGHL(
+      {
+        nombre,
+        tipo:            seg.tipo as never,
+        nivel,
+        angulo,
+        horarioPrometido,
+        gatilloSnapshot: seg.gatillo_snapshot,
+        historial:       historialResumen,
+        ...links,
+      },
+      { leadId, traceId: itemId },
+    );
+
+    if (!texto) throw new Error("La IA no generó un mensaje");
+
+    templateId = await guardarTemplateSugerido({
+      tipo:     seg.tipo as never,
+      anguloId: angulo.id,
+      texto,
+    }).catch(() => null);
+
+    scoreIA    = 0.75;
+    razonScore = `Generado por IA (ángulo: ${angulo.nombre}) — ${labelContexto}`;
+  }
+
+  await (supabase as any)
+    .from("ghl_approval_queue")
+    .update({
+      mensaje_ia:  texto,
+      template_id: templateId,
+      score_ia:    scoreIA,
+      razon_score: razonScore,
+    })
+    .eq("id", itemId);
+
+  if (templateId && cascade) {
+    void registrarUsoTemplate(templateId, leadId, qItem.seguimiento_id).catch(() => null);
+  }
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.generar_lazy", fase: "ok",
+    leadId,
+    resultado: `item:${itemId} cascade:${cascade?.estado ?? "nuevo"} template:${templateId?.slice(-8) ?? "none"}`,
+    metadata:  { seguimiento_id: qItem.seguimiento_id, tipo: seg.tipo, nivel },
+  });
+
+  return { texto };
+});
+
+// MPS-31 — Genera una respuesta personalizada basada en la conversación real.
+// No usa ángulos ni templates. No crea template nuevo. Almacena en mensaje_ia para persistencia.
+export const generarRespuestaPersonalizadaAction = safeAction(async (
+  itemId: string,
+): Promise<{ texto: string }> => {
+  const supabase = createServiceClient();
+
+  const { data: qItem } = await (supabase as any)
+    .from("ghl_approval_queue")
+    .select("mensaje_ia, seguimiento_id, lead_ecmatic_id")
+    .eq("id", itemId)
+    .eq("estado", "pendiente")
+    .maybeSingle() as {
+      data: { mensaje_ia: string; seguimiento_id: string | null; lead_ecmatic_id: string | null } | null;
+    };
+
+  if (!qItem) throw new Error("Item no encontrado o ya procesado");
+  if (qItem.mensaje_ia) return { texto: qItem.mensaje_ia };
+
+  const leadId = qItem.lead_ecmatic_id;
+  if (!leadId || !qItem.seguimiento_id) throw new Error("Item sin contexto de seguimiento");
+
+  const { data: seg } = await (supabase as any)
+    .from("seguimiento_lead")
+    .select("tipo, nivel, gatillo_snapshot, horario_prometido")
+    .eq("id", qItem.seguimiento_id)
+    .maybeSingle() as {
+      data: { tipo: string; nivel: number; gatillo_snapshot: string | null; horario_prometido: string | null } | null;
+    };
+
+  if (!seg) throw new Error("Seguimiento no encontrado");
+
+  const nivel = seg.nivel + 1;
+  const config = await getFollowupConfig(seg.tipo as never).catch(() => null);
+
+  const [nombre, links, historialRaw] = await Promise.all([
+    obtenerNombreLead(leadId),
+    seg.tipo === "payment"
+      ? obtenerLinksLead(leadId).catch(() => ({ linkPago: null, linkApartado: null }))
+      : Promise.resolve({ linkPago: null, linkApartado: null }),
+    // Historial más amplio para mejor contexto conversacional
+    obtenerHistorial(leadId, Math.min((config?.historial_limite ?? 10) + 5, 20)).catch(() => ""),
+  ]);
+
+  const texto = await generarRespuestaConversacional(
+    {
+      nombre,
+      tipo:            seg.tipo as never,
+      nivel,
+      historial:       historialRaw || null,
+      gatilloSnapshot: seg.gatillo_snapshot,
+      ...links,
+    },
+    { leadId, traceId: itemId },
+  );
+
+  if (!texto) throw new Error("La IA no generó un mensaje");
+
+  const labelContexto = `Recordatorio ${seg.tipo} · nivel ${nivel}${seg.gatillo_snapshot ? ` · ${seg.gatillo_snapshot}` : ""}`;
+
+  await (supabase as any)
+    .from("ghl_approval_queue")
+    .update({
+      mensaje_ia:  texto,
+      template_id: null,
+      score_ia:    0.80,
+      razon_score: `✏️ Respuesta personalizada — ${labelContexto}`,
+    })
+    .eq("id", itemId);
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.generar_personalizada", fase: "ok",
+    leadId,
+    resultado: `item:${itemId}`,
+    metadata:  { seguimiento_id: qItem.seguimiento_id, tipo: seg.tipo, nivel },
+  });
+
+  return { texto };
 });

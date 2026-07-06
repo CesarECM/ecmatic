@@ -310,6 +310,39 @@ export async function eliminarTemplateSiSugerido(templateId: string): Promise<vo
   });
 }
 
+// Actualiza el texto de un template sin cambiar su estado (Aprobado/Conectado).
+// Para promover Sugerido→Aprobado usar promoverTemplate().
+export async function actualizarTextoTemplate(
+  templateId: string,
+  nuevoTexto: string,
+): Promise<void> {
+  if (nuevoTexto.length < 20) return;
+
+  const { error } = await db()
+    .from("followup_templates")
+    .update({ texto: nuevoTexto, updated_at: new Date().toISOString() })
+    .eq("id", templateId);
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "followup_templates.actualizar_texto", fase: "error",
+      resultado: String(error), metadata: { templateId },
+    });
+    return;
+  }
+
+  // Regenerar embedding async al cambiar el texto
+  after(async () => {
+    try {
+      const embedding = await generarEmbedding(nuevoTexto);
+      await db()
+        .from("followup_templates")
+        .update({ embedding: `[${embedding.join(",")}]` })
+        .eq("id", templateId);
+    } catch { /* silencioso */ }
+  });
+}
+
 // Listado para panel /admin/templates
 export async function listarTemplates(filtros?: {
   tipo?: TipoFollowup;

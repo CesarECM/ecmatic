@@ -8,6 +8,8 @@ import {
   editarAprobarMensajeGHLAction,
   rechazarMensajeGHLAction,
   marcarEnviadoManualmenteGHLAction,
+  generarMensajeColaAction,
+  generarRespuestaPersonalizadaAction,
 } from "@/app/(dashboard)/admin/leads/[id]/actions";
 
 interface Props {
@@ -141,13 +143,116 @@ function BannerTemplate({ item, leadId, telefonoLead }: Props) {
   );
 }
 
+type FaseGeneracion = "eligiendo" | "generando" | "listo" | "error";
+
+// Panel que aparece cuando no hay mensaje generado — el admin elige cómo generarlo.
+function PanelEleccion({
+  item,
+  onElegir,
+}: {
+  item: ItemAprobacionGHL;
+  onElegir: (tipo: "template" | "personalizada") => void;
+}) {
+  return (
+    <div className="mx-3 mb-2 rounded-lg border-2 border-violet-300 bg-violet-50 p-4 space-y-3 text-sm shrink-0">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-semibold text-violet-800 text-xs uppercase tracking-wide">
+          ⏳ Seguimiento pendiente
+        </span>
+        {item.seguimiento_id && (
+          <span className="text-xs bg-violet-200 text-violet-800 px-1.5 py-0.5 rounded-full font-medium">
+            🔄 Seguimiento
+          </span>
+        )}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Lead: &ldquo;{item.mensaje_lead.slice(0, 120)}{item.mensaje_lead.length > 120 ? "…" : ""}&rdquo;
+      </p>
+
+      <p className="text-sm font-medium text-violet-900">¿Cómo generar el mensaje?</p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => onElegir("template")}
+          className="rounded-lg border-2 border-violet-200 bg-white p-3 text-left hover:border-violet-500 hover:bg-violet-50/60 transition-colors"
+        >
+          <p className="text-xs font-semibold text-violet-800">📋 Usar template</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            Selecciona el mejor template de la biblioteca (Aprobado → Sugerido → nuevo)
+          </p>
+        </button>
+        <button
+          onClick={() => onElegir("personalizada")}
+          className="rounded-lg border-2 border-blue-200 bg-white p-3 text-left hover:border-blue-500 hover:bg-blue-50/60 transition-colors"
+        >
+          <p className="text-xs font-semibold text-blue-800">✏️ Respuesta personalizada</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            Genera basada en el hilo real de la conversación
+          </p>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function BannerAprobacionGHL({ item, leadId, telefonoLead }: Props) {
-  // MPS-19: derivar hacia el banner de template si aplica
-  if (item.requiere_template) {
-    return <BannerTemplate item={item} leadId={leadId} telefonoLead={telefonoLead} />;
+  const [fase,     setFase]     = useState<FaseGeneracion>(item.mensaje_ia === "" ? "eligiendo" : "listo");
+  const [textoIA,  setTextoIA]  = useState(item.mensaje_ia);
+  const [errorGen, setErrorGen] = useState<string | null>(null);
+
+  async function generar(tipo: "template" | "personalizada") {
+    setFase("generando");
+    const fn = tipo === "template" ? generarMensajeColaAction : generarRespuestaPersonalizadaAction;
+    const r = await fn(item.id);
+    if ("error" in r) {
+      setErrorGen(r.error ?? "Error al generar el mensaje");
+      setFase("error");
+    } else {
+      setTextoIA(r.data.texto);
+      setFase("listo");
+    }
   }
 
-  return <BannerAprobacionLibre item={item} leadId={leadId} />;
+  if (fase === "eligiendo") {
+    return <PanelEleccion item={item} onElegir={generar} />;
+  }
+
+  if (fase === "generando") {
+    return (
+      <div className="mx-3 mb-2 rounded-lg border-2 border-violet-200 bg-violet-50/40 p-4 text-sm">
+        <div className="flex items-center gap-2 text-violet-700">
+          <span className="animate-pulse font-medium">Generando mensaje...</span>
+          <span className="text-xs text-muted-foreground">La IA está preparando el recordatorio</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (fase === "error") {
+    return (
+      <div className="mx-3 mb-2 rounded-lg border-2 border-red-300 bg-red-50 p-3 text-sm space-y-2">
+        <p className="font-semibold text-red-800">No se pudo generar el mensaje</p>
+        <p className="text-xs text-red-600">{errorGen}</p>
+        <button
+          onClick={() => { setErrorGen(null); setFase("eligiendo"); }}
+          className="text-xs text-blue-600 hover:underline"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  // fase === "listo"
+  const itemConTexto = { ...item, mensaje_ia: textoIA };
+
+  if (itemConTexto.requiere_template) {
+    return <BannerTemplate item={itemConTexto} leadId={leadId} telefonoLead={telefonoLead} />;
+  }
+
+  // key={textoIA} fuerza remount al cargar el texto, reinicializando el estado local
+  return <BannerAprobacionLibre key={textoIA} item={itemConTexto} leadId={leadId} />;
 }
 
 // Banner original para mensajes libres (dentro de ventana WA)
@@ -162,7 +267,7 @@ function BannerAprobacionLibre({ item, leadId }: Props) {
       const id = toast.loading("Enviando…");
       const r = await aprobarMensajeGHLAction(
         item.id, item.conv_id, item.ghl_contact_id,
-        item.mensaje_ia, item.lead_ecmatic_id, item.campana, leadId
+        texto, item.lead_ecmatic_id, item.campana, leadId
       );
       if (r.error) toast.error(r.error, { id });
       else toast.success("Mensaje enviado", { id });

@@ -1,18 +1,16 @@
 // MPS-26 S94–S97 — Lógica de procesamiento de un seguimiento vencido.
-// Extraído de seguimiento/route.ts para respetar el límite de 300 líneas.
-// Cascade: Conectado → Aprobado → Sugerido → generar nuevo.
+// MPS-31 S113: IA y cascade diferidos al momento de revisión (lazy generation).
+// El cron sólo encola con mensaje_ia="" y resuelve contacto/conv.
+// Cascade Conectado sigue disparando directo vía GHL Workflow.
 import { createServiceClient } from "@/lib/supabase/service";
 import { logSistema } from "@/services/log-sistema";
 import { type SeguimientoLead, avanzarNivel, cancelarPorTipo } from "@/services/seguimiento-lead";
-import { generarFollowupGHL } from "@/lib/ai/generar-followup-ghl";
-import { seleccionarAngulo } from "@/lib/ai/seleccionar-angulo";
 import { obtenerHistorial, obtenerUltimoEntrante } from "@/services/mensajes";
 import { buscarConversacionWA } from "@/lib/ghl/conversations-api";
 import { buscarOCrearContactoGHL } from "@/lib/ghl/contacts-api";
 import { encolarMensajeGHL } from "@/services/ghl-aprobacion";
 import { notificarMensajePendienteGHL } from "@/services/ghl-aprobacion-notif";
-import { getFollowupConfig } from "@/services/followup-config";
-import { buscarTemplateCascada, guardarTemplateSugerido, registrarUsoTemplate } from "@/services/followup-templates";
+import { buscarTemplateCascada, registrarUsoTemplate } from "@/services/followup-templates";
 import { inscribirEnWorkflow } from "@/lib/ghl/workflows-api";
 import { evaluarContinuacion } from "@/lib/ai/evaluar-continuacion";
 
@@ -29,14 +27,14 @@ export type ResultadoProcesamiento =
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function obtenerNombreLead(leadId: string): Promise<string | null> {
+export async function obtenerNombreLead(leadId: string): Promise<string | null> {
   const { data } = await db()
     .from("leads").select("nombre").eq("id", leadId).maybeSingle() as
     { data: { nombre: string | null } | null };
   return data?.nombre ?? null;
 }
 
-async function obtenerLinksLead(leadId: string): Promise<{ linkPago: string | null; linkApartado: string | null }> {
+export async function obtenerLinksLead(leadId: string): Promise<{ linkPago: string | null; linkApartado: string | null }> {
   const { data: lead } = await db()
     .from("leads").select("pipeline_ruta").eq("id", leadId).maybeSingle() as
     { data: { pipeline_ruta: string | null } | null };
@@ -142,17 +140,13 @@ export async function procesarSeguimiento(
     return "ya_en_cola";
   }
 
-  const nivel  = seg.nivel + 1;
-  const config = await getFollowupConfig(seg.tipo).catch(() => null);
-  const historialLimite = config?.historial_limite ?? 10;
+  const nivel = seg.nivel + 1;
 
-  const [nombre, contactId, links, historial] = await Promise.all([
+  // Historial ligero (cap 10): para evaluarContinuacion + Haiku cascade Conectado
+  const [nombre, contactId, historialRaw] = await Promise.all([
     obtenerNombreLead(seg.lead_id),
     resolverContactoGHL(seg),
-    seg.tipo === "payment"
-      ? obtenerLinksLead(seg.lead_id).catch(() => ({ linkPago: null, linkApartado: null }))
-      : Promise.resolve({ linkPago: null, linkApartado: null }),
-    obtenerHistorial(seg.lead_id, historialLimite).catch(() => ""),
+    obtenerHistorial(seg.lead_id, 10).catch(() => ""),
   ]);
 
   if (!contactId) {
@@ -166,11 +160,10 @@ export async function procesarSeguimiento(
     return "fallo_conv";
   }
 
-  const historialResumen = historial || null;
+  const historialResumen = historialRaw || null;
 
-  // ── MPS-26 S100: evaluación de continuación (solo si nivel >= 2) ──────────
+  // ── Evaluación de continuación (solo si nivel >= 2) ───────────────────────
   if (nivel >= 2) {
-    // Obtener ángulos ya usados con este lead para pasarlos al evaluador
     const { data: usoAngulos } = await db()
       .from("followup_template_uso_lead")
       .select("followup_templates(angulo:followup_angulos(codigo))")
@@ -198,11 +191,10 @@ export async function procesarSeguimiento(
         leadId: seg.lead_id, resultado: eval_.razon,
         metadata: { seguimientoId: seg.id, nivel, tipo: seg.tipo },
       });
-      return "ya_en_cola"; // reusa el counter de "sin acción"
+      return "ya_en_cola";
     }
 
     if (eval_.decision === "escalar") {
-      // avanzarNivel con max_intentos+1 dispara la escalación existente
       await avanzarNivel({ ...seg, nivel: seg.nivel + 99 }).catch(() => null);
       void logSistema({
         categoria: "cron", tipoAccion: "cron.seguimiento.ia_decision.escalar", fase: "ok", traceId,
@@ -213,14 +205,14 @@ export async function procesarSeguimiento(
     }
   }
 
-  // ── MPS-26: cascade Conectado → Aprobado → Sugerido ──────────────────────
+  // ── Cascade Conectado: único path que sigue disparando directo en el cron ──
+  // Aprobado/Sugerido y generación nueva quedan diferidos a la revisión (lazy).
   const cascade = await buscarTemplateCascada({
     leadId:          seg.lead_id,
     tipo:            seg.tipo,
     historialResumen,
   }).catch(() => null);
 
-  // Rama Conectado: envío directo vía GHL Workflow (sin cola de aprobación)
   if (cascade?.estado === "conectado" && cascade.template.ghl_workflow_id) {
     const ok = await inscribirEnWorkflow(
       contactId,
@@ -233,55 +225,10 @@ export async function procesarSeguimiento(
       void registrarIntento(seg);
       return "directo_ghl";
     }
-    // Si falla la inscripción, cae al path normal
+    // Si falla la inscripción, cae al encolado lazy
   }
 
-  // ── Determinar texto a usar (template reutilizado o generación nueva) ──────
-
-  let texto: string;
-  let templateId: string | null = null;
-
-  if (cascade && (cascade.estado === "aprobado" || cascade.estado === "sugerido")) {
-    texto      = cascade.template.texto;
-    templateId = cascade.template.id;
-  } else {
-    // Sin cascade: seleccionar ángulo bayesiano + generar texto fresco
-    const angulo = await seleccionarAngulo({
-      tipo:    seg.tipo,
-      nivel,
-      leadId:  seg.lead_id,
-    }).catch(() => null);
-
-    if (!angulo) {
-      await posponerPorFallo(seg, "sin_angulo", 1, traceId);
-      return "fallo_ia";
-    }
-
-    const horarioPrometido = seg.horario_prometido
-      ? new Date(seg.horario_prometido).toLocaleTimeString("es-MX", {
-          hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City",
-        })
-      : null;
-
-    texto = await generarFollowupGHL(
-      { nombre, tipo: seg.tipo, nivel, angulo, horarioPrometido,
-        gatilloSnapshot: seg.gatillo_snapshot, historial: historialResumen, ...links },
-      { leadId: seg.lead_id, traceId },
-    );
-
-    if (!texto) {
-      await posponerPorFallo(seg, "ia_sin_texto", 1, traceId);
-      return "fallo_ia";
-    }
-
-    // Auto-guardar como Sugerido (embedding se genera async)
-    templateId = await guardarTemplateSugerido({
-      tipo:     seg.tipo,
-      anguloId: angulo.id,
-      texto,
-    }).catch(() => null);
-  }
-
+  // ── Encolar con mensaje vacío — la IA se invoca al abrir la revisión ──────
   const labelContexto = `Recordatorio ${seg.tipo} · nivel ${nivel}${seg.gatillo_snapshot ? ` · ${seg.gatillo_snapshot}` : ""}`;
   const fueraDeVentana = await estaFueraDeVentanaWA(seg.lead_id).catch(() => false);
 
@@ -292,17 +239,14 @@ export async function procesarSeguimiento(
     leadEcmaticId:    seg.lead_id,
     nombre,
     mensajeLead:      labelContexto,
-    mensajeIA:        texto,
-    contexto:         { tipo: seg.tipo, nivel, gatillo: seg.gatillo_snapshot, templateId },
-    scoreIA:          fueraDeVentana ? 0 : (cascade ? 0.85 : 0.75),
+    mensajeIA:        "",
+    contexto:         { tipo: seg.tipo, nivel, gatillo: seg.gatillo_snapshot },
+    scoreIA:          fueraDeVentana ? 0 : 0.5,
     razonScore:       fueraDeVentana
       ? "⚠️ Fuera de ventana WA — enviar template desde GHL"
-      : cascade
-        ? `Template ${cascade.estado} reutilizado — ${labelContexto}`
-        : `Generado por IA (ángulo: ${cascade ?? "nuevo"}) — ${labelContexto}`,
+      : `${labelContexto} — generando mensaje IA…`,
     seguimientoId:    seg.id,
     requiereTemplate: fueraDeVentana,
-    templateId:       templateId ?? undefined,
   }).catch(() => null);
 
   if (!itemId) {
@@ -310,13 +254,9 @@ export async function procesarSeguimiento(
     return "fallo_encolar";
   }
 
-  if (templateId && cascade) {
-    void registrarUsoTemplate(templateId, seg.lead_id, seg.id);
-  }
-
   await notificarMensajePendienteGHL({
     itemId, convId, contactId, nombre, mensajeLead: labelContexto,
-    scoreIA:          fueraDeVentana ? 0 : (cascade ? 0.85 : 0.75),
+    scoreIA:          fueraDeVentana ? 0 : 0.5,
     leadEcmaticId:    seg.lead_id,
     urgencia:         fueraDeVentana ? 2 : 1,
     requiereTemplate: fueraDeVentana,
@@ -326,7 +266,7 @@ export async function procesarSeguimiento(
 
   void logSistema({
     categoria: "cron", tipoAccion: "cron.seguimiento.encolar", fase: "ok", traceId,
-    resultado: `item:${itemId} cascade:${cascade?.estado ?? "nuevo"} template:${templateId?.slice(-8) ?? "none"}`,
+    resultado: `item:${itemId} lazy:true fuera:${fueraDeVentana}`,
     metadata:  { seguimientoId: seg.id, leadId: seg.lead_id, nivel, tipo: seg.tipo },
   });
 

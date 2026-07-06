@@ -3,9 +3,9 @@
 import { useState } from "react";
 import type { FollowupTemplate } from "@/services/followup-templates";
 import {
-  promoverTemplateAction, conectarWorkflowAction,
-  desconectarWorkflowAction, eliminarTemplateSugeridoAction,
-  eliminarTemplateAction, degradarEstadoAction,
+  promoverTemplateAction, actualizarTextoTemplateAction,
+  conectarWorkflowAction, desconectarWorkflowAction,
+  eliminarTemplateSugeridoAction, eliminarTemplateAction, degradarEstadoAction,
 } from "./actions";
 
 const ESTADO_CONFIG = {
@@ -62,7 +62,10 @@ export function TemplateCard({ template }: Props) {
 
       {/* ── Texto ── */}
       {editandoTexto ? (
-        <form action={promoverTemplateAction} className="space-y-2">
+        <form
+          action={template.estado === "sugerido" ? promoverTemplateAction : actualizarTextoTemplateAction}
+          className="space-y-2"
+        >
           <input type="hidden" name="templateId" value={template.id} />
           <textarea
             name="texto"
