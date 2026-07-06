@@ -59,24 +59,69 @@ function formatVelocidad(v: number): string {
 
 type EstadoClaudeAPI = "operativa" | "sin_creditos" | "error" | "timeout" | "sin_datos";
 
-async function obtenerEstadoClaudeAPI(db: any): Promise<{ estado: EstadoClaudeAPI; hace: string | null; mensaje: string | null }> {
-  const { data } = await db
-    .from("log_sistema")
-    .select("fase, resultado, created_at")
-    .eq("categoria", "ia")
-    .in("fase", ["respuesta", "error", "timeout"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle() as { data: { fase: string; resultado: string | null; created_at: string } | null };
-  if (!data) return { estado: "sin_datos", hace: null, mensaje: null };
+interface DiagnosticoIA {
+  estado: EstadoClaudeAPI;
+  hace: string | null;
+  mensaje: string | null;
+  tarea: string | null;
+  errorCompleto: string | null;
+  ultimosErrores: Array<{ tarea: string; resultado: string | null; errorMsg: string | null; hace: string }>;
+}
+
+async function obtenerEstadoClaudeAPI(db: any): Promise<DiagnosticoIA> {
+  const [{ data }, { data: errores }] = await Promise.all([
+    db.from("log_sistema")
+      .select("fase, resultado, created_at, tipo_accion, metadata")
+      .eq("categoria", "ia")
+      .in("fase", ["respuesta", "error", "timeout"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle() as Promise<{ data: { fase: string; resultado: string | null; created_at: string; tipo_accion: string; metadata: Record<string, unknown> } | null }>,
+    db.from("log_sistema")
+      .select("tipo_accion, resultado, created_at, metadata")
+      .eq("categoria", "ia")
+      .in("fase", ["error", "timeout"])
+      .order("created_at", { ascending: false })
+      .limit(5) as Promise<{ data: Array<{ tipo_accion: string; resultado: string | null; created_at: string; metadata: Record<string, unknown> }> | null }>,
+  ]);
+
+  const fallback: DiagnosticoIA = { estado: "sin_datos", hace: null, mensaje: null, tarea: null, errorCompleto: null, ultimosErrores: [] };
+  if (!data) return fallback;
+
   const hace = new Date(data.created_at).toLocaleTimeString("es-MX", {
     timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
   });
-  if (data.fase === "respuesta") return { estado: "operativa", hace, mensaje: null };
-  if (data.fase === "timeout")   return { estado: "timeout",   hace, mensaje: data.resultado ?? null };
+  const tarea        = data.tipo_accion ?? null;
+  const errorCompleto = (data.metadata?.error_message as string | null) ?? null;
+  const ultimosErrores = (errores ?? []).map(e => ({
+    tarea:     e.tipo_accion,
+    resultado: e.resultado,
+    errorMsg:  (e.metadata?.error_message as string | null) ?? null,
+    hace:      new Date(e.created_at).toLocaleTimeString("es-MX", {
+      timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
+    }),
+  }));
+
+  if (data.fase === "respuesta") return { estado: "operativa", hace, mensaje: null, tarea, errorCompleto: null, ultimosErrores: [] };
+  if (data.fase === "timeout")   return { estado: "timeout",   hace, mensaje: data.resultado ?? null, tarea, errorCompleto, ultimosErrores };
   if (data.fase === "error" && data.resultado?.includes("credit balance"))
-    return { estado: "sin_creditos", hace, mensaje: null };
-  return { estado: "error", hace, mensaje: data.resultado ?? null };
+    return { estado: "sin_creditos", hace, mensaje: null, tarea, errorCompleto, ultimosErrores };
+  return { estado: "error", hace, mensaje: data.resultado ?? null, tarea, errorCompleto, ultimosErrores };
+}
+
+function interpretarError(mensaje: string | null, errorCompleto: string | null): string | null {
+  const txt = (errorCompleto ?? mensaje ?? "").toLowerCase();
+  if (!txt) return null;
+  if (txt.includes("credit balance") || txt.includes("credit"))  return "Saldo Anthropic agotado — recarga en console.anthropic.com/settings/billing";
+  if (txt.includes("529") || txt.includes("overloaded"))         return "API de Anthropic sobrecargada — reintentar en unos minutos";
+  if (txt.includes("429") || txt.includes("rate_limit"))         return "Límite de requests por minuto alcanzado — se normalizará solo";
+  if (txt.includes("401") || txt.includes("authentication"))     return "API key inválida o revocada — verifica ANTHROPIC_API_KEY en Vercel";
+  if (txt.includes("404") || txt.includes("not_found"))          return "Modelo no encontrado — el model ID puede estar desactualizado";
+  if (txt.includes("timeout") || txt.includes("timeout_60000"))  return "Sin respuesta en 60 s — Anthropic puede estar lento o hubo un problema de red";
+  if (txt.includes("fetch failed") || txt.includes("econnreset") || txt.includes("network")) return "Error de red — verifica conectividad del servidor Vercel";
+  if (txt.includes("500") || txt.includes("api_error") || txt.includes("internal")) return "Error interno de Anthropic — suele ser temporal";
+  if (txt.includes("invalid_request") || txt.includes("400"))    return "Petición inválida — posible contexto demasiado largo o parámetros incorrectos";
+  return null;
 }
 
 async function obtenerAlertasWebhook(db: any, enHorarioOp: boolean): Promise<AlertasWebhookData> {
@@ -151,7 +196,7 @@ export default async function GHLCampaignPage() {
       contarLogsCampana(CAMPANA),
       buscarContactosPorTag(TAG_FUENTE, 1, 1).catch(() => ({ contacts: [], total: 0 })),
       obtenerKPIsMonitor().catch(() => KPIS_FALLBACK),
-      obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null, mensaje: null })),
+      obtenerEstadoClaudeAPI(db).catch(() => ({ estado: "sin_datos" as EstadoClaudeAPI, hace: null, mensaje: null, tarea: null, errorCompleto: null, ultimosErrores: [] })),
       obtenerHistorialEnvios(db).catch(() => [] as number[]),
       contarResolucionesRecientes(CAMPANA).catch(() => 0),
       obtenerUltimoEncoladoAt(CAMPANA).catch(() => null),
@@ -323,6 +368,78 @@ export default async function GHLCampaignPage() {
 
       {/* ── Alertas de webhook / procesamiento de mensajes ─────────── */}
       <AlertasWebhook datos={alertasWebhook} />
+
+      {/* ── Diagnóstico de IA ──────────────────────────────────────── */}
+      {(claudeEstado.estado === "error" || claudeEstado.estado === "timeout" || claudeEstado.estado === "sin_datos") && (() => {
+        const interpretacion = interpretarError(claudeEstado.mensaje, claudeEstado.errorCompleto);
+        const colorBorder = claudeEstado.estado === "sin_datos" ? "border-muted" : "border-orange-500/40";
+        const colorBg     = claudeEstado.estado === "sin_datos" ? "bg-muted/30"  : "bg-orange-500/5";
+        const colorTitle  = claudeEstado.estado === "sin_datos" ? "text-muted-foreground" : "text-orange-700 dark:text-orange-400";
+        return (
+          <div className={`rounded-lg border ${colorBorder} ${colorBg} p-4 space-y-3`}>
+            <p className={`text-sm font-semibold ${colorTitle}`}>
+              Diagnóstico IA —{" "}
+              {claudeEstado.estado === "sin_datos" ? "Sin registros de llamadas IA" :
+               claudeEstado.estado === "timeout"   ? "Timeout (sin respuesta en 60 s)" :
+               "Error en última llamada"}
+              {claudeEstado.hace && <span className="font-normal opacity-70 ml-1">· {claudeEstado.hace}</span>}
+            </p>
+
+            {claudeEstado.tarea && (
+              <p className="text-xs text-muted-foreground">
+                Tarea: <code className="bg-muted px-1 rounded text-[11px]">{claudeEstado.tarea}</code>
+              </p>
+            )}
+
+            {/* Mensaje de error completo */}
+            {(claudeEstado.errorCompleto ?? claudeEstado.mensaje) && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium uppercase text-muted-foreground">Mensaje de error</p>
+                <pre className="text-[11px] bg-muted/60 rounded p-2 whitespace-pre-wrap break-words font-mono leading-relaxed">
+                  {claudeEstado.errorCompleto ?? claudeEstado.mensaje}
+                </pre>
+              </div>
+            )}
+
+            {/* Interpretación automática */}
+            {interpretacion && (
+              <div className="rounded border border-blue-400/30 bg-blue-500/5 px-3 py-2">
+                <p className="text-xs text-blue-700 dark:text-blue-400">
+                  <span className="font-semibold">Posible causa:</span> {interpretacion}
+                </p>
+              </div>
+            )}
+
+            {/* Últimos 5 errores */}
+            {claudeEstado.ultimosErrores.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                  Últimos {claudeEstado.ultimosErrores.length} errores
+                </p>
+                <div className="space-y-1">
+                  {claudeEstado.ultimosErrores.map((e, i) => (
+                    <div key={i} className="rounded border bg-muted/40 px-2.5 py-1.5 text-[11px] space-y-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <code className="text-[10px] bg-muted px-1 rounded">{e.tarea}</code>
+                        <span className="text-muted-foreground shrink-0">{e.hace}</span>
+                      </div>
+                      <p className="font-mono text-[10px] text-muted-foreground break-words">
+                        {(e.errorMsg ?? e.resultado ?? "sin mensaje").slice(0, 200)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {claudeEstado.estado === "sin_datos" && (
+              <p className="text-xs text-muted-foreground">
+                No hay registros de llamadas IA en la BD. El webhook puede no estar recibiendo mensajes, o la IA no ha sido invocada recientemente.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* S6: Banner de pendientes prominente ──────────────────────────────── */}
       {pendientes > 0 && (
