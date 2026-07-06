@@ -18,7 +18,7 @@ const TIPOS_POR_CAT: Record<string, string[]> = {
   cron: [
     "cron.procesar-cola","cron.nurturing","cron.gatillos","cron.recordatorios",
     "cron.archivar-inactivos","cron.vendedor-monitor","cron.pipeline-detector",
-    "cron.calidad-kb","cron.log-limpieza",
+    "cron.log-limpieza",
   ],
   webhook: ["webhook.whatsapp","webhook.stripe","webhook.ghl"],
   servicio: ["wa.send","brevo.send","calendar.event","stripe.api","sistema.health-check","sistema.alerta-wa","sistema.config","depuracion.email-interceptado"],
@@ -67,7 +67,7 @@ const TIPO_LABEL: Record<string, string> = {
   "cron.procesar-cola":"Procesar cola",   "cron.nurturing":"Nurturing",
   "cron.gatillos":"Gatillos",             "cron.recordatorios":"Recordatorios",
   "cron.archivar-inactivos":"Archivar inactivos", "cron.vendedor-monitor":"Monitor vendedores",
-  "cron.pipeline-detector":"Detector pipelines",  "cron.calidad-kb":"Calidad KB",
+  "cron.pipeline-detector":"Detector pipelines",
   "cron.log-limpieza":"Limpieza log",
   "webhook.whatsapp":"WhatsApp","webhook.stripe":"Stripe","webhook.ghl":"GHL",
   "wa.send":"WA envío","brevo.send":"Brevo","calendar.event":"Calendar","stripe.api":"Stripe API",

@@ -8,7 +8,6 @@ import { aprobarComprobante, rechazarComprobante } from "@/services/comprobantes
 import { enviarRespuestaWhatsApp } from "@/services/whatsapp-sender";
 import { logSistema } from "@/services/log-sistema";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
-import { aplicarSugerenciaKB, type ResultadoAplicacion } from "@/services/aplicar-sugerencia-kb";
 import { registrarFalloSugerencia } from "@/services/conocimiento";
 import { aplicarKBISugerencia, rechazarKBISugerencia, type ResultadoKBI } from "@/services/kbi/aplicador";
 
@@ -93,54 +92,6 @@ export async function rechazarSugerenciaAction(id: string, feedback: string) {
   void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.rechazar-sugerencia", fase: "ok", metadata: { sugerencia_id: id, feedback } });
   revalidatePath(PATH);
 }
-
-// MPS-14 S52 / MPS-16 S57 — Aprueba una sugerencia kb_calidad aplicando el cambio real al KB.
-// tipo_decision: sin_edicion si no hay override, editado si el admin modificó el contenido.
-export const aprobarSugerenciaKBAction = safeAction(
-  async (id: string, override?: { titulo: string; contenido: string; razon_edicion?: string }): Promise<ResultadoAplicacion> => {
-    const supabase = createServiceClient();
-    const tipoDecision = override ? "editado" : "sin_edicion";
-    await (supabase as any).from("sugerencias_ia").update({
-      tipo_decision: tipoDecision,
-      ...(override?.razon_edicion ? { admin_feedback: override.razon_edicion } : {}),
-    }).eq("id", id);
-    const resultado = await aplicarSugerenciaKB(id, override);
-    void logSistema({
-      categoria: "ui", tipoAccion: "aprobaciones.aplicar-kb", fase: "ok",
-      metadata: { sugerencia_id: id, accion: resultado.accion, recurso_id: resultado.recursoId, tipo_decision: tipoDecision },
-    });
-    revalidatePath(PATH);
-    return resultado;
-  }
-);
-
-// Genera vista previa del cambio propuesto al KB sin aplicarlo — usado por el modal de ficha.
-export const previsualizarCambioKBAction = safeAction(
-  async (id: string): Promise<{ titulo: string; contenido: string }> => {
-    const { previsualizarCambioKB } = await import("@/services/aplicar-sugerencia-kb");
-    const resultado = await previsualizarCambioKB(id);
-    if (!resultado) throw new Error("No se pudo generar la vista previa (sin recurso o instrucción)");
-    return resultado;
-  }
-);
-
-// MPS-16 S57 — Elimina permanentemente una sugerencia; feedback obligatorio desde la UI.
-export const eliminarSugerenciaAction = safeAction(async (id: string, feedback: string) => {
-  const supabase = createServiceClient();
-  // Guardar el feedback antes del delete para tener trazabilidad en logs
-  const { data } = await (supabase as any)
-    .from("sugerencias_ia")
-    .select("tipo, metadata")
-    .eq("id", id)
-    .single();
-  const recursoId = data?.metadata?.recurso_id ?? data?.metadata?.recurso_ids?.[0] ?? null;
-  if (recursoId && typeof recursoId === "string") {
-    void registrarFalloSugerencia(recursoId).catch(() => {});
-  }
-  await supabase.from("sugerencias_ia").delete().eq("id", id);
-  void logSistema({ categoria: "ui", tipoAccion: "aprobaciones.eliminar-sugerencia", fase: "ok", metadata: { sugerencia_id: id, feedback } });
-  revalidatePath(PATH);
-});
 
 // S33.9 — Acciones de cluster: operan sobre todas las sugerencias del grupo
 export async function aprobarClusterAction(clusterId: string) {

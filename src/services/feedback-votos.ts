@@ -4,7 +4,6 @@
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { analizarVotoNegativo } from "@/lib/ai/analisis-voto";
-import { crearAlertaKB } from "@/services/calidad-kb";
 
 // ── Procesamiento de voto negativo ────────────────────────────────────────
 
@@ -57,28 +56,21 @@ export async function procesarFeedbackNegativo(
 
     if (!sugerencias.length) return;
 
-    // 5. Insertar sugerencias según área
+    // 5. Insertar sugerencias de matriz y pipeline — KB se gestiona vía KBI
+    const TIPO_MAP: Record<string, string> = { matriz: "matriz", pipeline: "pipeline" };
     for (const s of sugerencias) {
-      if (s.area === "kb") {
-        await crearAlertaKB(s.titulo, s.descripcion, s.prioridad, {
-          origen: "voto_negativo",
+      if (s.area === "kb") continue; // KB ahora se gestiona exclusivamente por KBI
+      await (supabase as any).from("sugerencias_ia").insert({
+        tipo:        TIPO_MAP[s.area] ?? "general",
+        titulo:      s.titulo,
+        descripcion: s.descripcion,
+        prioridad:   s.prioridad,
+        metadata:    {
+          origen:     "voto_negativo",
           mensaje_id: mensajeId,
-        });
-      } else {
-        // matriz y pipeline → sugerencias_ia general
-        const TIPO_MAP: Record<string, string> = { matriz: "matriz", pipeline: "pipeline" };
-        await (supabase as any).from("sugerencias_ia").insert({
-          tipo:        TIPO_MAP[s.area] ?? "general",
-          titulo:      s.titulo,
-          descripcion: s.descripcion,
-          prioridad:   s.prioridad,
-          metadata:    {
-            origen:     "voto_negativo",
-            mensaje_id: mensajeId,
-            area:       s.area,
-          } satisfies Record<string, unknown>,
-        });
-      }
+          area:       s.area,
+        } satisfies Record<string, unknown>,
+      });
     }
   } catch (err) {
     console.error("[feedback-votos] Error procesando feedback negativo:", err);

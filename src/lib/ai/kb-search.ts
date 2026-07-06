@@ -80,49 +80,7 @@ async function rerankarPool(query: string, resultados: RecursoKB[], limite: numb
   }
 }
 
-// Pools independientes: cada uno obtiene hasta limitePorPool resultados propios.
-// El pool KB se amplía y re-rankea con Haiku; servicios mantiene su límite directo.
-export async function buscarRecursos(query: string, limitePorPool = 3): Promise<ResultadosBusqueda> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createServiceClient() as any;
-  const embedding = await generarEmbedding(query);
-  const limiteKB = Math.max(limitePorPool * 2 + 2, 8);
-
-  const [kbRes, svcRes] = await Promise.all([
-    supabase.rpc("buscar_recursos",  { query_embedding: embedding, limite: limiteKB,      umbral: 0.65 }),
-    supabase.rpc("buscar_servicios", { query_embedding: embedding, limite: limitePorPool, umbral: 0.65 }),
-  ]);
-
-  let servicios = (svcRes.data ?? []) as RecursoKB[];
-
-  // Fallback de texto: nombres de marca propios no embedan bien — si el vector search
-  // no encuentra nada, buscar por palabras del query en titulo y contenido.
-  if (servicios.length === 0) {
-    const palabras = query.trim().split(/\s+/).filter(p => p.length > 3);
-    if (palabras.length > 0) {
-      const orClause = palabras.flatMap(p =>
-        [`titulo.ilike.%${p}%`, `contenido.ilike.%${p}%`, `caracteristicas.ilike.%${p}%`]
-      ).join(",");
-      const { data: textData } = await supabase
-        .from("servicios")
-        .select("id, titulo, contenido, caracteristicas, beneficios, ventajas, para_quien_es, para_quien_no_es, estandar_conocer, nivel_estandar, modalidad, duracion_horas, requisitos_previos, entregables, garantia, sector_industria, ocupacion_objetivo, url_landing_propia, slug, modo_venta")
-        .eq("activo", true).eq("aprobado", true)
-        .or(orClause)
-        .limit(limitePorPool);
-      if (textData?.length) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        servicios = (textData as any[]).map(r => ({ ...r, tipo: "servicio" }));
-      }
-    }
-  }
-
-  const kbRaw = (kbRes.data ?? []) as RecursoKB[];
-  const kb = await rerankarPool(query, kbRaw, limitePorPool);
-
-  return { servicios, kb };
-}
-
-// MPS-20 S74.3 — Versión KBI del pool de KB: usa buscar_recursos_kbi en lugar de buscar_recursos.
+// MPS-20 S74.3 — Pool de KB con scoring KBI: usa buscar_recursos_kbi en lugar de buscar_recursos.
 // El RPC combina similitud coseno (70%) + kbi_score Bayesiano (30%).
 // Servicios mantienen su pool separado sin cambios.
 // El re-ranking Haiku se conserva sobre los resultados de la RPC KBI.

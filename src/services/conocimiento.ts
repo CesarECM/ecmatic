@@ -228,34 +228,6 @@ export async function detectarObsoletos(): Promise<AlertaRecurso[]> {
   return alertas;
 }
 
-// S2.8 — Sugiere un recurso nuevo cuando la pregunta no tiene cobertura en KB
-export async function sugerirRecursoDesdeQuery(query: string): Promise<void> {
-  try {
-    // S18.4 — Leer identidad para que los templates generados usen el branding correcto
-    const identidad = await obtenerIdentidad().catch(() => null);
-    const brandContext = identidad ? `\n\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
-
-    const response = await callClaudeIA("SUGERIR_KB", {
-      max_tokens: 400,
-      system: `Analiza la pregunta de un lead sobre certificaciones CONOCER en México.
-Determina si se debería crear un nuevo recurso en la base de conocimiento para responderla mejor.
-Responde SOLO en JSON con este formato exacto:
-{"crear": true, "tipo": "faq|objecion|servicio|practica_venta|template_wa|template_email", "titulo": "...", "contenido": "..."}
-Si el recurso es un template (template_wa o template_email), aplica la identidad de marca en el contenido: usa el nombre de la empresa, slogan y firma según el canal.
-Si la pregunta es demasiado específica, fuera de tema o ya estaría cubierta por FAQs generales, responde: {"crear": false}${brandContext}`,
-      messages: [{ role: "user", content: `Pregunta sin cobertura en KB:\n${query}` }],
-    });
-
-    const raw = (response.content[0] as { text: string }).text.trim();
-    const json = JSON.parse(raw) as { crear: boolean; tipo?: TipoRecurso; titulo?: string; contenido?: string };
-    if (!json.crear || !json.tipo || !json.titulo || !json.contenido) return;
-
-    await crearRecurso(json.tipo, json.titulo, json.contenido, "ia_sugerido");
-  } catch {
-    // No bloquear el flujo principal si falla la sugerencia
-  }
-}
-
 // S2.9 — Extrae y crea recursos desde contenido externo (URL o texto pegado)
 export async function procesarFuenteExterna(contenido: string): Promise<number> {
   // S18.4 — Brand context para que los templates extraídos usen el branding correcto

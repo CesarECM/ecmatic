@@ -1,6 +1,6 @@
 import { callClaudeIA } from "./client";
 import { createServiceClient } from "@/lib/supabase/service";
-import { registrarUso, sugerirRecursoDesdeQuery } from "@/services/conocimiento";
+import { registrarUso } from "@/services/conocimiento";
 import { registrarSenales } from "@/services/kbi/senales";
 import { obtenerGatillosActivos } from "@/services/gatillos";
 import { registrarUsoIA } from "@/services/alertas-ia";
@@ -86,7 +86,6 @@ export async function generarRespuesta(
 
   void registrarUso(todosRecursos.map((r) => r.id));
   if (todosRecursos.length === 0) {
-    void sugerirRecursoDesdeQuery(queryParaBusqueda);
     void import("@/services/kbi/detector").then(({ crearSugerenciaHueco }) =>
       crearSugerenciaHueco(queryParaBusqueda).catch(() => null)
     );

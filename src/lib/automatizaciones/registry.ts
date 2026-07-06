@@ -46,8 +46,6 @@ export const CRONS: DefinicionCron[] = [
     descripcion: "Evalúa los tests A/B activos de pipeline, declara ganadores o aplica benchmarks de industria." },
   { name: "pipeline-detector", label: "Detector de ramas pipeline", schedule: "Lunes 1am", path: "/api/admin/pipeline-detector",
     descripcion: "Detecta leads elegibles para abrir ramas paralelas en el pipeline según señales CAGC." },
-  { name: "calidad-kb", label: "Calidad de KB", schedule: "Lunes 1am", path: "/api/admin/calidad-kb",
-    descripcion: "Evalúa la calidad de los recursos de la base de conocimiento y sugiere mejoras." },
   { name: "brochures-scan", label: "Scan de brochures", schedule: "Lunes 2am", path: "/api/admin/brochures-scan",
     descripcion: "Detecta servicios con uso frecuente sin brochure asociado y genera sugerencias." },
   { name: "auditoria-assets", label: "Auditoría de assets", schedule: "Lunes 2am", path: "/api/admin/auditoria-assets",

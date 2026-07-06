@@ -1,10 +1,11 @@
 // MPS-20 S75.1 — Detectores KBI: generan kbi_sugerencias desde patrones observados.
-// 4 detectores independientes, cada uno con límite MAX_POR_TIPO.
-// El orquestador detectarSugerencias() los ejecuta en secuencia desde el cron diario.
+// MPS-30 S111.1 — Detectores 6 (duplicados) y 7 (obsolescencia) migrados desde KB legado.
+// El orquestador detectarSugerencias() ejecuta todos los detectores en secuencia desde el cron diario.
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { callClaudeIA } from "@/lib/ai/client";
 import { logSistema } from "@/services/log-sistema";
+import { detectarDuplicadosSemanticos, detectarObsolescenciaParcial, detectarCanibalizacion, verificarUrgenciaPatron } from "./detector-auditoria";
 
 // Límite de sugerencias nuevas por detector por ciclo diario.
 // Evita inundar el panel del admin con demasiadas sugerencias a la vez.
@@ -178,11 +179,14 @@ JSON: {"contenido_nuevo": "..."}` }],
         `Corrección: "${mensajeFinal.slice(0, 80)}…"`,
       ].filter(Boolean).join("\n");
 
+      // Urgencia: si este recurso acumula 3+ edits en 7 días → origen=detector_urgente
+      const origenA = await verificarUrgenciaPatron(db, [recurso.id]);
+
       await db.from("kbi_sugerencias").insert({
         recurso_id: recurso.id, tipo_accion: "actualizar",
         titulo_propuesto: recurso.titulo,
         contenido_propuesto: json.contenido_nuevo ?? mensajeFinal,
-        razon: razonDisplay, origen: "detector_patron",
+        razon: razonDisplay, origen: origenA,
       });
       return true;
     }
@@ -426,11 +430,14 @@ export async function detectarSugerencias(): Promise<{ total: number; errores: s
   let total = 0;
 
   const detectores: [string, (db: DB) => Promise<number>][] = [
-    ["baja_confianza",   detectarBajaConfianza],
-    ["sin_uso",          detectarSinUso],
-    ["patron_ghl",       detectarPatronGHL],
-    ["huecos_cobertura", detectarHuecosCobertura],
-    ["regla_desde_edits", detectarReglaDesdeEdits],
+    ["baja_confianza",        detectarBajaConfianza],
+    ["sin_uso",               detectarSinUso],
+    ["patron_ghl",            detectarPatronGHL],
+    ["huecos_cobertura",      detectarHuecosCobertura],
+    ["regla_desde_edits",     detectarReglaDesdeEdits],
+    ["duplicados_semanticos", detectarDuplicadosSemanticos],
+    ["obsolescencia_parcial", detectarObsolescenciaParcial],
+    ["canibalizacion",        detectarCanibalizacion],
   ];
 
   for (const [nombre, fn] of detectores) {
