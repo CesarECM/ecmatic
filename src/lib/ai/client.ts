@@ -4,15 +4,31 @@ import { randomUUID } from "crypto";
 import { modeloPorTarea } from "./model-router";
 import type { TareaIA } from "./model-router";
 
-export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-export const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+// Inicialización diferida: los SDKs se crean dentro de funciones, no al importar.
+// Esto evita que un Server Component crashee por keys faltantes al momento del import.
+function makeAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+}
+function makeOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+}
+
+let _anthropic: Anthropic | null = null;
+let _openai: OpenAI | null = null;
+
+export function getAnthropic(): Anthropic {
+  return (_anthropic ??= makeAnthropic());
+}
+export function getOpenAI(): OpenAI {
+  return (_openai ??= makeOpenAI());
+}
 
 export const CLAUDE_MODEL    = "claude-sonnet-4-6";
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMS  = 1536;
 
 export async function generarEmbedding(texto: string): Promise<number[]> {
-  const res = await openai.embeddings.create({
+  const res = await getOpenAI().embeddings.create({
     model: EMBEDDING_MODEL,
     input: texto,
     dimensions: EMBEDDING_DIMS,
@@ -105,7 +121,7 @@ export async function callClaudeIA(
   try {
     response = await Promise.race([
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (anthropic.messages.create as any)({ ...params, model }) as Promise<Anthropic.Message>,
+      (getAnthropic().messages.create as any)({ ...params, model }) as Promise<Anthropic.Message>,
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("TIMEOUT_60000ms")), 60_000)
       ),

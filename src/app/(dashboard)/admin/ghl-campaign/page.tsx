@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { anthropic } from "@/lib/ai/client";
+import { getAnthropic } from "@/lib/ai/client";
 import { obtenerStatsAB } from "@/services/ab-workflows-ghl";
 import {
   obtenerStatsAprobacion, calcularNivel,
@@ -75,7 +75,7 @@ async function obtenerEstadoClaudeAPI(db: any): Promise<DiagnosticoIA> {
     (async () => {
       try {
         await Promise.race([
-          anthropic.messages.create({
+          getAnthropic().messages.create({
             model: "claude-haiku-4-5-20251001",
             max_tokens: 1,
             messages: [{ role: "user", content: "ok" }],
