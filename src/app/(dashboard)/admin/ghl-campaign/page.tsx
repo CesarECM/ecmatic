@@ -102,7 +102,12 @@ async function obtenerEstadoClaudeAPI(db: any): Promise<DiagnosticoIA> {
     }),
   }));
 
+  // Error/timeout con más de 2 h de antigüedad = sistema en reposo, no error activo
+  const VENTANA_ERROR_MS = 2 * 60 * 60 * 1000;
+  const esReciente = Date.now() - new Date(data.created_at).getTime() < VENTANA_ERROR_MS;
+
   if (data.fase === "respuesta") return { estado: "operativa", hace, mensaje: null, tarea, errorCompleto: null, ultimosErrores: [] };
+  if (!esReciente)               return { estado: "sin_datos", hace: null, mensaje: null, tarea: null, errorCompleto: null, ultimosErrores: [] };
   if (data.fase === "timeout")   return { estado: "timeout",   hace, mensaje: data.resultado ?? null, tarea, errorCompleto, ultimosErrores };
   if (data.fase === "error" && data.resultado?.includes("credit balance"))
     return { estado: "sin_creditos", hace, mensaje: null, tarea, errorCompleto, ultimosErrores };
