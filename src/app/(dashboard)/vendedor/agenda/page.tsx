@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import Link from "next/link";
 import type { EstadoCita } from "@/lib/supabase/types";
+import { isConfigured } from "@/lib/google/calendar";
 
 const BADGE: Record<EstadoCita, string> = {
   pendiente:  "bg-yellow-100 text-yellow-800",
@@ -29,19 +30,53 @@ export default async function AgendaPage() {
   desde.setHours(0, 0, 0, 0);
   const hasta = new Date(desde.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-  const { data: citas } = await svc
-    .from("citas")
-    .select("id, fecha_inicio, fecha_fin, estado, google_meet_link, resultado, leads(nombre, telefono)")
-    .eq("vendedor_id", vendedor.id)
-    .gte("fecha_inicio", desde.toISOString())
-    .lte("fecha_inicio", hasta.toISOString())
-    .order("fecha_inicio");
+  const [{ data: citas }, { data: token }] = await Promise.all([
+    svc
+      .from("citas")
+      .select("id, fecha_inicio, fecha_fin, estado, google_meet_link, resultado, leads(nombre, telefono)")
+      .eq("vendedor_id", vendedor.id)
+      .gte("fecha_inicio", desde.toISOString())
+      .lte("fecha_inicio", hasta.toISOString())
+      .order("fecha_inicio"),
+    svc
+      .from("vendedor_tokens")
+      .select("vendedor_id, expires_at")
+      .eq("vendedor_id", vendedor.id)
+      .maybeSingle(),
+  ]);
+
+  const googleOk = isConfigured();
+  const calConectado = !!token;
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Mi agenda — próximas 2 semanas</h1>
-        <p className="text-sm text-muted-foreground">{citas?.length ?? 0} citas agendadas</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Mi agenda — próximas 2 semanas</h1>
+          <p className="text-sm text-muted-foreground">{citas?.length ?? 0} citas agendadas</p>
+        </div>
+        {googleOk && (
+          <div className="text-right">
+            {calConectado ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                Google Calendar conectado
+              </span>
+            ) : (
+              <div className="space-y-1 text-right">
+                <a
+                  href={`/api/auth/google?vendedor_id=${vendedor.id}`}
+                  className="inline-block rounded border bg-black px-3 py-1.5 text-xs text-white hover:bg-gray-800"
+                >
+                  Conectar Google Calendar
+                </a>
+                <p className="text-xs text-orange-600">
+                  Sin conexión — las citas no se crean en tu calendario
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {(!citas || citas.length === 0) && (

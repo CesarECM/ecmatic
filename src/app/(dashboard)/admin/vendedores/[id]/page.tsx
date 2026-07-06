@@ -15,15 +15,15 @@ export default async function VendedorDetallePage({ params }: Props) {
   if (!vendedor) notFound();
 
   const [metricas, coaching, transcriptos] = await Promise.all([
-    calcularMetricasVendedor(id),
-    generarCoachingIA(id),
-    listarTranscriptos(),
+    calcularMetricasVendedor(id).catch(() => ({
+      vendedorId: id, totalCitas: 0, shows: 0, noShows: 0, showRate: 0,
+      conversiones: 0, tasaConversion: 0, promesasVencidas: 0, transcriptosSubidos: 0,
+    })),
+    generarCoachingIA(id).catch(() => [] as string[]),
+    listarTranscriptos().catch(() => []),
   ]);
 
-  const misTranscriptos = transcriptos.filter((t) => {
-    const lead = t as { cita_id?: string | null };
-    return lead.cita_id !== undefined;
-  });
+  const misTranscriptos = transcriptos.filter((t) => t.cita_id != null);
 
   return (
     <div className="space-y-6 max-w-3xl">
