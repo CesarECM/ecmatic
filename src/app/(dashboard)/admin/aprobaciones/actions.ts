@@ -10,6 +10,8 @@ import { logSistema } from "@/services/log-sistema";
 import { safeAction, type ActionResult } from "@/lib/safe-action";
 import { registrarFalloSugerencia } from "@/services/conocimiento";
 import { aplicarKBISugerencia, rechazarKBISugerencia, type ResultadoKBI } from "@/services/kbi/aplicador";
+import { resolverItemAprobacion, actualizarStatsAprobacion } from "@/services/ghl-aprobacion";
+import { posponerSeguimientoFlexible } from "@/services/seguimiento-lead";
 
 const PATH = "/admin/aprobaciones";
 
@@ -200,3 +202,30 @@ export const rechazarKBISugerenciaAction = safeAction(
     revalidatePath(PATH);
   }
 );
+
+// Pospone un seguimiento directamente desde la cola de aprobaciones.
+// Rechaza el item GHL (sale de la cola) y actualiza proximo_at del seguimiento.
+export const posponerItemGHLAction = safeAction(async (
+  itemId: string,
+  seguimientoId: string,
+  campana: string,
+  modo: "horas" | "dias",
+  valor: string,
+): Promise<void> => {
+  const ms = modo === "horas"
+    ? Number(valor) * 3_600_000
+    : Number(valor) * 86_400_000;
+  const proximoAt = new Date(Date.now() + ms);
+
+  await resolverItemAprobacion({ id: itemId, estado: "rechazado" });
+  await actualizarStatsAprobacion(campana, "rechazado");
+  await posponerSeguimientoFlexible(seguimientoId, proximoAt);
+
+  void logSistema({
+    categoria: "ui", tipoAccion: "ghl_aprobacion.posponer_cola", fase: "ok",
+    resultado: `item:${itemId} seg:${seguimientoId} modo:${modo} val:${valor}`,
+    metadata: { itemId, seguimientoId, campana, modo, valor },
+  });
+
+  revalidatePath(PATH);
+});

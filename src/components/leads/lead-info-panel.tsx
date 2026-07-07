@@ -7,7 +7,9 @@ import { LeadInfoTab } from "@/components/leads/lead-info-tab";
 import { EmailsInterceptadosCard } from "@/components/leads/emails-interceptados-card";
 import { PipelinesLead } from "@/components/leads/pipelines-lead";
 import { LeadProtocoloPanel } from "@/components/leads/lead-protocolo-panel";
+import { PosponerSeguimientoWidget } from "@/components/leads/posponer-seguimiento-widget";
 import { agendarLlamadaAdminAction } from "@/app/(dashboard)/admin/leads/[id]/actions";
+import { posponerSeguimientoAction } from "@/app/(dashboard)/admin/leads/[id]/actions-seguimiento";
 import type { EntradaContexto } from "@/lib/supabase/types";
 import type { EmailInterceptado } from "@/services/bandeja-email";
 import type { LeadProtocolo, ToqueRegistro } from "@/services/lead-protocolo";
@@ -130,6 +132,10 @@ export function LeadInfoPanel({
                   {seguimientoActivo.campana && (
                     <div><span className="text-muted-foreground">Campaña: </span>{seguimientoActivo.campana}</div>
                   )}
+                  <PosponerSeguimientoWidget
+                    mostrarListaNegra
+                    onPosponer={(modo, valor) => posponerSeguimientoAction(lead.id, modo, valor)}
+                  />
                 </CardContent>
               </Card>
             ) : (

@@ -255,26 +255,53 @@ export async function obtenerPorId(seguimientoId: string): Promise<SeguimientoLe
   return data ?? null;
 }
 
-// S107 — Pospone el seguimiento 4h en el mismo nivel (sin consumir intento).
-// Llamado al rechazar desde la ficha del lead, en contraste con avanzarNivel (desde aprobaciones).
-export async function posponerSeguimiento4h(seguimientoId: string): Promise<void> {
-  const proximo = new Date(Date.now() + 4 * 3_600_000);
+// Pospone el seguimiento a un timestamp arbitrario (sin consumir intento).
+export async function posponerSeguimientoFlexible(
+  seguimientoId: string,
+  proximoAt: Date,
+): Promise<void> {
   const { error } = await db()
     .from("seguimiento_lead")
-    .update({ proximo_at: proximo.toISOString() })
+    .update({ proximo_at: proximoAt.toISOString() })
     .eq("id", seguimientoId)
     .eq("estado", "activo");
 
   if (error) {
     void logSistema({
-      categoria: "servicio", tipoAccion: "seguimiento.posponer_4h", fase: "error",
-      resultado: String(error), metadata: { seguimientoId },
+      categoria: "servicio", tipoAccion: "seguimiento.posponer", fase: "error",
+      resultado: String(error), metadata: { seguimientoId, proximoAt: proximoAt.toISOString() },
     });
     return;
   }
   void logSistema({
-    categoria: "servicio", tipoAccion: "seguimiento.posponer_4h", fase: "ok",
-    resultado: `proximo:${proximo.toISOString()}`, metadata: { seguimientoId },
+    categoria: "servicio", tipoAccion: "seguimiento.posponer", fase: "ok",
+    resultado: `proximo:${proximoAt.toISOString()}`, metadata: { seguimientoId },
+  });
+}
+
+// S107 — Wrapper 4h para compatibilidad con el rechazo desde la ficha del lead.
+export async function posponerSeguimiento4h(seguimientoId: string): Promise<void> {
+  return posponerSeguimientoFlexible(seguimientoId, new Date(Date.now() + 4 * 3_600_000));
+}
+
+// Cancela el seguimiento activo de un lead (sin importar el tipo). Usado al archivar/blacklist.
+export async function cancelarSeguimientoActivo(leadId: string): Promise<void> {
+  const { error } = await db()
+    .from("seguimiento_lead")
+    .update({ estado: "cancelado" })
+    .eq("lead_id", leadId)
+    .eq("estado", "activo");
+
+  if (error) {
+    void logSistema({
+      categoria: "servicio", tipoAccion: "seguimiento.cancelar_activo", fase: "error",
+      resultado: String(error), metadata: { leadId },
+    });
+    return;
+  }
+  void logSistema({
+    categoria: "servicio", tipoAccion: "seguimiento.cancelar_activo", fase: "ok",
+    metadata: { leadId },
   });
 }
 
