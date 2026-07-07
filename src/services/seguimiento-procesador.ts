@@ -85,6 +85,17 @@ async function yaEnCola(seguimientoId: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
+// Detecta si el lead ya tiene CUALQUIER item pendiente en la cola (respuesta inbound
+// o seguimiento previo). Evita crear un follow-up encima de una respuesta sin aprobar.
+async function tieneOtroPendienteLead(leadId: string): Promise<boolean> {
+  const { count } = await db()
+    .from("ghl_approval_queue")
+    .select("id", { count: "exact", head: true })
+    .eq("lead_ecmatic_id", leadId)
+    .eq("estado", "pendiente") as { count: number | null };
+  return (count ?? 0) > 0;
+}
+
 export async function posponerPorFallo(
   seg: SeguimientoLead, motivo: string, delayH: number, traceId: string,
 ): Promise<void> {
@@ -137,6 +148,19 @@ export async function procesarSeguimiento(
       metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
     });
     await posponerPorFallo(seg, "ya_en_cola", 1, traceId);
+    return "ya_en_cola";
+  }
+
+  // Guardia anti-duplicado: si el lead ya tiene cualquier item pendiente (respuesta
+  // a mensaje entrante u otro seguimiento), posponer para no apilar en la cola.
+  const otroPendiente = await tieneOtroPendienteLead(seg.lead_id).catch(() => false);
+  if (otroPendiente) {
+    void logSistema({
+      categoria: "cron", tipoAccion: "cron.seguimiento.lead_con_pendiente", fase: "debug", traceId,
+      resultado: "lead ya tiene item en cola — posponiendo 1h para no duplicar",
+      metadata:  { seguimientoId: seg.id, leadId: seg.lead_id },
+    });
+    await posponerPorFallo(seg, "lead_con_pendiente", 1, traceId);
     return "ya_en_cola";
   }
 

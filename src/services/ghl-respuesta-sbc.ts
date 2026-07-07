@@ -402,6 +402,20 @@ async function generarRespuestaMotorCompleto(
   const intencion     = await clasificarIntencion([cuerpo], historial).catch(() => "fuera_de_contexto" as const);
   await guardarMensaje({ leadId: lead.id, contenido: cuerpo, direccion: "entrante", intencion });
 
+  // Cerrar seguimiento activo no-pago: si el lead responde, el motor conversacional
+  // toma el control. No hace falta que el cron genere un follow-up encima.
+  void (async () => {
+    const segActivo = await obtenerActivo(lead.id).catch(() => null);
+    if (segActivo && segActivo.tipo !== "payment") {
+      await marcarCompletado(lead.id).catch(() => null);
+      void logSistema({
+        categoria: "webhook", tipoAccion: "ghl_sbc.seguimiento_completado", fase: "ok",
+        resultado: `tipo:${segActivo.tipo} — lead respondió, seguimiento cerrado`,
+        metadata: { leadId: lead.id, seguimientoId: segActivo.id, tipo: segActivo.tipo },
+      });
+    }
+  })();
+
   const setterFaseActual    = (lead.setter_fase_actual as number | null) ?? 1;
   const setterCalificado    = (lead.setter_calificado as boolean | null) ?? null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
