@@ -85,6 +85,13 @@ function pasaFiltroContacto(lead: LeadRow, filtro: ContactoOpc): boolean {
   return true;
 }
 
+type GHLLeadResult = {
+  id: string; nombre: string | null; telefono: string | null;
+  email: string | null; ghl_contact_id: string | null;
+  pipeline_stage: string; pipeline_ruta: string;
+  score_salud: number; ultimo_mensaje_at: string | null;
+};
+
 export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListProps) {
   const router = useRouter();
 
@@ -98,10 +105,30 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
   const [busqueda, setBusqueda] = useState("");
   const [dropdownAbierto, setDropdownAbierto] = useState(false);
   const [indiceFocused, setIndiceFocused] = useState(-1);
+  const [ghlLeads, setGhlLeads] = useState<GHLLeadResult[]>([]);
+  const [buscandoGHL, setBuscandoGHL] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const etapasActuales = filtroRuta === "premium" ? etapasPremium : etapasTripwire;
+
+  // Búsqueda GHL por teléfono (debounce 500ms, solo cuando hay ≥4 dígitos)
+  useEffect(() => {
+    const digits = soloDigitos(busqueda);
+    if (digits.length < 4) { setGhlLeads([]); setBuscandoGHL(false); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setBuscandoGHL(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/admin/leads/buscar-tel?q=${encodeURIComponent(digits)}`);
+        const json = await res.json();
+        setGhlLeads(json.leads ?? []);
+      } catch { setGhlLeads([]); }
+      finally { setBuscandoGHL(false); }
+    }, 500);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [busqueda]);
 
   // Leads ordenados según selección
   const leadsOrdenados = useMemo(() => {
@@ -113,17 +140,23 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
         return new Date(b.ultimo_mensaje_at).getTime() - new Date(a.ultimo_mensaje_at).getTime();
       });
     }
-    // reciente_sistema: orden original (updated_at DESC del servidor)
     return leads;
   }, [leads, orden]);
 
-  // Sugerencias del dropdown — sin filtros de ruta/etapa/contacto
-  const sugerencias = useMemo(() =>
+  // Sugerencias locales (nombre, email, ghl_contact_id)
+  const sugerenciasLocales = useMemo(() =>
     busqueda.trim().length > 0
       ? leadsOrdenados.filter((l) => matchLead(l, busqueda)).slice(0, 8)
       : [],
     [leadsOrdenados, busqueda]
   );
+
+  // Mezcla: GHL primero (resultados por teléfono), luego locales sin duplicados
+  const sugerencias = useMemo(() => {
+    const ghlIds = new Set(ghlLeads.map((l) => l.id));
+    const localesSinDup = sugerenciasLocales.filter((l) => !ghlIds.has(l.id));
+    return [...ghlLeads, ...localesSinDup].slice(0, 8);
+  }, [ghlLeads, sugerenciasLocales]);
 
   // Lista principal
   const filtrados = useMemo(() =>
@@ -224,7 +257,13 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
         {/* Dropdown autocomplete */}
         {dropdownAbierto && busqueda.trim().length > 0 && (
           <div ref={dropdownRef} className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg overflow-hidden">
-            {sugerencias.length === 0 ? (
+            {buscandoGHL && (
+              <p className="px-4 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                <span className="inline-block w-3 h-3 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
+                Buscando en GHL…
+              </p>
+            )}
+            {!buscandoGHL && sugerencias.length === 0 ? (
               <p className="px-4 py-3 text-sm text-muted-foreground">Sin resultados para &ldquo;{busqueda}&rdquo;</p>
             ) : (
               sugerencias.map((lead, i) => {

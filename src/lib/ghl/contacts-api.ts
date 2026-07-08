@@ -83,6 +83,21 @@ export async function actualizarDatosContactoGHL(
   }
 }
 
+// Busca contactos en GHL cuyo teléfono contenga la cadena dada (últimos dígitos).
+export async function buscarContactosPorTelefono(q: string): Promise<GHLContact[]> {
+  const locationId = process.env.GHL_LOCATION_ID!;
+  try {
+    const data = await ghlPost<SearchResponse>("/contacts/search", {
+      locationId,
+      filters: [{ field: "phone", operator: "contains", value: q }],
+      pageLimit: 10,
+    });
+    return data.contacts ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // GHL-9.5 — Busca un contacto en GHL por número de teléfono.
 // Si no existe, lo crea con el nombre del lead. Retorna el contactId.
 export async function buscarOCrearContactoGHL(
