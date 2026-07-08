@@ -16,6 +16,7 @@ import { LeadInfoPanel } from "@/components/leads/lead-info-panel";
 import { GhlContactoCard } from "@/components/leads/ghl-contacto-card";
 import { RefreshBtn } from "@/components/ui/refresh-btn";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
+import { AgregarAPanelBtn } from "@/components/oportunidades/AgregarAPanelBtn";
 import { Badge } from "@/components/ui/badge";
 import { eliminarLlamadaAdminAction } from "./actions";
 
@@ -230,9 +231,12 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
             </div>
           </div>
           {/* Acciones globales */}
-          <div className="flex items-center gap-1 shrink-0 mt-0.5">
-            <RefreshBtn />
-            <AuditorIABtn tipo="lead" id={lead.id} nombre={lead.nombre ?? lead.telefono ?? "Este lead"} />
+          <div className="flex flex-col items-end gap-1.5 shrink-0 mt-0.5">
+            <div className="flex items-center gap-1">
+              <RefreshBtn />
+              <AuditorIABtn tipo="lead" id={lead.id} nombre={lead.nombre ?? lead.telefono ?? "Este lead"} />
+            </div>
+            <AgregarAPanelBtn leadId={lead.id} variante="completo" />
           </div>
         </div>
       </div>

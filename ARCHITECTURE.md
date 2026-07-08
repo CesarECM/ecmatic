@@ -64,6 +64,7 @@ src/
 │   │   │   ├── financiero/         # KPIs, comisiones, gasto IA
 │   │   │   ├── analitica/          # Competidores, A/B, KB report
 │   │   │   ├── aprobaciones/       # Cola unificada KB + Matriz + sugerencias
+│   │   │   ├── oportunidades/      # MPS-34: Top 10 oportunidades de cierre con DnD + análisis IA
 │   │   │   ├── sistema/            # Panel LED de integraciones + gasto IA
 │   │   │   └── lanzamiento/        # Checklist de producción (S12.10)
 │   │   ├── vendedor/
@@ -91,9 +92,11 @@ src/
 │               ├── procesar-buffer/   # Cron 1min: drena ghl_message_buffer (debounce 15s)
 │               ├── reclasificar-cobertura/ # Manual/cron: leads sin seguimiento activo → Haiku asigna tipo
 │               └── campana/auditoria-entregas/ # MPS-29: GET audita entregas vs GHL; POST repara fallidos
+│           └── oportunidades/analizar/    # MPS-34: POST analiza IA las 10 oportunidades del panel
 ├── services/
 │   ├── aplicar-sugerencia-kb.ts    # MPS-14: aplica sugerencias kb_calidad al KB real (actualizar/crear/desactivar)
 │   ├── ghl-auditoria-entregas.ts   # MPS-29: auditarEntregasBatch + repararEntregasFallidas + contarCandidatosAuditoria
+│   ├── oportunidades.ts            # MPS-34: CRUD panel de oportunidades (listar, notas, orden, candidatos)
 ├── components/
 │   ├── ui/                         # shadcn/ui — no modificar directamente
 │   ├── auth/                       # LoginForm

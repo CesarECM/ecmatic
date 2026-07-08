@@ -37,6 +37,7 @@ const SECTIONS: NavSection[] = [
     id: "operaciones",
     label: "Operaciones",
     items: [
+      { href: "/admin/oportunidades",  label: "Oportunidades",  emoji: "🎯", roles: ["admin"] },
       { href: "/admin/ghl-campaign",  label: "Campaña SBC",    emoji: "📣", roles: ["admin"] },
       { href: "/admin/seguimientos", label: "Seguimientos",   emoji: "🔄", roles: ["admin"] },
       { href: "/admin/templates",    label: "Templates",      emoji: "📝", roles: ["admin"] },
