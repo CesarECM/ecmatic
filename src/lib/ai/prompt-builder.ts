@@ -37,6 +37,32 @@ export interface ContextoLead {
   modoPreSesion?: { fechaIso: string; meetLink?: string | null };
 }
 
+// MPS-33 S118 — Contexto de segmento declarado en formulario de Facebook Lead Ads.
+// Los tags fb-seg-* los asigna el workflow de GHL al recibir el lead del formulario.
+function detectarContextoFacebookLead(tagsGhl?: string[]): string {
+  if (!tagsGhl?.length) return "";
+  if (tagsGhl.includes("fb-seg-certificacion")) {
+    return `\nCONTEXTO FACEBOOK LEAD ADS — INTENCIÓN DECLARADA:
+El lead indicó en el formulario de Facebook que QUIERE CERTIFICARSE por primera vez (EC0217.01).
+Ya confirmó su interés — NO hagas descubrimiento de intención. Ve directo a explorar su situación específica: ¿tiene el expediente iniciado? ¿cuándo tiene su evaluación? ¿cuántos cursos imparte al año?
+Esto justifica saltarse el protocolo de descubrimiento de oculto y avanzar más rápido al producto.`;
+  }
+  if (tagsGhl.includes("fb-seg-centro")) {
+    return `\nCONTEXTO FACEBOOK LEAD ADS — PERFIL B2B:
+El lead indicó que ya está certificado o dirige un Centro de Evaluación.
+NO ofrezcas SmartBuilderEC individual. Este lead es un prospecto B2B para acceso de alumnos/instructores.
+Objetivo de esta conversación: descubrir cuántos instructores gestionan, si ya usan una herramienta para expedientes EC0217.01, y si les interesa ofrecer SmartBuilderEC a sus instructores a precio de acceso por volumen.
+Tono: par a par, no de ventas. Empieza con: "¿Cuántos instructores gestionas actualmente que necesiten el EC0217.01?"`;
+  }
+  if (tagsGhl.includes("fb-seg-info")) {
+    return `\nCONTEXTO FACEBOOK LEAD ADS — INTENCIÓN EXPLORATORIA:
+El lead indicó que solo busca información por ahora. No presiones hacia la compra en este primer intercambio.
+Comparte valor educativo sobre el proceso de certificación EC0217.01 y los obstáculos más comunes.
+Termina con una pregunta de diagnóstico suave: ¿qué parte del proceso le genera más dudas?`;
+  }
+  return "";
+}
+
 // MPS-16 S60 — prioridad: match temperamento (+2) + match etapa (+1) > universales (0).
 export function seleccionarPracticasContextuales(
   practicas: { contenido: string; contextos_aplica: { temperamento?: string[]; pipeline_stage?: string[] } | null }[],
@@ -80,6 +106,7 @@ export interface ParamsPrompt {
   variantePrompt:   { variante: string; texto: string } | null;
   reglasAplicables: ReglaConversacional[];
   imagenActivaUrl:  string | null;
+  resumenCatalogo:  string | null;
   contexto:         ContextoLead;
 }
 
@@ -142,6 +169,9 @@ export function construirSystemPrompt(params: ParamsPrompt): SystemPromptBlocks 
 
   // Líneas de contexto
   const brandLinea        = identidad ? `\nIDENTIDAD DE MARCA:\n${formatearIdentidadParaPrompt(identidad)}` : "";
+  const catalogoLinea     = params.resumenCatalogo
+    ? `\nCATÁLOGO COMPLETO (referencia para responder preguntas sobre qué servicios existen — no lo reveles activamente):\n${params.resumenCatalogo}`
+    : "";
   const pipelineContexto  = formatearContextoPipelineParaPrompt(params.contextoPipeline, contexto.pipelineStage);
   const imagenLinea       = params.imagenActivaUrl
     ? `\nIMAGEN DEL SERVICIO DISPONIBLE:\nURL: ${params.imagenActivaUrl}\nEsta imagen puede acompañar tu respuesta si el canal lo permite. No la menciones como "imagen"; úsala para enriquecer tu argumento visual.` : "";
@@ -182,6 +212,7 @@ export function construirSystemPrompt(params: ParamsPrompt): SystemPromptBlocks 
     ? `- Fase de compra CAGC: ${contexto.faseCAGC} — guía el tono y objetivo de tu respuesta según este momento del comprador` : "";
   const etiquetasLinea    = contexto.etiquetas?.length
     ? `- Etiquetas del lead: ${contexto.etiquetas.join(", ")}` : "";
+  const fbLeadLinea       = detectarContextoFacebookLead(contexto.tagsGhl);
   const autoReplyLinea    = contexto.esAutoReply
     ? "\n- CONTEXTO CLAVE: El mensaje recibido es una respuesta automática de WhatsApp Business del lead (saludo o bienvenida automática, no una consulta real). NOSOTROS lo contactamos a él — él NO nos contactó. NUNCA preguntes '¿En qué puedo ayudarte?' ni '¿Para qué nos contactaste?'. Retoma el hilo de prospección explicando brevemente el motivo de nuestro contacto y abre con una pregunta de descubrimiento sobre su situación."
     : "";
@@ -226,7 +257,7 @@ Tono: informativo, cálido y muy breve.`;
   // Bloque estable: idéntico entre turnos del mismo lead mientras el servicio/KB no cambie.
   // Se marca con cache_control cuando supera 1024 tokens (~4096 chars).
   const estable = `Eres el asistente de ventas de ${identidad?.nombre_empresa ?? "Centro ECM"}, un centro de certificación CONOCER en México.
-Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${anclaLinea}${params.relacionesLinea}${pipelineContexto}${imagenLinea}
+Tu objetivo es guiar al lead hacia la certificación con calidez y profesionalismo.${brandLinea}${catalogoLinea}${anclaLinea}${params.relacionesLinea}${pipelineContexto}${imagenLinea}
 
 BASE DE CONOCIMIENTO — FAQs y recursos adicionales:
 ${recursosTexto}
@@ -243,6 +274,7 @@ CONTEXTO DEL LEAD:
 - Cliente previo: ${contexto.compraPreviaa ? "SÍ — trata con familiaridad" : "NO — es nuevo lead"}
 ${faseCagcLinea}
 ${etiquetasLinea}
+${fbLeadLinea}
 ${memoriaLinea}
 ${matrizLinea}${instruccionCanal}${autoReplyLinea}
 ${contexto.modoPreSesion ? preSessionLinea : instruccionVenta}
