@@ -1,6 +1,6 @@
-// MPS-34 — Re-análisis ligero de un solo lead del panel.
+// MPS-36 — Re-análisis completo de un solo lead (Sonnet).
+// Devuelve valor_ticket, fecha_compromiso y pregunta_clave además del análisis base.
 // POST /api/admin/oportunidades/analizar-uno
-// Llamado desde NotasInline después de guardar notas, o desde la tarjeta individualmente.
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -35,8 +35,8 @@ export async function POST(req: Request) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createServiceClient() as any;
+  const hoy = new Date().toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  // Leer datos del lead + notas historial + mensajes
   const [{ data: lead }, mensajesRes, notasRes] = await Promise.all([
     supabase.from("leads")
       .select("id, nombre, pipeline_stage, score_salud, temperamento_inferido, memoria_ia, email, telefono, tags_ghl, created_at")
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     : "ninguna";
 
   const prompt = `Eres un experto en ventas B2C de certificaciones CONOCER en México.
-Analiza este prospecto con CRITERIOS ESTRICTOS y devuelve JSON exacto.
+Analiza este prospecto con CRITERIOS ESTRICTOS. HOY ES: ${hoy}.
 
 DATOS:
 - Nombre: ${lead.nombre ?? "Desconocido"}
@@ -83,55 +83,65 @@ DATOS:
 - Días sin último mensaje: ${diasSinContacto}
 - Tags GHL: ${Array.isArray(lead.tags_ghl) ? (lead.tags_ghl as string[]).join(", ") : "ninguno"}
 - Memoria conversaciones anteriores: ${lead.memoria_ia ?? "ninguna"}
-- Notas del admin (historial cronológico, más reciente primero):
+- Notas del admin (más reciente primero):
 ${notasTexto}
 
 HISTORIAL (últimos 25 mensajes):
 ${historial || "Sin mensajes registrados."}
 
-CRITERIOS DE SCORING (score_cierre 0-100):
-- 80-100: Lead confirmó querer proceder, tiene presupuesto, solo falta formalizar
-- 60-79: Muy interesado, pregunta activamente por proceso/precio, sin objeción fuerte
-- 40-59: Interés medio, responde pero no hay urgencia clara
-- 20-39: Interés bajo o lleva más de 14 días sin responder
-- 0-19: Sin respuesta >30 días, rechazó explícitamente o barrera insuperable
+CRITERIOS score_cierre (0-100):
+- 80-100: confirmó querer proceder, presupuesto listo, solo falta formalizar
+- 60-79: muy interesado, pregunta activamente por proceso/precio, sin objeción fuerte
+- 40-59: interés medio, responde pero sin urgencia clara
+- 20-39: interés bajo o >14 días sin responder
+- 0-19: >30 días sin respuesta, rechazó explícitamente o barrera insuperable
+Notas con urgencia/compromiso verbal/fecha límite → suma 10-20 puntos.
 
-IMPACTO DE LAS NOTAS DEL ADMIN: Si las notas mencionan urgencia, compromiso verbal, fecha límite o señal de cierre, suma 10-20 puntos.
+INSTRUCCIONES ADICIONALES:
+- valor_ticket_estimado: número en pesos MXN si se mencionó un precio/inversión específica. null si no hay dato.
+- fecha_compromiso_sugerida: si el lead mencionó una fecha de pago/confirmación, convierte a ISO 8601 UTC. null si no hay.
+- pregunta_clave: UNA pregunta concreta (máx 15 palabras) que César debería responder en sus notas para avanzar este lead.
 
 Responde SOLO JSON (sin markdown):
 {
-  "resumen_ia": "2-3 oraciones: quién es, en qué etapa REAL está, qué lo motiva o frena",
-  "siguiente_accion_ia": "acción concreta y específica para HOY (un paso, no una lista)",
-  "score_cierre": <entero 0-100 usando los criterios estrictos de arriba>,
-  "razon_score": "1 oración explicando el score con datos concretos de la conversación",
+  "resumen_ia": "2-3 oraciones: quién es, etapa REAL, qué lo motiva o frena",
+  "siguiente_accion_ia": "acción concreta y específica para HOY",
+  "score_cierre": <entero 0-100>,
+  "razon_score": "1 oración con datos concretos del score",
   "ia_sugiere": "<'ninguna'|'cerrar_ganado'|'cerrar_perdido'|'upsell'>",
-  "ia_razon": <null o "explicación breve">
+  "ia_razon": <null o "explicación breve">,
+  "valor_ticket_estimado": <número o null>,
+  "fecha_compromiso_sugerida": "<ISO 8601 UTC o null>",
+  "pregunta_clave": "<pregunta específica, máx 15 palabras>"
 }`;
 
   try {
     const res = await callClaudeIA("OPORTUNIDAD_ANALISIS", {
-      max_tokens: 600,
+      max_tokens: 700,
       messages: [{ role: "user", content: prompt }],
     }, { leadId });
 
-    const texto = (res.content[0] as { text: string }).text.trim();
+    const texto   = (res.content[0] as { text: string }).text.trim();
     const cleaned = texto.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(cleaned);
+    const p = JSON.parse(cleaned);
 
     const analisis = {
-      resumen_ia:          String(parsed.resumen_ia ?? ""),
-      siguiente_accion_ia: String(parsed.siguiente_accion_ia ?? ""),
-      score_cierre:        Math.max(0, Math.min(100, Number(parsed.score_cierre) || 0)),
-      razon_score:         String(parsed.razon_score ?? ""),
-      ia_sugiere:          (["ninguna","cerrar_ganado","cerrar_perdido","upsell"].includes(parsed.ia_sugiere)
-                            ? parsed.ia_sugiere : "ninguna") as "ninguna"|"cerrar_ganado"|"cerrar_perdido"|"upsell",
-      ia_razon:            parsed.ia_razon ?? null,
+      resumen_ia:          String(p.resumen_ia ?? ""),
+      siguiente_accion_ia: String(p.siguiente_accion_ia ?? ""),
+      score_cierre:        Math.max(0, Math.min(100, Number(p.score_cierre) || 0)),
+      razon_score:         String(p.razon_score ?? ""),
+      ia_sugiere:          (["ninguna","cerrar_ganado","cerrar_perdido","upsell"].includes(p.ia_sugiere)
+                            ? p.ia_sugiere : "ninguna") as "ninguna"|"cerrar_ganado"|"cerrar_perdido"|"upsell",
+      ia_razon:            p.ia_razon ?? null,
+      valor_ticket:        p.valor_ticket_estimado ? Number(p.valor_ticket_estimado) : null,
+      fecha_compromiso:    p.fecha_compromiso_sugerida ?? null,
+      pregunta_clave:      String(p.pregunta_clave ?? ""),
     };
 
     await guardarAnalisisIA(leadId, analisis);
     void actualizarScoreSalud(leadId).catch(() => null);
 
-    return NextResponse.json({ ok: true, ...analisis });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     void logSistema({ categoria: "ia", tipoAccion: "oportunidades.analizar_uno",
       fase: "error", leadId, resultado: err instanceof Error ? err.message.slice(0, 200) : "Error" });

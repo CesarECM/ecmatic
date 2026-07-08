@@ -6,6 +6,7 @@ import { obtenerActivo, posponerSeguimientoFlexible } from "@/services/seguimien
 import {
   removerDelPanel, actualizarOrden, limpiarSugerenciaIA, agregarAlPanel,
   agregarNota, editarNota, eliminarNota,
+  registrarMomentum, fijarEnPanel, actualizarCamposPanel,
 } from "@/services/oportunidades";
 import type { OportunidadNota } from "@/services/oportunidades";
 import { logSistema } from "@/services/log-sistema";
@@ -43,13 +44,33 @@ export async function removerDelPanelAction(leadId: string) {
   revalidatePath(PATH);
 }
 
-export async function reordenarAction(items: { id: string; posicion: number }[]) {
-  await actualizarOrden(items);
+// MPS-36: DnD suma momentum al lead movido (posición destino < posición origen = subió = +15)
+export async function reordenarAction(items: { id: string; posicion: number; leadId: string }[]) {
+  await actualizarOrden(items.map(({ id, posicion }) => ({ id, posicion })));
+  // Registrar momentum en todos los leads reordenados (el que subió más es el más importante)
+  await Promise.all(
+    items.map(({ leadId }) => registrarMomentum(leadId, "drag_reorder").catch(() => null))
+  );
   revalidatePath(PATH);
 }
 
 export async function desestimnarSugerenciaIAAction(leadId: string) {
   await limpiarSugerenciaIA(leadId);
+  revalidatePath(PATH);
+}
+
+// MPS-36: anclar/desanclar un lead en su posición actual
+export async function fijarEnPanelAction(leadId: string, fijado: boolean) {
+  await fijarEnPanel(leadId, fijado);
+  revalidatePath(PATH);
+}
+
+// MPS-36: editar valor_ticket y/o fecha_compromiso manualmente
+export async function actualizarCamposAction(
+  oportunidadId: string,
+  campos: { valor_ticket?: number | null; fecha_compromiso?: string | null }
+) {
+  await actualizarCamposPanel(oportunidadId, campos);
   revalidatePath(PATH);
 }
 
@@ -77,16 +98,17 @@ export async function eliminarNotaAction(notaId: string): Promise<void> {
 
 // ── AgregarAlPanel ────────────────────────────────────────────────────────────
 
+// MPS-36: sin límite de 10. Suma momentum +10 al agregarlas.
 export async function agregarAOportunidadesAction(
   leadId: string
 ): Promise<{ ok: boolean; mensaje: string }> {
   try {
     await agregarAlPanel(leadId);
+    void registrarMomentum(leadId, "agregar_al_panel").catch(() => null);
     revalidatePath(PATH);
     return { ok: true, mensaje: "Agregado al panel de oportunidades" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
-    if (msg.includes("Panel lleno")) return { ok: false, mensaje: "El panel ya tiene 10 oportunidades" };
     if (msg.includes("duplicate") || msg.includes("unique") || msg.includes("23505")) {
       try {
         const { createServiceClient } = await import("@/lib/supabase/service");
@@ -95,6 +117,7 @@ export async function agregarAOportunidadesAction(
           .from("oportunidades_panel")
           .update({ activo: true })
           .eq("lead_id", leadId);
+        void registrarMomentum(leadId, "agregar_al_panel").catch(() => null);
         revalidatePath(PATH);
         return { ok: true, mensaje: "Reagregado al panel" };
       } catch { /* ignore */ }

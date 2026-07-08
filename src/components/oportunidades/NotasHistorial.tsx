@@ -9,9 +9,10 @@ interface Props {
   oportunidadId: string;
   leadId: string;
   initialNotas: OportunidadNota[];
+  preguntaClave?: string | null;
 }
 
-export function NotasHistorial({ oportunidadId, leadId, initialNotas }: Props) {
+export function NotasHistorial({ oportunidadId, leadId, initialNotas, preguntaClave }: Props) {
   const router    = useRouter();
   const inputRef  = useRef<HTMLTextAreaElement>(null);
   const [notas,   setNotas]   = useState<OportunidadNota[]>(initialNotas);
@@ -88,6 +89,14 @@ export function NotasHistorial({ oportunidadId, leadId, initialNotas }: Props) {
 
   return (
     <div className="space-y-2">
+      {/* ── Pregunta clave IA ── */}
+      {preguntaClave && (
+        <div className="flex items-start gap-1.5 rounded bg-blue-50 border border-blue-100 px-2.5 py-1.5">
+          <span className="text-blue-400 text-[11px] mt-px shrink-0">?</span>
+          <p className="text-[11px] text-blue-700 italic leading-snug">{preguntaClave}</p>
+        </div>
+      )}
+
       {/* ── Input nueva nota ── */}
       <div className="relative">
         <textarea

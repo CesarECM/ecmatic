@@ -29,7 +29,7 @@ export function AgregarAPanelBtn({ leadId, variante = "completo", className }: P
         <button
           onClick={handleClick}
           disabled={pending}
-          title={msg?.texto ?? "Agregar a Top 10 Oportunidades"}
+          title={msg?.texto ?? "Agregar al seguimiento de oportunidades"}
           className={`rounded p-1 text-sm transition-colors cursor-pointer
             ${msg?.ok ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-500 hover:bg-muted/60"}
             ${pending ? "opacity-50 cursor-not-allowed" : ""}
@@ -59,7 +59,7 @@ export function AgregarAPanelBtn({ leadId, variante = "completo", className }: P
           ${className ?? ""}`}
       >
         <span>★</span>
-        {pending ? "Agregando…" : msg?.ok ? "En panel de oportunidades" : "Agregar a Top 10"}
+        {pending ? "Agregando…" : msg?.ok ? "En seguimiento de oportunidades" : "Seguir oportunidad"}
       </button>
       {msg && !msg.ok && (
         <span className="text-xs text-red-500">{msg.texto}</span>

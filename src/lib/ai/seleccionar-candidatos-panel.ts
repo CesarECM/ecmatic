@@ -1,16 +1,14 @@
-// MPS-34 S120.2 — Haiku selecciona los mejores leads activos para llenar el panel.
-// Se invoca cuando el panel tiene < 10 slots ocupados.
+// MPS-36 S124.3 — Sin hard limit de PANEL_SIZE. Soft cap: agrega máx 20 candidatos por pasada.
+// Haiku elige los mejores del pool de leads activos que aún no están en el panel.
 
 import { callClaudeIA } from "@/lib/ai/client";
-import { obtenerCandidatos, agregarAlPanel, PANEL_SIZE, contarOportunidadesActivas } from "@/services/oportunidades";
+import { obtenerCandidatos, agregarAlPanel } from "@/services/oportunidades";
 import { logSistema } from "@/services/log-sistema";
 
-export async function seleccionarCandidatosPanel(): Promise<{ agregados: number }> {
-  const actuales = await contarOportunidadesActivas();
-  const slots = PANEL_SIZE - actuales;
-  if (slots <= 0) return { agregados: 0 };
+const SOFT_CAP = 20; // máx leads nuevos por pasada
 
-  const candidatos = await obtenerCandidatos(40);
+export async function seleccionarCandidatosPanel(): Promise<{ agregados: number }> {
+  const candidatos = await obtenerCandidatos(60);
   if (!candidatos.length) return { agregados: 0 };
 
   const lista = candidatos.map((c, i) =>
@@ -20,36 +18,36 @@ export async function seleccionarCandidatosPanel(): Promise<{ agregados: number 
   const res = await callClaudeIA(
     "SELECCIONAR_CANDIDATOS",
     {
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{
         role: "user",
         content: `Eres experto en ventas B2C de certificaciones CONOCER en México.
-Necesito llenar ${slots} slot(s) en un panel de las 10 oportunidades más cercanas al cierre.
+Selecciona los mejores candidatos para un panel de seguimiento de oportunidades de cierre.
+Elige hasta ${SOFT_CAP} leads (o menos si no hay suficientes que valgan la pena).
 
 Leads candidatos (ordenados por score_salud):
 ${lista}
 
-Devuelve ÚNICAMENTE un JSON con los IDs de los ${slots} mejores candidatos:
+Devuelve ÚNICAMENTE un JSON con los IDs de los mejores candidatos:
 { "ids": ["uuid1", "uuid2", ...] }
 
-Criterios: prioriza leads con score alto, con actividad reciente y en etapas avanzadas del pipeline.
+Criterios: prioriza leads con score alto, actividad reciente y etapas avanzadas del pipeline.
+Excluye leads con score_salud < 20 o sin actividad en los últimos 60 días.
 Sin markdown, sin texto extra.`,
       }],
     }
   );
 
-  const texto = (res.content[0] as { text: string }).text.trim();
+  const texto   = (res.content[0] as { text: string }).text.trim();
   const cleaned = texto.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const { ids } = JSON.parse(cleaned) as { ids: string[] };
 
   let agregados = 0;
-  for (const id of ids.slice(0, slots)) {
+  for (const id of ids.slice(0, SOFT_CAP)) {
     try {
       await agregarAlPanel(id);
       agregados++;
-    } catch {
-      // slot puede llenarse en carrera concurrente
-    }
+    } catch { /* puede ya existir */ }
   }
 
   void logSistema({
