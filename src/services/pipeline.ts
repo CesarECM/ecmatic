@@ -291,7 +291,7 @@ export async function listarLeads(filtros: FiltrosLeads = {}) {
   // Selección explícita: evita traer metadata (JSONB pesado) y columnas no usadas en la lista
   let query = supabase
     .from("leads")
-    .select("id, nombre, telefono, email, pipeline_stage, pipeline_ruta, temperamento_inferido, score_salud, compra_previa, updated_at")
+    .select("id, nombre, telefono, email, ghl_contact_id, pipeline_stage, pipeline_ruta, temperamento_inferido, score_salud, compra_previa, updated_at")
     .order("updated_at", { ascending: false });
 
   if (filtros.etapa !== undefined) query = query.eq("pipeline_stage", filtros.etapa);
