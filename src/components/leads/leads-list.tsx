@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,17 +17,15 @@ interface LeadsListProps {
   etapasPremium: Etapa[];
 }
 
+type OrdenOpc = "ultimo_contacto" | "reciente_sistema";
+type ContactoOpc = "todos" | "hoy" | "semana" | "mes" | "mas_30" | "sin_mensajes";
+
 const DISC_COLORS: Record<string, string> = {
   D: "bg-red-100 text-red-800",
   I: "bg-yellow-100 text-yellow-800",
   S: "bg-green-100 text-green-800",
   C: "bg-blue-100 text-blue-800",
 };
-
-function ScoreSalud({ score }: { score: number }) {
-  const color = score >= 67 ? "text-green-600" : score >= 34 ? "text-yellow-600" : "text-red-600";
-  return <span className={`text-sm font-semibold ${color}`}>{score}</span>;
-}
 
 function soloDigitos(s: string) {
   return s.replace(/\D/g, "");
@@ -37,7 +35,6 @@ function matchLead(lead: LeadRow, q: string): boolean {
   if (!q) return true;
   const ql = q.toLowerCase().trim();
   const qd = soloDigitos(q);
-
   if (lead.nombre?.toLowerCase().includes(ql)) return true;
   if (lead.email?.toLowerCase().includes(ql)) return true;
   if (lead.ghl_contact_id?.toLowerCase().includes(ql)) return true;
@@ -58,10 +55,44 @@ function highlight(text: string, q: string) {
   );
 }
 
+function fechaRelativa(iso: string | null | undefined): string {
+  if (!iso) return "Sin mensajes";
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  const hrs = Math.floor(diff / 3600000);
+  const dias = Math.floor(diff / 86400000);
+  if (min < 60) return `hace ${min}m`;
+  if (hrs < 24) return `hace ${hrs}h`;
+  if (dias === 1) return "ayer";
+  if (dias < 7) return `hace ${dias} días`;
+  if (dias < 30) return `hace ${Math.floor(dias / 7)} sem`;
+  if (dias < 365) return `hace ${Math.floor(dias / 30)} mes`;
+  return `hace ${Math.floor(dias / 365)} año`;
+}
+
+function pasaFiltroContacto(lead: LeadRow, filtro: ContactoOpc): boolean {
+  if (filtro === "todos") return true;
+  if (filtro === "sin_mensajes") return !lead.ultimo_mensaje_at;
+  if (!lead.ultimo_mensaje_at) return false;
+  const diff = Date.now() - new Date(lead.ultimo_mensaje_at).getTime();
+  const dias = diff / 86400000;
+  if (filtro === "hoy") return dias < 1;
+  if (filtro === "semana") return dias < 7;
+  if (filtro === "mes") return dias < 30;
+  if (filtro === "mas_30") return dias >= 30;
+  return true;
+}
+
 export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListProps) {
   const router = useRouter();
+
+  // Filtros
   const [filtroRuta, setFiltroRuta] = useState<"todos" | "tripwire" | "premium">("todos");
   const [filtroEtapa, setFiltroEtapa] = useState("todas");
+  const [filtroContacto, setFiltroContacto] = useState<ContactoOpc>("todos");
+  const [orden, setOrden] = useState<OrdenOpc>("ultimo_contacto");
+
+  // Buscador
   const [busqueda, setBusqueda] = useState("");
   const [dropdownAbierto, setDropdownAbierto] = useState(false);
   const [indiceFocused, setIndiceFocused] = useState(-1);
@@ -70,18 +101,39 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
 
   const etapasActuales = filtroRuta === "premium" ? etapasPremium : etapasTripwire;
 
-  // Sugerencias del dropdown — buscan en todos los leads, ignorando filtros de ruta/etapa
-  const sugerencias = busqueda.trim().length > 0
-    ? leads.filter((l) => matchLead(l, busqueda)).slice(0, 8)
-    : [];
+  // Leads ordenados según selección
+  const leadsOrdenados = useMemo(() => {
+    if (orden === "ultimo_contacto") {
+      return [...leads].sort((a, b) => {
+        if (!a.ultimo_mensaje_at && !b.ultimo_mensaje_at) return 0;
+        if (!a.ultimo_mensaje_at) return 1;
+        if (!b.ultimo_mensaje_at) return -1;
+        return new Date(b.ultimo_mensaje_at).getTime() - new Date(a.ultimo_mensaje_at).getTime();
+      });
+    }
+    // reciente_sistema: orden original (updated_at DESC del servidor)
+    return leads;
+  }, [leads, orden]);
 
-  // Lista principal — aplica búsqueda + filtros de ruta/etapa
-  const filtrados = leads.filter((l) => {
-    if (!matchLead(l, busqueda)) return false;
-    if (filtroRuta !== "todos" && l.pipeline_ruta !== filtroRuta) return false;
-    if (filtroEtapa !== "todas" && l.pipeline_stage !== filtroEtapa) return false;
-    return true;
-  });
+  // Sugerencias del dropdown — sin filtros de ruta/etapa/contacto
+  const sugerencias = useMemo(() =>
+    busqueda.trim().length > 0
+      ? leadsOrdenados.filter((l) => matchLead(l, busqueda)).slice(0, 8)
+      : [],
+    [leadsOrdenados, busqueda]
+  );
+
+  // Lista principal
+  const filtrados = useMemo(() =>
+    leadsOrdenados.filter((l) => {
+      if (!matchLead(l, busqueda)) return false;
+      if (filtroRuta !== "todos" && l.pipeline_ruta !== filtroRuta) return false;
+      if (filtroEtapa !== "todas" && l.pipeline_stage !== filtroEtapa) return false;
+      if (!pasaFiltroContacto(l, filtroContacto)) return false;
+      return true;
+    }),
+    [leadsOrdenados, busqueda, filtroRuta, filtroEtapa, filtroContacto]
+  );
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -134,6 +186,8 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
     return idx >= 0 && idx < etapas.length - 1 ? etapas[idx + 1].nombre : null;
   }
 
+  const hayFiltrosActivos = filtroRuta !== "todos" || filtroEtapa !== "todas" || filtroContacto !== "todos" || busqueda.trim();
+
   return (
     <div className="space-y-3">
       {/* Buscador */}
@@ -146,11 +200,7 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
             ref={inputRef}
             type="text"
             value={busqueda}
-            onChange={(e) => {
-              setBusqueda(e.target.value);
-              setDropdownAbierto(true);
-              setIndiceFocused(-1);
-            }}
+            onChange={(e) => { setBusqueda(e.target.value); setDropdownAbierto(true); setIndiceFocused(-1); }}
             onFocus={() => { if (busqueda.trim()) setDropdownAbierto(true); }}
             onKeyDown={handleKeyDown}
             placeholder="Buscar por nombre, email, teléfono o código GHL…"
@@ -171,38 +221,31 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
 
         {/* Dropdown autocomplete */}
         {dropdownAbierto && busqueda.trim().length > 0 && (
-          <div
-            ref={dropdownRef}
-            className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg overflow-hidden"
-          >
+          <div ref={dropdownRef} className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg overflow-hidden">
             {sugerencias.length === 0 ? (
               <p className="px-4 py-3 text-sm text-muted-foreground">Sin resultados para &ldquo;{busqueda}&rdquo;</p>
             ) : (
               sugerencias.map((lead, i) => {
                 const nombre = lead.nombre ?? lead.telefono ?? "Sin nombre";
-                const subtitulo = [lead.telefono, lead.email].filter(Boolean).join(" · ");
                 return (
                   <button
                     key={lead.id}
                     onMouseDown={(e) => { e.preventDefault(); navegarALead(lead.id); }}
                     onMouseEnter={() => setIndiceFocused(i)}
-                    className={`w-full text-left px-4 py-2.5 text-sm flex flex-col gap-0.5 border-b last:border-b-0 transition-colors ${
-                      i === indiceFocused ? "bg-accent" : "hover:bg-muted"
-                    }`}
+                    className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between gap-3 border-b last:border-b-0 transition-colors ${i === indiceFocused ? "bg-accent" : "hover:bg-muted"}`}
                   >
-                    <span className="font-medium">{highlight(nombre, busqueda)}</span>
-                    {subtitulo && (
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="font-medium truncate">{highlight(nombre, busqueda)}</span>
                       <span className="text-xs text-muted-foreground">
                         {lead.telefono && highlight(lead.telefono, busqueda)}
                         {lead.telefono && lead.email && " · "}
                         {lead.email && highlight(lead.email, busqueda)}
+                        {lead.ghl_contact_id && busqueda && lead.ghl_contact_id.toLowerCase().includes(busqueda.toLowerCase()) && (
+                          <> · GHL: {highlight(lead.ghl_contact_id, busqueda)}</>
+                        )}
                       </span>
-                    )}
-                    {lead.ghl_contact_id && busqueda && lead.ghl_contact_id.toLowerCase().includes(busqueda.toLowerCase()) && (
-                      <span className="text-xs text-muted-foreground">
-                        GHL: {highlight(lead.ghl_contact_id, busqueda)}
-                      </span>
-                    )}
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">{fechaRelativa(lead.ultimo_mensaje_at)}</span>
                   </button>
                 );
               })
@@ -212,7 +255,8 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
+        {/* Ruta */}
         <div className="flex rounded-md border overflow-hidden text-sm">
           {(["todos", "tripwire", "premium"] as const).map((r) => (
             <button
@@ -224,6 +268,8 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
             </button>
           ))}
         </div>
+
+        {/* Etapa */}
         <select
           value={filtroEtapa}
           onChange={(e) => setFiltroEtapa(e.target.value)}
@@ -234,10 +280,43 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
             <option key={e.id} value={e.nombre}>{e.nombre}</option>
           ))}
         </select>
-        <span className="text-sm text-muted-foreground self-center">
+
+        {/* Último contacto */}
+        <select
+          value={filtroContacto}
+          onChange={(e) => setFiltroContacto(e.target.value as ContactoOpc)}
+          className="text-sm border rounded-md px-3 py-1.5 bg-background"
+        >
+          <option value="todos">Cualquier contacto</option>
+          <option value="hoy">Contactados hoy</option>
+          <option value="semana">Últimos 7 días</option>
+          <option value="mes">Últimos 30 días</option>
+          <option value="mas_30">Sin contacto +30 días</option>
+          <option value="sin_mensajes">Sin mensajes</option>
+        </select>
+
+        {/* Ordenar */}
+        <select
+          value={orden}
+          onChange={(e) => setOrden(e.target.value as OrdenOpc)}
+          className="text-sm border rounded-md px-3 py-1.5 bg-background"
+        >
+          <option value="ultimo_contacto">↓ Último contacto</option>
+          <option value="reciente_sistema">↓ Más reciente en sistema</option>
+        </select>
+
+        {/* Contador + limpiar */}
+        <span className="text-sm text-muted-foreground">
           {filtrados.length} lead{filtrados.length !== 1 ? "s" : ""}
-          {busqueda.trim() && ` · búsqueda: "${busqueda}"`}
         </span>
+        {hayFiltrosActivos && (
+          <button
+            onClick={() => { setFiltroRuta("todos"); setFiltroEtapa("todas"); setFiltroContacto("todos"); setBusqueda(""); }}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       {/* Lista */}
@@ -273,7 +352,10 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
                           <span className="text-xs text-green-600 font-medium">★ Recurrente</span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{lead.telefono ?? lead.email ?? "—"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {lead.telefono ?? lead.email ?? "—"}
+                        <span className="ml-2 opacity-60">{fechaRelativa(lead.ultimo_mensaje_at)}</span>
+                      </p>
                     </div>
 
                     {/* Badges */}
@@ -315,4 +397,9 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
       )}
     </div>
   );
+}
+
+function ScoreSalud({ score }: { score: number }) {
+  const color = score >= 67 ? "text-green-600" : score >= 34 ? "text-yellow-600" : "text-red-600";
+  return <span className={`text-sm font-semibold ${color}`}>{score}</span>;
 }

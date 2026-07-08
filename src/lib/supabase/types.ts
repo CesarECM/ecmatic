@@ -205,6 +205,8 @@ export interface Database {
           is_test: boolean;
           created_at: string;
           updated_at: string;
+          // Migration 093 — buscador leads
+          ultimo_mensaje_at: string | null;
         };
         Insert: {
           id?: string;
