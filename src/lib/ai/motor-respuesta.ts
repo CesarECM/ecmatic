@@ -21,6 +21,7 @@ import { obtenerReglasAplicables } from "@/services/reglas-conversacionales";
 import { construirSystemPrompt } from "./prompt-builder";
 import type { ContextoLead } from "./prompt-builder";
 import { normalizarRespuesta } from "./normalizar-respuesta";
+import { obtenerResumenCatalogo } from "@/services/sistema";
 import type { DimensionesMatriz } from "@/lib/supabase/types";
 
 export type { ContextoLead };
@@ -53,7 +54,7 @@ export async function generarRespuesta(
     modoRevelacion:         contexto.modoRevelacion ?? "oculto",
   };
 
-  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt, reglasAplicables, adaptativo] = await Promise.all([
+  const [resultadosBusqueda, gatillos, sugerenciaMatriz, identidad, contextoPipeline, hintCalidad, variantePrompt, reglasAplicables, adaptativo, resumenCatalogo] = await Promise.all([
     buscarRecursosKBI(queryParaBusqueda),
     obtenerGatillosActivos(contexto.pipelineRuta),
     inferirRespuestaMatriz(dims8D, mensajes, contexto.nombre).catch(() => null),
@@ -68,6 +69,7 @@ export async function generarRespuesta(
     contexto.leadId
       ? calcularContextoAdaptativo(contexto.leadId, ctxTokens)
       : Promise.resolve({ limiteHistorial: 8, maxTokens: 500 }),
+    obtenerResumenCatalogo().catch(() => null),
   ]);
 
   const { limiteHistorial, maxTokens } = adaptativo;
@@ -139,7 +141,7 @@ export async function generarRespuesta(
     identidad, serviciosAncla, pagosServicios, cuentasActivas, relacionesLinea,
     kb, todasPracticas: todasPracticas ?? [], gatillos, sugerenciaMatriz,
     contextoPipeline, hintCalidad, variantePrompt, reglasAplicables,
-    imagenActivaUrl, contexto,
+    imagenActivaUrl, resumenCatalogo, contexto,
   });
 
   // Activar prompt caching solo si el bloque estable supera el mínimo de Sonnet (1024 tokens ≈ 4096 chars).

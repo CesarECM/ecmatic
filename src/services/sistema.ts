@@ -8,6 +8,8 @@ export interface ConfigSistema {
   umbral_confianza: number;
   updated_at: string;
   updated_by: string | null;
+  resumen_catalogo: string | null;
+  resumen_catalogo_at: string | null;
 }
 
 // S17.1 — Lee la configuración global del sistema (singleton)
@@ -54,4 +56,14 @@ export async function actualizarUmbral(umbral: number): Promise<void> {
 export async function obtenerModo(): Promise<ModoOperacion> {
   const config = await obtenerConfig();
   return config.modo_operacion;
+}
+
+// MPS-32 — Lee solo el resumen de catálogo sin traer la config completa.
+export async function obtenerResumenCatalogo(): Promise<string | null> {
+  const supabase = createServiceClient();
+  const { data } = await (supabase as any)
+    .from("configuracion_sistema")
+    .select("resumen_catalogo")
+    .single();
+  return (data?.resumen_catalogo as string | null) ?? null;
 }

@@ -105,6 +105,11 @@ export async function crearServicio(
     .then(m => m.dispararAuditoria(data.id, "crear"))
     .catch(console.error);
 
+  // Resumen de catálogo (fire-and-forget)
+  void import("@/services/catalogo-resumen")
+    .then(m => m.dispararResumenCatalogo())
+    .catch(console.error);
+
   return data as Servicio;
 }
 
@@ -140,6 +145,11 @@ export async function actualizarServicio(
   // Auditor IA (fire-and-forget)
   void import("@/services/auditor-servicios")
     .then(m => m.dispararAuditoria(id, "editar"))
+    .catch(console.error);
+
+  // Resumen de catálogo (fire-and-forget)
+  void import("@/services/catalogo-resumen")
+    .then(m => m.dispararResumenCatalogo())
     .catch(console.error);
 
   return data as Servicio;
