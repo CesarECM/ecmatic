@@ -355,39 +355,63 @@ interface ResultadoMotor {
   historial: string;
 }
 
+function normalizarTel(raw?: string | null): string | null {
+  if (!raw) return null;
+  const limpio = raw.replace(/^\+/, "").replace(/[\s\-().]/g, "");
+  return limpio.length >= 7 ? limpio : null;
+}
+
 async function generarRespuestaMotorCompleto(
   contactId: string,
   cuerpo: string
 ): Promise<ResultadoMotor | null> {
   const supabase = createServiceClient();
-  const telefono = `ghl_${contactId}`;
 
   let nombre: string | null = null;
   let tagsGHL: string[] = [];
+  let realPhone: string | null = null;
   try {
     const c = await obtenerContacto(contactId);
-    nombre  = (c.name ?? [c.firstName, c.lastName].filter(Boolean).join(" ")) || null;
-    tagsGHL = c.tags ?? [];
+    nombre    = (c.name ?? [c.firstName, c.lastName].filter(Boolean).join(" ")) || null;
+    tagsGHL   = c.tags ?? [];
+    realPhone = normalizarTel(c.phone);
   } catch { /* usar null */ }
 
   // Ruta del pipeline SBC — garantiza que el motor inyecte la ficha del servicio
   const SBC_PIPELINE_RUTA = process.env.GHL_SBC_PIPELINE_RUTA ?? "smartbuilder_vd_wa_mqqau2nj";
 
+  // 1. Buscar primero por ghl_contact_id (evita duplicados con leads creados por el webhook de contacto)
+  const { data: existente } = await supabase
+    .from("leads")
+    .select("id, telefono")
+    .eq("ghl_contact_id", contactId)
+    .maybeSingle();
+
+  if (existente) {
+    // Si el lead tiene placeholder, actualizarlo al teléfono real
+    if (realPhone && existente.telefono?.startsWith("ghl_")) {
+      void supabase.from("leads").update({ telefono: realPhone }).eq("id", existente.id);
+    }
+  }
+
+  // 2. Upsert: usa teléfono real si está disponible, placeholder como fallback
+  const telefono = existente?.telefono?.startsWith("ghl_") && realPhone
+    ? realPhone
+    : (existente?.telefono ?? realPhone ?? `ghl_${contactId}`);
+
+  const camposUpsert: Record<string, unknown> = {
+    telefono,
+    canal_origen: "whatsapp",
+    privacidad_aceptada: true,
+    ghl_contact_id: contactId,
+    ...(nombre && { nombre }),
+    ...(tagsGHL.length && { tags_ghl: tagsGHL, tags_ghl_at: new Date().toISOString() }),
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: lead, error } = await (supabase as any)
     .from("leads")
-    .upsert(
-      {
-        telefono,
-        canal_origen:  "whatsapp",
-        privacidad_aceptada: true,
-        ...(nombre && { nombre }),
-        // MPS-21 S79 — cachear ghl_contact_id y tags del contacto
-        ghl_contact_id: contactId,
-        ...(tagsGHL.length && { tags_ghl: tagsGHL, tags_ghl_at: new Date().toISOString() }),
-      },
-      { onConflict: "telefono" }
-    )
+    .upsert(camposUpsert, { onConflict: "telefono" })
     .select("id, nombre, temperamento_inferido, pipeline_stage, pipeline_ruta, compra_previa, setter_fase_actual, setter_calificado, modo_revelacion")
     .single();
 

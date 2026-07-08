@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { moverLeadAction } from "@/app/(dashboard)/admin/leads/actions";
 import { KanbanCrossPipeline } from "./kanban-cross-pipeline";
 import type { LeadRow, EtapaPipeline } from "@/services/pipeline";
+import { telVisible } from "@/lib/utils";
 
 type PipelinePos = { ruta: string; etapa_actual: string };
 type PipelinesMap = Record<string, PipelinePos[]>;
@@ -60,10 +61,10 @@ function KanbanCard({
           href={`/admin/leads/${lead.id}`}
           className="font-medium text-sm hover:text-primary block truncate"
         >
-          {lead.nombre ?? lead.telefono ?? "Sin nombre"}
+          {lead.nombre ?? telVisible(lead.telefono) ?? "Sin nombre"}
         </a>
         <p className="text-xs text-muted-foreground truncate">
-          {lead.telefono ?? lead.email ?? "—"}
+          {telVisible(lead.telefono) ?? lead.email ?? "—"}
         </p>
         <div className="flex items-center gap-1.5 flex-wrap">
           {lead.temperamento_inferido && (

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { dispararCicloAction } from "@/app/(dashboard)/admin/nurturing/actions";
 import type { LeadParaNurturing } from "@/services/nurturing";
+import { telVisible } from "@/lib/utils";
 
 const CANAL_COLOR: Record<string, string> = {
   whatsapp: "bg-green-100 text-green-800",
@@ -79,10 +80,10 @@ export function LeadsNurturing({ leads }: Props) {
                         href={`/admin/leads/${lead.id}`}
                         className="font-medium hover:underline"
                       >
-                        {lead.nombre ?? lead.telefono ?? "Sin nombre"}
+                        {lead.nombre ?? telVisible(lead.telefono) ?? "Sin nombre"}
                       </a>
-                      {lead.telefono && lead.nombre && (
-                        <p className="text-xs text-muted-foreground">{lead.telefono}</p>
+                      {telVisible(lead.telefono) && lead.nombre && (
+                        <p className="text-xs text-muted-foreground">{telVisible(lead.telefono)}</p>
                       )}
                     </td>
                     <td className="py-3 px-4 text-muted-foreground">{lead.pipeline_stage}</td>

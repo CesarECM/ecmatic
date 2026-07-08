@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { moverLeadAction } from "@/app/(dashboard)/admin/leads/actions";
 import { AgregarAPanelBtn } from "@/components/oportunidades/AgregarAPanelBtn";
 import type { LeadRow } from "@/services/pipeline";
+import { telVisible } from "@/lib/utils";
 
 type Etapa = { id: string; nombre: string; orden: number };
 
@@ -38,7 +39,8 @@ function matchLead(lead: LeadRow, q: string): boolean {
   if (lead.nombre?.toLowerCase().includes(ql)) return true;
   if (lead.email?.toLowerCase().includes(ql)) return true;
   if (lead.ghl_contact_id?.toLowerCase().includes(ql)) return true;
-  if (qd && lead.telefono && soloDigitos(lead.telefono).includes(qd)) return true;
+  const tel = telVisible(lead.telefono);
+  if (qd && tel && soloDigitos(tel).includes(qd)) return true;
   return false;
 }
 
@@ -226,7 +228,8 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
               <p className="px-4 py-3 text-sm text-muted-foreground">Sin resultados para &ldquo;{busqueda}&rdquo;</p>
             ) : (
               sugerencias.map((lead, i) => {
-                const nombre = lead.nombre ?? lead.telefono ?? "Sin nombre";
+                const tel = telVisible(lead.telefono);
+                const nombre = lead.nombre ?? tel ?? "Sin nombre";
                 return (
                   <button
                     key={lead.id}
@@ -237,8 +240,8 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <span className="font-medium truncate">{highlight(nombre, busqueda)}</span>
                       <span className="text-xs text-muted-foreground">
-                        {lead.telefono && highlight(lead.telefono, busqueda)}
-                        {lead.telefono && lead.email && " · "}
+                        {tel && highlight(tel, busqueda)}
+                        {tel && lead.email && " · "}
                         {lead.email && highlight(lead.email, busqueda)}
                         {lead.ghl_contact_id && busqueda && lead.ghl_contact_id.toLowerCase().includes(busqueda.toLowerCase()) && (
                           <> · GHL: {highlight(lead.ghl_contact_id, busqueda)}</>
@@ -333,7 +336,8 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
           {filtrados.map((lead) => {
             const prev = etapaAnterior(lead);
             const next = etapaSiguiente(lead);
-            const nombre = lead.nombre ?? lead.telefono ?? "Sin nombre";
+            const tel = telVisible(lead.telefono);
+            const nombre = lead.nombre ?? tel ?? "Sin nombre";
 
             return (
               <Card key={lead.id} className="hover:shadow-sm transition-shadow">
@@ -353,7 +357,7 @@ export function LeadsList({ leads, etapasTripwire, etapasPremium }: LeadsListPro
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {lead.telefono ?? lead.email ?? "—"}
+                        {tel ?? lead.email ?? "—"}
                         <span className="ml-2 opacity-60">{fechaRelativa(lead.ultimo_mensaje_at)}</span>
                       </p>
                     </div>

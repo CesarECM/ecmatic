@@ -10,6 +10,7 @@ import { FacturacionCard } from "@/components/leads/facturacion-card";
 import type { EntradaContexto } from "@/lib/supabase/types";
 import { ScoreSaludHistorial } from "@/components/leads/score-salud-historial";
 import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
+import { telVisible } from "@/lib/utils";
 
 type EntradaScoreHistorial = { score: number; timestamp: string };
 
@@ -67,11 +68,11 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores, sena
         <a href="/admin/leads" className="text-muted-foreground hover:text-foreground text-sm mt-1">← Leads</a>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{lead.nombre ?? lead.telefono ?? "Sin nombre"}</h1>
+            <h1 className="text-2xl font-bold">{lead.nombre ?? telVisible(lead.telefono) ?? "Sin nombre"}</h1>
             <AuditorIABtn
               tipo="lead"
               id={lead.id}
-              nombre={lead.nombre ?? lead.telefono ?? "Este lead"}
+              nombre={lead.nombre ?? telVisible(lead.telefono) ?? "Este lead"}
             />
           </div>
           <div className="flex gap-2 mt-1 flex-wrap">
@@ -93,7 +94,7 @@ export function LeadPerfil({ lead, etapas, historial, mensajes, vendedores, sena
           <CardHeader className="pb-2"><CardTitle className="text-sm">Datos</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div><span className="text-muted-foreground">Nombre: </span>{lead.nombre ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
-            <div><span className="text-muted-foreground">Teléfono: </span>{lead.telefono ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
+            <div><span className="text-muted-foreground">Teléfono: </span>{telVisible(lead.telefono) ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
             <div><span className="text-muted-foreground">Email: </span>{lead.email ?? <span className="text-muted-foreground italic">Sin capturar</span>}</div>
             <div className="flex gap-4">
               <div><span className="text-muted-foreground">Score salud: </span><span className={`font-semibold ${scoreColor}`}>{lead.score_salud}</span></div>

@@ -19,6 +19,7 @@ import { AuditorIABtn } from "@/components/ui/auditor-ia-btn";
 import { AgregarAPanelBtn } from "@/components/oportunidades/AgregarAPanelBtn";
 import { Badge } from "@/components/ui/badge";
 import { eliminarLlamadaAdminAction } from "./actions";
+import { telVisible } from "@/lib/utils";
 
 export const revalidate = 0;
 
@@ -127,8 +128,8 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
   const ghlUrl = ghlContactId && process.env.GHL_LOCATION_ID
     ? `https://app.relief.academy/v2/location/${process.env.GHL_LOCATION_ID}/contacts/detail/${ghlContactId}`
     : null;
-  const waUrl = lead.telefono
-    ? `https://wa.me/${lead.telefono.replace(/\D/g, "")}`
+  const waUrl = telVisible(lead.telefono)
+    ? `https://wa.me/${telVisible(lead.telefono)!.replace(/\D/g, "")}`
     : null;
 
   // Métricas de tiempo
@@ -180,7 +181,7 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
           <div className="flex-1 min-w-0 space-y-1">
             {/* Fila 1: nombre + badges */}
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-bold truncate">{lead.nombre ?? lead.telefono ?? "Sin nombre"}</h1>
+              <h1 className="text-lg font-bold truncate">{lead.nombre ?? telVisible(lead.telefono) ?? "Sin nombre"}</h1>
               <Badge>{lead.pipeline_stage}</Badge>
               <Badge variant="secondary">{lead.pipeline_ruta}</Badge>
               {temperamento && (
@@ -234,7 +235,7 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
           <div className="flex flex-col items-end gap-1.5 shrink-0 mt-0.5">
             <div className="flex items-center gap-1">
               <RefreshBtn />
-              <AuditorIABtn tipo="lead" id={lead.id} nombre={lead.nombre ?? lead.telefono ?? "Este lead"} />
+              <AuditorIABtn tipo="lead" id={lead.id} nombre={lead.nombre ?? telVisible(lead.telefono) ?? "Este lead"} />
             </div>
             <AgregarAPanelBtn leadId={lead.id} variante="completo" />
           </div>
@@ -246,8 +247,8 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
         <div className="flex flex-col h-[55vh] overflow-hidden md:h-auto md:min-h-0 md:overflow-hidden border-b md:border-b-0 md:border-r md:w-[55%]">
           <ChatWhatsAppLead
             leadId={id}
-            tieneTelefono={!!lead.telefono}
-            telefonoLead={lead.telefono ?? null}
+            tieneTelefono={!!telVisible(lead.telefono)}
+            telefonoLead={telVisible(lead.telefono)}
             mensajesIniciales={mensajesIniciales}
             hayMasIniciales={hayMasIniciales}
             dentro24h={dentro24h}

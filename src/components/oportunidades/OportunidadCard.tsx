@@ -8,6 +8,7 @@ import {
   removerDelPanelAction, desestimnarSugerenciaIAAction,
 } from "@/app/(dashboard)/admin/oportunidades/actions";
 import { NotasHistorial } from "./NotasHistorial";
+import { telVisible } from "@/lib/utils";
 
 const DISC_BADGE: Record<string, string> = {
   D: "bg-red-100 text-red-700",
@@ -41,8 +42,9 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
   const ghlLink = lead.ghl_contact_id
     ? `https://app.gohighlevel.com/contacts/${lead.ghl_contact_id}`
     : null;
-  const waLink = lead.telefono
-    ? `https://wa.me/${lead.telefono.replace(/\D/g, "")}`
+  const telReal = telVisible(lead.telefono);
+  const waLink = telReal
+    ? `https://wa.me/${telReal.replace(/\D/g, "")}`
     : null;
 
   function copiarDatos() {
@@ -141,7 +143,7 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
 
         {/* Datos de contacto */}
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-          {lead.telefono && <span>📞 {lead.telefono}</span>}
+          {telReal && <span>📞 {telReal}</span>}
           {lead.email    && <span>✉ {lead.email}</span>}
           <span>⭐ {lead.score_salud}/100</span>
         </div>
