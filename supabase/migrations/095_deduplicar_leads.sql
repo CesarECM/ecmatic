@@ -109,12 +109,8 @@ WHERE sl.lead_id = d.loser_id
       AND x.estado = 'activo'
   );
 
--- ── 4. Migrar intentos de seguimiento ───────────────────────────────────────────
-
-UPDATE seguimiento_intentos
-SET lead_id = d.winner_id
-FROM _dupes d
-WHERE seguimiento_intentos.lead_id = d.loser_id;
+-- ── 4. (followup_attempts_log tiene ON DELETE CASCADE en lead_id y seguimiento_id,
+--         cae automáticamente al borrar el loser — no requiere migración explícita)
 
 -- ── 5. Migrar oportunidades_panel (UNIQUE lead_id) ───────────────────────────────
 -- Si el winner ya tiene panel propio, el del loser cae por CASCADE.
