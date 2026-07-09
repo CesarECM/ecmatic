@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { OportunidadNota } from "@/services/oportunidades";
+import type { OportunidadNota, OportunidadRow } from "@/services/oportunidades";
 import { agregarNotaAction, editarNotaAction, eliminarNotaAction } from "@/app/(dashboard)/admin/oportunidades/actions";
 
 interface Props {
@@ -10,9 +10,11 @@ interface Props {
   leadId: string;
   initialNotas: OportunidadNota[];
   preguntaClave?: string | null;
+  // S128.3/S129.2 — cuando se tienen callbacks, no se llama router.refresh()
+  onScoreUpdate?: (data: Partial<OportunidadRow>) => void;
 }
 
-export function NotasHistorial({ oportunidadId, leadId, initialNotas, preguntaClave }: Props) {
+export function NotasHistorial({ oportunidadId, leadId, initialNotas, preguntaClave, onScoreUpdate }: Props) {
   const router    = useRouter();
   const inputRef  = useRef<HTMLTextAreaElement>(null);
   const [notas,   setNotas]   = useState<OportunidadNota[]>(initialNotas);
@@ -28,12 +30,19 @@ export function NotasHistorial({ oportunidadId, leadId, initialNotas, preguntaCl
     analyzeTimer.current = setTimeout(async () => {
       setAnalyzing(true);
       try {
-        await fetch("/api/admin/oportunidades/analizar-uno", {
+        const res = await fetch("/api/admin/oportunidades/analizar-uno", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ leadId }),
         });
-        router.refresh();
+        const json = await res.json() as { ok?: boolean; data?: Partial<OportunidadRow> };
+        if (json.data && onScoreUpdate) {
+          // S129.2 — actualizar estado local sin reload
+          onScoreUpdate(json.data);
+        } else {
+          // fallback cuando no hay callback (uso standalone)
+          router.refresh();
+        }
       } catch { /* no bloquear */ }
       finally { setAnalyzing(false); }
     }, 3000);
@@ -120,7 +129,9 @@ export function NotasHistorial({ oportunidadId, leadId, initialNotas, preguntaCl
 
       {/* ── Indicador IA ── */}
       {analyzing && (
-        <p className="text-[9px] text-muted-foreground">⟳ actualizando score…</p>
+        <p className="text-[9px] text-muted-foreground flex items-center gap-1">
+          <span className="animate-spin">⟳</span> actualizando score…
+        </p>
       )}
 
       {/* ── Historial ── */}

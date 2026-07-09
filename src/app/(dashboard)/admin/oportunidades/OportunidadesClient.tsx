@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -32,9 +32,23 @@ const SCORE_COLOR = (s: number) =>
   s >= 70 ? "text-green-600" : s >= 40 ? "text-yellow-600" : "text-muted-foreground";
 
 export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
-  const router   = useRouter();
-  const [items,      setItems]      = useState<OportunidadRow[]>(lista.top10);
-  const [selected,   setSelected]   = useState<OportunidadRow | null>(null);
+  const router = useRouter();
+
+  // S127.1 — Todas las secciones en estado local (antes esperando/seguimiento eran props estáticas)
+  const [items,       setItems]       = useState<OportunidadRow[]>(lista.top10);
+  const [esperando,   setEsperando]   = useState<OportunidadRow[]>(lista.esperando);
+  const [seguimiento, setSeguimiento] = useState<OportunidadRow[]>(lista.seguimiento);
+
+  // S127.2 — selected por id; derivado del estado actual → siempre fresco, se cierra solo al remover
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(
+    () => [...items, ...esperando, ...seguimiento].find((op) => op.id === selectedId) ?? null,
+    [selectedId, items, esperando, seguimiento],
+  );
+
+  // S127.3 — rastrear qué lead_id está siendo mutado para mostrar indicador en filas
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
   const [analizando, setAnalizando] = useState(false);
   const [msg,        setMsg]        = useState<string | null>(null);
   const [mostrarEspera,      setMostrarEspera]      = useState(true);
@@ -43,12 +57,30 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const panelVacio = items.length === 0 && lista.esperando.length === 0 && lista.seguimiento.length === 0;
+  const panelVacio = items.length === 0 && esperando.length === 0 && seguimiento.length === 0;
+  const totalPool  = items.length + esperando.length + seguimiento.length;
 
   const staleHours = ultimaIaAt
     ? Math.floor((Date.now() - new Date(ultimaIaAt).getTime()) / 3_600_000)
     : null;
   const isStale = staleHours === null || staleHours >= 24;
+
+  // S127.1 — Quitar un lead de cualquier sección sin reload
+  function handleRemoveFromList(leadId: string) {
+    setItems((prev)       => prev.filter((op) => op.lead_id !== leadId));
+    setEsperando((prev)   => prev.filter((op) => op.lead_id !== leadId));
+    setSeguimiento((prev) => prev.filter((op) => op.lead_id !== leadId));
+    // Si era el lead abierto en la modal, la cierra automáticamente via derived selected
+  }
+
+  // S127.1 — Actualizar campos de un lead en todas las secciones sin reload
+  function handleUpdateInList(leadId: string, updates: Partial<OportunidadRow>) {
+    const patch = (op: OportunidadRow): OportunidadRow =>
+      op.lead_id === leadId ? { ...op, ...updates } : op;
+    setItems((prev)       => prev.map(patch));
+    setEsperando((prev)   => prev.map(patch));
+    setSeguimiento((prev) => prev.map(patch));
+  }
 
   async function handleAnalizar() {
     setAnalizando(true); setMsg(null);
@@ -56,7 +88,7 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
       const res  = await fetch("/api/admin/oportunidades/analizar", { method: "POST" });
       const data = await res.json() as { exitosos?: number; errores?: number; agregados?: number };
       setMsg(`${data.exitosos ?? 0} analizados${data.agregados ? `, ${data.agregados} nuevos` : ""}${data.errores ? `, ${data.errores} errores` : ""}`);
-      router.refresh();
+      router.refresh(); // refresh completo solo al reanalizar todo
     } catch { setMsg("Error al analizar. Intenta de nuevo."); }
     finally  { setAnalizando(false); }
   }
@@ -73,11 +105,10 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
     );
   }
 
+  // Sin router.refresh() al cerrar: el estado local ya está al día
   function handleOpenChange(open: boolean) {
-    if (!open) { setSelected(null); router.refresh(); }
+    if (!open) setSelectedId(null);
   }
-
-  const totalPool = lista.top10.length + lista.esperando.length + lista.seguimiento.length;
 
   return (
     <div className="space-y-4">
@@ -130,7 +161,8 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
                     key={op.id}
                     op={op}
                     posicion={idx + 1}
-                    onClick={() => setSelected(op)}
+                    isUpdating={updatingId === op.lead_id}
+                    onClick={() => setSelectedId(op.id)}
                   />
                 ))}
               </div>
@@ -140,24 +172,25 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
       )}
 
       {/* ── En espera (fecha_compromiso futura) ──────────── */}
-      {lista.esperando.length > 0 && (
+      {esperando.length > 0 && (
         <div>
           <button
             onClick={() => setMostrarEspera((v) => !v)}
             className="flex items-center gap-2 text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-2 cursor-pointer hover:opacity-70"
           >
             <span>{mostrarEspera ? "▾" : "▸"}</span>
-            En espera ({lista.esperando.length})
+            En espera ({esperando.length})
             <span className="normal-case font-normal text-amber-600">— vuelven al reactivarse</span>
           </button>
           {mostrarEspera && (
             <div className="w-full rounded-xl border border-amber-200 overflow-hidden divide-y divide-amber-100">
-              {lista.esperando.map((op, idx) => (
+              {esperando.map((op, idx) => (
                 <EsperandoRow
                   key={op.id}
                   op={op}
                   posicion={idx + 1}
-                  onClick={() => setSelected(op)}
+                  isUpdating={updatingId === op.lead_id}
+                  onClick={() => setSelectedId(op.id)}
                 />
               ))}
             </div>
@@ -166,24 +199,25 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
       )}
 
       {/* ── En seguimiento (fuera del top 10) ────────────── */}
-      {lista.seguimiento.length > 0 && (
+      {seguimiento.length > 0 && (
         <div>
           <button
             onClick={() => setMostrarSeguimiento((v) => !v)}
             className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 cursor-pointer hover:opacity-70"
           >
             <span>{mostrarSeguimiento ? "▾" : "▸"}</span>
-            En seguimiento ({lista.seguimiento.length})
+            En seguimiento ({seguimiento.length})
             <span className="normal-case font-normal">— monitoreados, fuera del foco principal</span>
           </button>
           {mostrarSeguimiento && (
             <div className="w-full rounded-xl border overflow-hidden divide-y opacity-75">
-              {lista.seguimiento.map((op, idx) => (
+              {seguimiento.map((op, idx) => (
                 <SimpleRow
                   key={op.id}
                   op={op}
                   posicion={idx + 1}
-                  onClick={() => setSelected(op)}
+                  isUpdating={updatingId === op.lead_id}
+                  onClick={() => setSelectedId(op.id)}
                 />
               ))}
             </div>
@@ -202,9 +236,14 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
               op={selected}
               posicionLabel={
                 items.findIndex((i) => i.id === selected.id) + 1 ||
-                lista.esperando.findIndex((i) => i.id === selected.id) + 1 ||
-                lista.seguimiento.findIndex((i) => i.id === selected.id) + 1
+                esperando.findIndex((i) => i.id === selected.id) + 1 ||
+                seguimiento.findIndex((i) => i.id === selected.id) + 1
               }
+              isUpdating={updatingId === selected.lead_id}
+              onRemove={handleRemoveFromList}
+              onUpdate={handleUpdateInList}
+              onStartUpdating={(leadId) => setUpdatingId(leadId)}
+              onEndUpdating={() => setUpdatingId(null)}
             />
           )}
         </DialogContent>
@@ -215,8 +254,8 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
 
 // ── Fila DnD (Top 10) ─────────────────────────────────────────────────────────
 
-function SortableRow({ op, posicion, onClick }: {
-  op: OportunidadRow; posicion: number; onClick: () => void;
+function SortableRow({ op, posicion, isUpdating, onClick }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: op.id });
@@ -230,26 +269,29 @@ function SortableRow({ op, posicion, onClick }: {
 
   return (
     <div ref={setNodeRef} style={style}
-      className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors group">
+      className={`flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors group
+        ${isUpdating ? "opacity-60" : ""}`}>
       <span {...attributes} {...listeners}
         className="cursor-grab text-muted-foreground/40 hover:text-muted-foreground select-none text-base leading-none shrink-0"
         title="Arrastrar">⠿</span>
-      <LeadIndicadores op={op} posicion={posicion} onClick={onClick} />
+      <LeadIndicadores op={op} posicion={posicion} isUpdating={isUpdating} onClick={onClick} />
     </div>
   );
 }
 
 // ── Fila En Espera (con countdown) ───────────────────────────────────────────
 
-function EsperandoRow({ op, posicion, onClick }: {
-  op: OportunidadRow; posicion: number; onClick: () => void;
+function EsperandoRow({ op, posicion, isUpdating, onClick }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
 }) {
   const countdown = op.fecha_compromiso ? calcularCountdown(op.fecha_compromiso) : null;
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-amber-50/40 hover:bg-amber-50 transition-colors">
+    <div className={`flex items-center gap-3 px-4 py-3 bg-amber-50/40 hover:bg-amber-50 transition-colors
+      ${isUpdating ? "opacity-60" : ""}`}>
       <span className="text-xs shrink-0 w-5 text-center text-amber-600 font-bold">{posicion}</span>
       <button onClick={onClick}
         className="flex-1 text-left text-sm font-medium hover:text-primary truncate cursor-pointer">
+        {isUpdating && <span className="animate-spin mr-1 text-[10px]">⟳</span>}
         {op.leads?.nombre ?? <span className="text-muted-foreground italic">Sin nombre</span>}
       </button>
       {countdown && (
@@ -264,14 +306,16 @@ function EsperandoRow({ op, posicion, onClick }: {
 
 // ── Fila simple (Seguimiento pool) ───────────────────────────────────────────
 
-function SimpleRow({ op, posicion, onClick }: {
-  op: OportunidadRow; posicion: number; onClick: () => void;
+function SimpleRow({ op, posicion, isUpdating, onClick }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors">
+    <div className={`flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors
+      ${isUpdating ? "opacity-60" : ""}`}>
       <span className="text-xs font-bold text-muted-foreground w-5 text-center shrink-0">{posicion}</span>
       <button onClick={onClick}
         className="flex-1 text-left text-sm font-medium hover:text-primary truncate cursor-pointer">
+        {isUpdating && <span className="animate-spin mr-1 text-[10px]">⟳</span>}
         {op.leads?.nombre ?? <span className="text-muted-foreground italic">Sin nombre</span>}
       </button>
       <ScoreChip score={op.score_cierre} />
@@ -281,8 +325,8 @@ function SimpleRow({ op, posicion, onClick }: {
 
 // ── Sub-componente reutilizable de indicadores ────────────────────────────────
 
-function LeadIndicadores({ op, posicion, onClick }: {
-  op: OportunidadRow; posicion: number; onClick: () => void;
+function LeadIndicadores({ op, posicion, isUpdating, onClick }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
 }) {
   const sugDot     = op.ia_sugiere !== "ninguna" ? SUGIERE_DOT[op.ia_sugiere] : null;
   const tieneNotas = (op.oportunidades_notas?.length ?? 0) > 0;
@@ -296,6 +340,7 @@ function LeadIndicadores({ op, posicion, onClick }: {
         className="flex-1 text-left text-sm font-medium hover:text-primary truncate cursor-pointer">
         <span className="flex items-center gap-1">
           {op.fijado && <span className="text-[9px] text-amber-500" title="Anclado">⚓</span>}
+          {isUpdating && <span className="animate-spin text-[10px] text-muted-foreground">⟳</span>}
           {op.leads?.nombre ?? <span className="text-muted-foreground italic">Sin nombre</span>}
         </span>
       </button>

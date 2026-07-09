@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { OportunidadRow } from "@/services/oportunidades";
 import {
   cerrarGanadoAction, cerrarPerdidoAction, posponerSeguimientoAction,
@@ -28,15 +27,23 @@ interface Props {
   op: OportunidadRow;
   posicionLabel: number;
   dragHandleProps?: Record<string, unknown>;
+  // S128 — callbacks para reactividad sin router.refresh()
+  isUpdating?: boolean;
+  onRemove?: (leadId: string) => void;
+  onUpdate?: (leadId: string, updates: Partial<OportunidadRow>) => void;
+  onStartUpdating?: (leadId: string) => void;
+  onEndUpdating?: () => void;
 }
 
-export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
-  const router  = useRouter();
-  const lead    = op.leads;
+export function OportunidadCard({
+  op, posicionLabel, dragHandleProps,
+  isUpdating, onRemove, onUpdate, onStartUpdating, onEndUpdating,
+}: Props) {
+  const lead = op.leads;
 
-  const [pendingG,  startG]  = useTransition();
-  const [pendingP,  startP]  = useTransition();
-  const [pendingR,  startR]  = useTransition();
+  const [pendingG,   startG]   = useTransition();
+  const [pendingP,   startP]   = useTransition();
+  const [pendingR,   startR]   = useTransition();
   const [pendingFij, startFij] = useTransition();
 
   const [horasPosponer,  setHorasPosponer]  = useState(4);
@@ -65,45 +72,96 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
 
   function handleCerrarGanado() {
     if (!confirm(`¿Cerrar a ${lead?.nombre ?? "este lead"} como GANADO?`)) return;
-    startG(async () => { await cerrarGanadoAction(op.lead_id); router.refresh(); });
+    startG(async () => {
+      onStartUpdating?.(op.lead_id);
+      try {
+        await cerrarGanadoAction(op.lead_id);
+        onRemove?.(op.lead_id);
+      } finally { onEndUpdating?.(); }
+    });
   }
+
   function handleCerrarPerdido() {
     if (!confirm(`¿Marcar a ${lead?.nombre ?? "este lead"} como PERDIDO?`)) return;
-    startP(async () => { await cerrarPerdidoAction(op.lead_id); router.refresh(); });
+    startP(async () => {
+      onStartUpdating?.(op.lead_id);
+      try {
+        await cerrarPerdidoAction(op.lead_id);
+        onRemove?.(op.lead_id);
+      } finally { onEndUpdating?.(); }
+    });
   }
+
   function handleRemover() {
     if (!confirm("¿Quitar este lead del panel? No se cerrará, solo saldrá del seguimiento.")) return;
-    startR(async () => { await removerDelPanelAction(op.lead_id); router.refresh(); });
+    startR(async () => {
+      onStartUpdating?.(op.lead_id);
+      try {
+        await removerDelPanelAction(op.lead_id);
+        onRemove?.(op.lead_id);
+      } finally { onEndUpdating?.(); }
+    });
   }
+
   function handlePosponer() {
-    startG(async () => { await posponerSeguimientoAction(op.lead_id, horasPosponer); router.refresh(); });
+    startG(async () => {
+      onStartUpdating?.(op.lead_id);
+      try {
+        await posponerSeguimientoAction(op.lead_id, horasPosponer);
+      } finally { onEndUpdating?.(); }
+    });
   }
+
   function handleToggleFijado() {
-    startFij(async () => { await fijarEnPanelAction(op.lead_id, !op.fijado); router.refresh(); });
+    const nuevoFijado = !op.fijado;
+    // Optimistic: toggle inmediato
+    onUpdate?.(op.lead_id, { fijado: nuevoFijado });
+    startFij(async () => {
+      try {
+        await fijarEnPanelAction(op.lead_id, nuevoFijado);
+      } catch {
+        // Rollback si falla
+        onUpdate?.(op.lead_id, { fijado: op.fijado });
+      }
+    });
   }
 
   async function handleGuardarCampos() {
     setSavingCampos(true);
+    onStartUpdating?.(op.lead_id);
     try {
+      const nuevoTicket = valorTicket ? Number(valorTicket) : null;
+      const nuevaFecha  = fechaCompromiso ? new Date(fechaCompromiso).toISOString() : null;
       await actualizarCamposAction(op.id, {
-        valor_ticket:    valorTicket ? Number(valorTicket) : null,
-        fecha_compromiso: fechaCompromiso ? new Date(fechaCompromiso).toISOString() : null,
+        valor_ticket:     nuevoTicket,
+        fecha_compromiso: nuevaFecha,
       });
+      onUpdate?.(op.lead_id, { valor_ticket: nuevoTicket, fecha_compromiso: nuevaFecha });
       setEditandoCampos(false);
-      router.refresh();
     } catch { /* ignore */ }
-    finally { setSavingCampos(false); }
+    finally {
+      setSavingCampos(false);
+      onEndUpdating?.();
+    }
   }
 
   const sugerirCfg = op.ia_sugiere !== "ninguna" ? SUGIERE_CONFIG[op.ia_sugiere] : null;
 
-  // Formatear fecha_compromiso relativa
   const fechaCompromisoLabel = op.fecha_compromiso
     ? formatearFechaRelativa(op.fecha_compromiso)
     : null;
 
+  const anyPending = pendingG || pendingP || pendingR || pendingFij || savingCampos;
+
   return (
     <div className="rounded-xl border bg-card shadow-sm flex flex-col gap-0 overflow-hidden">
+
+      {/* ── Banner "Actualizando" — S128.2 ───────────────── */}
+      {(isUpdating || anyPending) && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/60 border-b text-[10px] text-muted-foreground">
+          <span className="animate-spin">⟳</span> Actualizando…
+        </div>
+      )}
 
       {/* ── Cabecera ──────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b bg-muted/30">
@@ -138,7 +196,11 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
           <span className="font-semibold">{sugerirCfg.label}</span>
           {op.ia_razon && <span className="opacity-80">— {op.ia_razon}</span>}
           <button
-            onClick={() => void desestimnarSugerenciaIAAction(op.lead_id).then(() => router.refresh())}
+            onClick={() => {
+              // Optimistic: quitar sugerencia inmediatamente
+              onUpdate?.(op.lead_id, { ia_sugiere: "ninguna", ia_razon: null });
+              void desestimnarSugerenciaIAAction(op.lead_id);
+            }}
             className="ml-auto shrink-0 opacity-50 hover:opacity-100 text-base leading-none"
             title="Desestimar sugerencia">×</button>
         </div>
@@ -234,6 +296,7 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
             leadId={op.lead_id}
             initialNotas={op.oportunidades_notas ?? []}
             preguntaClave={op.pregunta_clave}
+            onScoreUpdate={(data) => onUpdate?.(op.lead_id, data)}
           />
         </div>
 
@@ -274,17 +337,17 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
 
       {/* ── Acciones ──────────────────────────────────────────── */}
       <div className="px-4 py-2 border-t bg-muted/20 flex flex-wrap items-center gap-2">
-        <button onClick={handleCerrarGanado} disabled={pendingG}
+        <button onClick={handleCerrarGanado} disabled={pendingG || isUpdating}
           className="rounded px-2.5 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer">
           {pendingG ? "…" : "Ganado"}
         </button>
-        <button onClick={handleCerrarPerdido} disabled={pendingP}
+        <button onClick={handleCerrarPerdido} disabled={pendingP || isUpdating}
           className="rounded px-2.5 py-1 text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 cursor-pointer">
           {pendingP ? "…" : "Perdido"}
         </button>
         <button
           onClick={handleToggleFijado}
-          disabled={pendingFij}
+          disabled={pendingFij || isUpdating}
           title={op.fijado ? "Liberar posición (el algoritmo puede moverlo)" : "Anclar en posición actual"}
           className={`rounded px-2.5 py-1 text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50
             ${op.fijado
@@ -301,11 +364,11 @@ export function OportunidadCard({ op, posicionLabel, dragHandleProps }: Props) {
               <option key={h} value={h}>+{h}h</option>
             ))}
           </select>
-          <button onClick={handlePosponer} disabled={pendingG}
+          <button onClick={handlePosponer} disabled={pendingG || isUpdating}
             className="rounded px-2 py-0.5 text-[10px] border text-muted-foreground hover:bg-muted/60 cursor-pointer">
             Posponer
           </button>
-          <button onClick={handleRemover} disabled={pendingR}
+          <button onClick={handleRemover} disabled={pendingR || isUpdating}
             className="rounded px-2 py-0.5 text-[10px] border border-dashed text-muted-foreground hover:text-foreground cursor-pointer">
             Quitar
           </button>

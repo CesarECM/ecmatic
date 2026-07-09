@@ -141,7 +141,8 @@ Responde SOLO JSON (sin markdown):
     await guardarAnalisisIA(leadId, analisis);
     void actualizarScoreSalud(leadId).catch(() => null);
 
-    return NextResponse.json({ ok: true });
+    // S129.1 — devolver datos para que el cliente actualice el card sin router.refresh()
+    return NextResponse.json({ ok: true, data: analisis });
   } catch (err) {
     void logSistema({ categoria: "ia", tipoAccion: "oportunidades.analizar_uno",
       fase: "error", leadId, resultado: err instanceof Error ? err.message.slice(0, 200) : "Error" });
