@@ -91,23 +91,46 @@ export async function procesarContactoGHL(payload: GHLWebhookPayload): Promise<v
   const supabase = createServiceClient();
   const canal = canalDesdeSource(source, utmSource);
 
-  const { data: existente } = await supabase
-    .from("leads")
-    .select("id, canal_origen, nombre, email")
-    .eq("telefono", telefono)
-    .maybeSingle();
-
-  let leadId: string;
-
   const ghlContactId = c.id ?? payload.contact_id ?? null;
   const tagsGHL      = c.tags ?? payload.tags ?? [];
+
+  // 1. Buscar por ghl_contact_id primero — evita crear un duplicado cuando el lead
+  //    fue creado con teléfono placeholder por ghl-respuesta-sbc antes del ContactCreate.
+  let existente: {
+    id: string; canal_origen: string; nombre: string | null;
+    email: string | null; telefono: string | null;
+  } | null = null;
+
+  if (ghlContactId) {
+    const { data } = await supabase
+      .from("leads")
+      .select("id, canal_origen, nombre, email, telefono")
+      .eq("ghl_contact_id", ghlContactId)
+      .maybeSingle();
+    existente = data ?? null;
+  }
+
+  // 2. Si no encontró por ghl_contact_id, buscar por teléfono real.
+  if (!existente) {
+    const { data } = await supabase
+      .from("leads")
+      .select("id, canal_origen, nombre, email, telefono")
+      .eq("telefono", telefono)
+      .maybeSingle();
+    existente = data ?? null;
+  }
+
+  let leadId: string;
 
   if (existente) {
     leadId = existente.id;
     const updates: {
       nombre?: string; email?: string; canal_origen?: string;
       ghl_contact_id?: string; tags_ghl?: string[]; tags_ghl_at?: string;
+      telefono?: string;
     } = {};
+    // Si el lead tenía teléfono placeholder, reemplazarlo con el real
+    if (existente.telefono?.startsWith("ghl_")) updates.telefono = telefono;
     if (!existente.nombre && nombre) updates.nombre = nombre;
     if (!existente.email && email) updates.email = email;
     if (existente.canal_origen === "whatsapp" && canal !== "ghl") {
