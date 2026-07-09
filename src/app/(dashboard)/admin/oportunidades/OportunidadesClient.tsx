@@ -110,6 +110,10 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
     if (!open) setSelectedId(null);
   }
 
+  // Potencial de ingresos por sección (null si ningún lead tiene valor_ticket)
+  const potencialFoco   = calcularPotencial(items);
+  const potencialEspera = calcularPotencial(esperando);
+
   return (
     <div className="space-y-4">
       {/* ── Barra IA ─────────────────────────────────────── */}
@@ -150,9 +154,16 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
       {/* ── Top 10 — Lista DnD ───────────────────────────── */}
       {items.length > 0 && (
         <div>
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            En foco ({items.length})
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              En foco ({items.length})
+            </p>
+            {potencialFoco !== null && (
+              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                {potencialFoco} potencial
+              </span>
+            )}
+          </div>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
               <div className="w-full rounded-xl border overflow-hidden divide-y">
@@ -174,14 +185,21 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
       {/* ── En espera (fecha_compromiso futura) ──────────── */}
       {esperando.length > 0 && (
         <div>
-          <button
-            onClick={() => setMostrarEspera((v) => !v)}
-            className="flex items-center gap-2 text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-2 cursor-pointer hover:opacity-70"
-          >
-            <span>{mostrarEspera ? "▾" : "▸"}</span>
-            En espera ({esperando.length})
-            <span className="normal-case font-normal text-amber-600">— vuelven al reactivarse</span>
-          </button>
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={() => setMostrarEspera((v) => !v)}
+              className="flex items-center gap-2 text-[10px] font-semibold text-amber-700 uppercase tracking-wide cursor-pointer hover:opacity-70"
+            >
+              <span>{mostrarEspera ? "▾" : "▸"}</span>
+              En espera ({esperando.length})
+              <span className="normal-case font-normal text-amber-600">— vuelven al reactivarse</span>
+            </button>
+            {potencialEspera !== null && (
+              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                {potencialEspera} potencial
+              </span>
+            )}
+          </div>
           {mostrarEspera && (
             <div className="w-full rounded-xl border border-amber-200 overflow-hidden divide-y divide-amber-100">
               {esperando.map((op, idx) => (
@@ -371,6 +389,15 @@ function ScoreChip({ score }: { score: number }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function calcularPotencial(lista: OportunidadRow[]): string | null {
+  const conTicket = lista.filter((op) => op.valor_ticket != null);
+  if (conTicket.length === 0) return null;
+  const total = conTicket.reduce((acc, op) => acc + (op.valor_ticket ?? 0), 0);
+  if (total >= 1_000_000) return `$${(total / 1_000_000).toFixed(1)}M MXN`;
+  if (total >= 10_000)    return `$${Math.round(total / 1_000)}k MXN`;
+  return `$${total.toLocaleString("es-MX")} MXN`;
+}
 
 function calcularCountdown(isoStr: string): string {
   const ms = new Date(isoStr).getTime() - Date.now();
