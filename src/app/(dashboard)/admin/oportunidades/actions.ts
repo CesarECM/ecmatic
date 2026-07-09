@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { moverLead } from "@/services/pipeline";
 import { obtenerActivo, posponerSeguimientoFlexible } from "@/services/seguimiento-lead";
 import {
@@ -10,15 +9,18 @@ import {
 } from "@/services/oportunidades";
 import type { OportunidadNota } from "@/services/oportunidades";
 import { logSistema } from "@/services/log-sistema";
+import { revalidatePath } from "next/cache";
 
-const PATH = "/admin/oportunidades";
+// Todas las mutaciones finas usan estado optimista en el cliente (MPS-37).
+// revalidatePath() se omite aquí para evitar que Next.js 15+ haga un soft-refresh
+// automático que reinicializaría el estado local. La página tiene revalidate=0:
+// la próxima visita siempre obtiene datos frescos del servidor.
 
 export async function cerrarGanadoAction(leadId: string) {
   await moverLead(leadId, "Comprado", "admin", "Cerrado desde panel de oportunidades");
   await removerDelPanel(leadId, "cerrado_ganado");
   void logSistema({ categoria: "ui", tipoAccion: "oportunidades.cerrar_ganado",
     fase: "ok", leadId });
-  revalidatePath(PATH);
 }
 
 export async function cerrarPerdidoAction(leadId: string) {
@@ -26,7 +28,6 @@ export async function cerrarPerdidoAction(leadId: string) {
   await removerDelPanel(leadId, "cerrado_perdido");
   void logSistema({ categoria: "ui", tipoAccion: "oportunidades.cerrar_perdido",
     fase: "ok", leadId });
-  revalidatePath(PATH);
 }
 
 export async function posponerSeguimientoAction(leadId: string, horas: number) {
@@ -36,33 +37,27 @@ export async function posponerSeguimientoAction(leadId: string, horas: number) {
   await posponerSeguimientoFlexible(seg.id, proximoAt);
   void logSistema({ categoria: "ui", tipoAccion: "oportunidades.posponer",
     fase: "ok", leadId, resultado: `+${horas}h` });
-  revalidatePath(PATH);
 }
 
 export async function removerDelPanelAction(leadId: string) {
   await removerDelPanel(leadId, "manual");
-  revalidatePath(PATH);
 }
 
 // MPS-36: DnD suma momentum al lead movido (posición destino < posición origen = subió = +15)
 export async function reordenarAction(items: { id: string; posicion: number; leadId: string }[]) {
   await actualizarOrden(items.map(({ id, posicion }) => ({ id, posicion })));
-  // Registrar momentum en todos los leads reordenados (el que subió más es el más importante)
   await Promise.all(
     items.map(({ leadId }) => registrarMomentum(leadId, "drag_reorder").catch(() => null))
   );
-  revalidatePath(PATH);
 }
 
 export async function desestimnarSugerenciaIAAction(leadId: string) {
   await limpiarSugerenciaIA(leadId);
-  revalidatePath(PATH);
 }
 
 // MPS-36: anclar/desanclar un lead en su posición actual
 export async function fijarEnPanelAction(leadId: string, fijado: boolean) {
   await fijarEnPanel(leadId, fijado);
-  revalidatePath(PATH);
 }
 
 // MPS-36: editar valor_ticket y/o fecha_compromiso manualmente
@@ -71,7 +66,6 @@ export async function actualizarCamposAction(
   campos: { valor_ticket?: number | null; fecha_compromiso?: string | null }
 ) {
   await actualizarCamposPanel(oportunidadId, campos);
-  revalidatePath(PATH);
 }
 
 // ── CRUD Notas ────────────────────────────────────────────────────────────────
@@ -82,30 +76,28 @@ export async function agregarNotaAction(
   contenido: string
 ): Promise<OportunidadNota> {
   const nota = await agregarNota(oportunidadId, leadId, contenido);
-  revalidatePath(PATH);
   return nota;
 }
 
 export async function editarNotaAction(notaId: string, contenido: string): Promise<void> {
   await editarNota(notaId, contenido);
-  revalidatePath(PATH);
 }
 
 export async function eliminarNotaAction(notaId: string): Promise<void> {
   await eliminarNota(notaId);
-  revalidatePath(PATH);
 }
 
 // ── AgregarAlPanel ────────────────────────────────────────────────────────────
+// Sí usa revalidatePath: se llama desde otras páginas (ej: lead detail),
+// necesita invalidar el router cache del panel para la próxima visita.
 
-// MPS-36: sin límite de 10. Suma momentum +10 al agregarlas.
 export async function agregarAOportunidadesAction(
   leadId: string
 ): Promise<{ ok: boolean; mensaje: string }> {
   try {
     await agregarAlPanel(leadId);
     void registrarMomentum(leadId, "agregar_al_panel").catch(() => null);
-    revalidatePath(PATH);
+    revalidatePath("/admin/oportunidades");
     return { ok: true, mensaje: "Agregado al panel de oportunidades" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
@@ -118,7 +110,7 @@ export async function agregarAOportunidadesAction(
           .update({ activo: true })
           .eq("lead_id", leadId);
         void registrarMomentum(leadId, "agregar_al_panel").catch(() => null);
-        revalidatePath(PATH);
+        revalidatePath("/admin/oportunidades");
         return { ok: true, mensaje: "Reagregado al panel" };
       } catch { /* ignore */ }
       return { ok: false, mensaje: "Este lead ya está en el panel" };
