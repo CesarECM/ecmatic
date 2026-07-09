@@ -58,8 +58,8 @@ export function OportunidadCard({
 
   if (!lead) return null;
 
-  const ghlLink = lead.ghl_contact_id
-    ? `https://app.gohighlevel.com/contacts/${lead.ghl_contact_id}`
+  const ghlLink = lead.ghl_contact_id && process.env.NEXT_PUBLIC_GHL_LOCATION_ID
+    ? `https://app.relief.academy/v2/location/${process.env.NEXT_PUBLIC_GHL_LOCATION_ID}/contacts/detail/${lead.ghl_contact_id}`
     : null;
   const telReal = telVisible(lead.telefono);
   const waLink  = telReal ? `https://wa.me/${telReal.replace(/\D/g, "")}` : null;
