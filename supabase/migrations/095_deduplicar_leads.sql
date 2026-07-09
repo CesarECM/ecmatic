@@ -105,8 +105,8 @@ WHERE sl.lead_id = d.loser_id
   AND NOT EXISTS (
     SELECT 1 FROM seguimiento_lead x
     WHERE x.lead_id = d.winner_id
-      AND x.tipo    = sl.tipo
-      AND x.activo  = TRUE
+      AND x.tipo   = sl.tipo
+      AND x.estado = 'activo'
   );
 
 -- ── 4. Migrar intentos de seguimiento ───────────────────────────────────────────
