@@ -63,6 +63,32 @@ Termina con una pregunta de diagnóstico suave: ¿qué parte del proceso le gene
   return "";
 }
 
+// MPS-38 S133.1 — Contexto de segmento declarado en formulario de TikTok Lead Ads.
+// Los tags tkt-seg-* los asigna el workflow de GHL al recibir el lead del formulario.
+function detectarContextoTikTokLead(tagsGhl?: string[]): string {
+  if (!tagsGhl?.length) return "";
+  if (tagsGhl.includes("tkt-seg-certificacion")) {
+    return `\nCONTEXTO TIKTOK LEAD ADS — INTENCIÓN DECLARADA:
+El lead indicó en el formulario de TikTok que QUIERE CERTIFICARSE por primera vez (EC0217.01).
+Ya confirmó su interés — NO hagas descubrimiento de intención. Ve directo a explorar su situación específica: ¿tiene el expediente iniciado? ¿cuándo tiene su evaluación? ¿cuántos cursos imparte al año?
+Tono más directo que en otros canales: el usuario de TikTok busca respuestas concretas y rápidas. Sé breve y ve al punto.`;
+  }
+  if (tagsGhl.includes("tkt-seg-centro")) {
+    return `\nCONTEXTO TIKTOK LEAD ADS — PERFIL B2B:
+El lead indicó que ya está certificado o dirige un Centro de Evaluación.
+NO ofrezcas SmartBuilderEC individual. Este lead es un prospecto B2B para acceso de alumnos/instructores.
+Objetivo de esta conversación: descubrir cuántos instructores gestionan, si ya usan una herramienta para expedientes EC0217.01, y si les interesa ofrecer SmartBuilderEC a sus instructores a precio de acceso por volumen.
+Tono: par a par, no de ventas. Empieza con: "¿Cuántos instructores gestionas actualmente que necesiten el EC0217.01?"`;
+  }
+  if (tagsGhl.includes("tkt-seg-info")) {
+    return `\nCONTEXTO TIKTOK LEAD ADS — INTENCIÓN EXPLORATORIA:
+El lead indicó que solo está explorando opciones. No presiones hacia la compra en este primer intercambio.
+Comparte valor educativo sobre el proceso de certificación EC0217.01 de forma breve y concreta.
+Termina con una pregunta de diagnóstico suave: ¿qué parte del proceso le genera más dudas?`;
+  }
+  return "";
+}
+
 // MPS-16 S60 — prioridad: match temperamento (+2) + match etapa (+1) > universales (0).
 export function seleccionarPracticasContextuales(
   practicas: { contenido: string; contextos_aplica: { temperamento?: string[]; pipeline_stage?: string[] } | null }[],
@@ -213,6 +239,7 @@ export function construirSystemPrompt(params: ParamsPrompt): SystemPromptBlocks 
   const etiquetasLinea    = contexto.etiquetas?.length
     ? `- Etiquetas del lead: ${contexto.etiquetas.join(", ")}` : "";
   const fbLeadLinea       = detectarContextoFacebookLead(contexto.tagsGhl);
+  const tktLeadLinea      = detectarContextoTikTokLead(contexto.tagsGhl);
   const autoReplyLinea    = contexto.esAutoReply
     ? "\n- CONTEXTO CLAVE: El mensaje recibido es una respuesta automática de WhatsApp Business del lead (saludo o bienvenida automática, no una consulta real). NOSOTROS lo contactamos a él — él NO nos contactó. NUNCA preguntes '¿En qué puedo ayudarte?' ni '¿Para qué nos contactaste?'. Retoma el hilo de prospección explicando brevemente el motivo de nuestro contacto y abre con una pregunta de descubrimiento sobre su situación."
     : "";
@@ -275,6 +302,7 @@ CONTEXTO DEL LEAD:
 ${faseCagcLinea}
 ${etiquetasLinea}
 ${fbLeadLinea}
+${tktLeadLinea}
 ${memoriaLinea}
 ${matrizLinea}${instruccionCanal}${autoReplyLinea}
 ${contexto.modoPreSesion ? preSessionLinea : instruccionVenta}
