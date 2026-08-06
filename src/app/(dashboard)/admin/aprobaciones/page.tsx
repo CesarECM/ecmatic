@@ -9,6 +9,7 @@ import { ColaMensajesSeccion } from "./ColaMensajesSeccion";
 import { ColaSugerenciasSeccion } from "./ColaSugerenciasSeccion";
 import { ColaGHLSeccion } from "./ColaGHLSeccion";
 import { KBISugerenciasSeccion } from "./KBISugerenciasSeccion";
+import { AutoRecargarToggle } from "./AutoRecargarToggle";
 import type { RecursoActual } from "./KBISugerenciaModal";
 import type { KBISugerenciaItem } from "./KBISugerenciaCard";
 import {
@@ -87,9 +88,12 @@ export default async function AprobacionesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Cola de aprobaciones</h1>
-        <p className="text-sm text-muted-foreground">{totalPendientes} pendientes de revisión</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Cola de aprobaciones</h1>
+          <p className="text-sm text-muted-foreground">{totalPendientes} pendientes de revisión</p>
+        </div>
+        <AutoRecargarToggle totalPendientes={totalPendientes} />
       </div>
 
       {totalPendientes === 0 && (
