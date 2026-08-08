@@ -272,8 +272,13 @@ export function AprobacionesPane({ initial }: { initial: AprobacionesData }) {
               ws.triggerChatRefresh();
             }
           }}
+          onSelectLead={(leadId) => ws?.selectLead(leadId, null)}
         />
-        <ColaMensajesSeccion items={mensajesPendientes} onRemoved={(id) => removeFrom("mensajesPendientes", id)} />
+        <ColaMensajesSeccion
+          items={mensajesPendientes}
+          onRemoved={(id) => removeFrom("mensajesPendientes", id)}
+          onSelectLead={(leadId) => ws?.selectLead(leadId, null)}
+        />
 
         <ColaSugerenciasSeccion
           items={sugerencias}

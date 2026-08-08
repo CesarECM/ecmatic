@@ -6,6 +6,7 @@ import { aprobarMensajeAction, rechazarMensajeAction, actualizarMensajeAction } 
 
 type MensajeItem = {
   id: string;
+  lead_id: string;
   telefono: string;
   respuesta: string;
   bloques: string[];
@@ -30,7 +31,11 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
-function ItemMensaje({ item, onRemoved }: { item: MensajeItem; onRemoved?: (id: string) => void }) {
+function ItemMensaje({ item, onRemoved, onSelectLead }: {
+  item: MensajeItem;
+  onRemoved?: (id: string) => void;
+  onSelectLead?: (leadId: string) => void;
+}) {
   const [editando, setEditando] = useState(false);
   const [respuesta, setRespuesta] = useState(item.respuesta);
   const [pending, startTransition] = useTransition();
@@ -66,9 +71,13 @@ function ItemMensaje({ item, onRemoved }: { item: MensajeItem; onRemoved?: (id: 
     <div className="rounded-lg border border-teal-200 p-4">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">
+          <button
+            onClick={() => onSelectLead?.(item.lead_id)}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline text-left"
+            title="Ver lead en panel central"
+          >
             {item.lead_nombre ?? item.telefono} · hace {diasDesde(item.created_at)}d
-          </span>
+          </button>
           {item.score_confianza !== null && <ScoreBadge score={item.score_confianza} />}
         </div>
       </div>
@@ -127,7 +136,11 @@ function ItemMensaje({ item, onRemoved }: { item: MensajeItem; onRemoved?: (id: 
   );
 }
 
-export function ColaMensajesSeccion({ items, onRemoved }: { items: MensajeItem[]; onRemoved?: (id: string) => void }) {
+export function ColaMensajesSeccion({ items, onRemoved, onSelectLead }: {
+  items: MensajeItem[];
+  onRemoved?: (id: string) => void;
+  onSelectLead?: (leadId: string) => void;
+}) {
   if (items.length === 0) return null;
   return (
     <section className="space-y-2">
@@ -135,7 +148,9 @@ export function ColaMensajesSeccion({ items, onRemoved }: { items: MensajeItem[]
         <span className="w-3 h-3 rounded-full bg-teal-500" />
         Respuestas en cola ({items.length})
       </p>
-      {items.map((item) => <ItemMensaje key={item.id} item={item} onRemoved={onRemoved} />)}
+      {items.map((item) => (
+        <ItemMensaje key={item.id} item={item} onRemoved={onRemoved} onSelectLead={onSelectLead} />
+      ))}
     </section>
   );
 }

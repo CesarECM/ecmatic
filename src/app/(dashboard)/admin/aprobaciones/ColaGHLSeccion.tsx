@@ -54,7 +54,12 @@ const CHIPS_COLA = [
   { label: "7d",  modo: "dias"  as const, valor: "7"  },
 ];
 
-function ItemGHL({ item, totalPorLead, onRemoved }: { item: ItemAprobacionGHL; totalPorLead: number; onRemoved?: (id: string) => void }) {
+function ItemGHL({ item, totalPorLead, onRemoved, onSelectLead }: {
+  item: ItemAprobacionGHL;
+  totalPorLead: number;
+  onRemoved?: (id: string) => void;
+  onSelectLead?: (leadId: string) => void;
+}) {
   const [pending, startTransition] = useTransition();
   const [expandido, setExpandido] = useState(false);
   const fichaHref = item.lead_ecmatic_id
@@ -116,12 +121,21 @@ function ItemGHL({ item, totalPorLead, onRemoved }: { item: ItemAprobacionGHL; t
             Lead: "{item.mensaje_lead.slice(0, 120)}{item.mensaje_lead.length > 120 ? "…" : ""}"
           </p>
         </div>
-        <a
-          href={fichaHref}
-          className="shrink-0 rounded bg-violet-600 px-3 py-1.5 text-xs text-white hover:bg-violet-700 whitespace-nowrap"
-        >
-          Revisar →
-        </a>
+        {onSelectLead && item.lead_ecmatic_id ? (
+          <button
+            onClick={() => onSelectLead(item.lead_ecmatic_id!)}
+            className="shrink-0 rounded bg-violet-600 px-3 py-1.5 text-xs text-white hover:bg-violet-700 whitespace-nowrap"
+          >
+            Revisar →
+          </button>
+        ) : (
+          <a
+            href={fichaHref}
+            className="shrink-0 rounded bg-violet-600 px-3 py-1.5 text-xs text-white hover:bg-violet-700 whitespace-nowrap"
+          >
+            Revisar →
+          </a>
+        )}
       </div>
 
       {/* Chips de posponer — solo para seguimientos */}
@@ -170,7 +184,11 @@ function ItemGHL({ item, totalPorLead, onRemoved }: { item: ItemAprobacionGHL; t
   );
 }
 
-export function ColaGHLSeccion({ items, onRemoved }: { items: ItemAprobacionGHL[]; onRemoved?: (id: string) => void }) {
+export function ColaGHLSeccion({ items, onRemoved, onSelectLead }: {
+  items: ItemAprobacionGHL[];
+  onRemoved?: (id: string) => void;
+  onSelectLead?: (leadId: string) => void;
+}) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
 
   if (items.length === 0) return null;
@@ -219,6 +237,7 @@ export function ColaGHLSeccion({ items, onRemoved }: { items: ItemAprobacionGHL[
               item={item}
               totalPorLead={item.lead_ecmatic_id ? (contadorPorLead.get(item.lead_ecmatic_id) ?? 1) : 1}
               onRemoved={onRemoved}
+              onSelectLead={onSelectLead}
             />
           ))}
         </div>
