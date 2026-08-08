@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -16,10 +16,12 @@ import {
 import { OportunidadCard } from "@/components/oportunidades/OportunidadCard";
 import { reordenarAction } from "./actions";
 import type { OportunidadRow, OportunidadLista } from "@/services/oportunidades";
+import { useWorkspaceOptional } from "@/app/(dashboard)/admin/workspace/WorkspaceContext";
 
 interface Props {
   lista: OportunidadLista;
   ultimaIaAt: string | null;
+  workspaceMode?: boolean;
 }
 
 const SUGIERE_DOT: Record<string, string> = {
@@ -31,7 +33,7 @@ const SUGIERE_DOT: Record<string, string> = {
 const SCORE_COLOR = (s: number) =>
   s >= 70 ? "text-green-600" : s >= 40 ? "text-yellow-600" : "text-muted-foreground";
 
-export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
+export function OportunidadesClient({ lista, ultimaIaAt, workspaceMode = false }: Props) {
   const router = useRouter();
 
   // S127.1 — Todas las secciones en estado local (antes esperando/seguimiento eran props estáticas)
@@ -65,22 +67,35 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
     : null;
   const isStale = staleHours === null || staleHours >= 24;
 
-  // S127.1 — Quitar un lead de cualquier sección sin reload
-  function handleRemoveFromList(leadId: string) {
+  const handleRemoveFromList = useCallback((leadId: string) => {
     setItems((prev)       => prev.filter((op) => op.lead_id !== leadId));
     setEsperando((prev)   => prev.filter((op) => op.lead_id !== leadId));
     setSeguimiento((prev) => prev.filter((op) => op.lead_id !== leadId));
-    // Si era el lead abierto en la modal, la cierra automáticamente via derived selected
-  }
+  }, []);
 
-  // S127.1 — Actualizar campos de un lead en todas las secciones sin reload
-  function handleUpdateInList(leadId: string, updates: Partial<OportunidadRow>) {
+  const handleUpdateInList = useCallback((leadId: string, updates: Partial<OportunidadRow>) => {
     const patch = (op: OportunidadRow): OportunidadRow =>
       op.lead_id === leadId ? { ...op, ...updates } : op;
     setItems((prev)       => prev.map(patch));
     setEsperando((prev)   => prev.map(patch));
     setSeguimiento((prev) => prev.map(patch));
-  }
+  }, []);
+
+  const handleAddToList = useCallback((op: OportunidadRow) => {
+    setSeguimiento((prev) => [op, ...prev]);
+  }, []);
+
+  // Registro de callbacks en WorkspaceContext (solo en modo workspace)
+  const workspace = useWorkspaceOptional();
+  useEffect(() => {
+    if (!workspaceMode || !workspace) return;
+    workspace.setOportunidadesCallbacks({
+      remove: handleRemoveFromList,
+      update: handleUpdateInList,
+      add:    handleAddToList,
+    });
+    return () => workspace.setOportunidadesCallbacks(null);
+  }, [workspaceMode, workspace, handleRemoveFromList, handleUpdateInList, handleAddToList]);
 
   async function handleAnalizar() {
     setAnalizando(true); setMsg(null);
@@ -173,7 +188,11 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
                     op={op}
                     posicion={idx + 1}
                     isUpdating={updatingId === op.lead_id}
-                    onClick={() => setSelectedId(op.id)}
+                    isSelected={workspaceMode && workspace?.selectedLeadId === op.lead_id}
+                    onClick={() => {
+                      if (workspaceMode && workspace) workspace.selectLead(op.lead_id, op);
+                      else setSelectedId(op.id);
+                    }}
                   />
                 ))}
               </div>
@@ -208,7 +227,11 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
                   op={op}
                   posicion={idx + 1}
                   isUpdating={updatingId === op.lead_id}
-                  onClick={() => setSelectedId(op.id)}
+                  isSelected={workspaceMode && workspace?.selectedLeadId === op.lead_id}
+                  onClick={() => {
+                    if (workspaceMode && workspace) workspace.selectLead(op.lead_id, op);
+                    else setSelectedId(op.id);
+                  }}
                 />
               ))}
             </div>
@@ -235,7 +258,11 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
                   op={op}
                   posicion={idx + 1}
                   isUpdating={updatingId === op.lead_id}
-                  onClick={() => setSelectedId(op.id)}
+                  isSelected={workspaceMode && workspace?.selectedLeadId === op.lead_id}
+                  onClick={() => {
+                    if (workspaceMode && workspace) workspace.selectLead(op.lead_id, op);
+                    else setSelectedId(op.id);
+                  }}
                 />
               ))}
             </div>
@@ -243,8 +270,8 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
         </div>
       )}
 
-      {/* ── Modal ficha completa ─────────────────────────── */}
-      <Dialog open={!!selected} onOpenChange={handleOpenChange}>
+      {/* ── Modal ficha completa (solo en modo normal, no workspace) ── */}
+      <Dialog open={!workspaceMode && !!selected} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
           <DialogHeader className="sr-only">
             <DialogTitle>{selected?.leads?.nombre ?? "Oportunidad"}</DialogTitle>
@@ -272,8 +299,8 @@ export function OportunidadesClient({ lista, ultimaIaAt }: Props) {
 
 // ── Fila DnD (Top 10) ─────────────────────────────────────────────────────────
 
-function SortableRow({ op, posicion, isUpdating, onClick }: {
-  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
+function SortableRow({ op, posicion, isUpdating, onClick, isSelected }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void; isSelected?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: op.id });
@@ -288,7 +315,8 @@ function SortableRow({ op, posicion, isUpdating, onClick }: {
   return (
     <div ref={setNodeRef} style={style}
       className={`flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors group
-        ${isUpdating ? "opacity-60" : ""}`}>
+        ${isUpdating ? "opacity-60" : ""}
+        ${isSelected ? "border-l-2 border-primary bg-primary/5" : ""}`}>
       <span {...attributes} {...listeners}
         className="cursor-grab text-muted-foreground/40 hover:text-muted-foreground select-none text-base leading-none shrink-0"
         title="Arrastrar">⠿</span>
@@ -299,13 +327,14 @@ function SortableRow({ op, posicion, isUpdating, onClick }: {
 
 // ── Fila En Espera (con countdown) ───────────────────────────────────────────
 
-function EsperandoRow({ op, posicion, isUpdating, onClick }: {
-  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
+function EsperandoRow({ op, posicion, isUpdating, onClick, isSelected }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void; isSelected?: boolean;
 }) {
   const countdown = op.fecha_compromiso ? calcularCountdown(op.fecha_compromiso) : null;
   return (
     <div className={`flex items-center gap-3 px-4 py-3 bg-amber-50/40 hover:bg-amber-50 transition-colors
-      ${isUpdating ? "opacity-60" : ""}`}>
+      ${isUpdating ? "opacity-60" : ""}
+      ${isSelected ? "border-l-2 border-primary" : ""}`}>
       <span className="text-xs shrink-0 w-5 text-center text-amber-600 font-bold">{posicion}</span>
       <button onClick={onClick}
         className="flex-1 text-left text-sm font-medium hover:text-primary truncate cursor-pointer">
@@ -324,12 +353,13 @@ function EsperandoRow({ op, posicion, isUpdating, onClick }: {
 
 // ── Fila simple (Seguimiento pool) ───────────────────────────────────────────
 
-function SimpleRow({ op, posicion, isUpdating, onClick }: {
-  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void;
+function SimpleRow({ op, posicion, isUpdating, onClick, isSelected }: {
+  op: OportunidadRow; posicion: number; isUpdating: boolean; onClick: () => void; isSelected?: boolean;
 }) {
   return (
     <div className={`flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors
-      ${isUpdating ? "opacity-60" : ""}`}>
+      ${isUpdating ? "opacity-60" : ""}
+      ${isSelected ? "border-l-2 border-primary bg-primary/5" : ""}`}>
       <span className="text-xs font-bold text-muted-foreground w-5 text-center shrink-0">{posicion}</span>
       <button onClick={onClick}
         className="flex-1 text-left text-sm font-medium hover:text-primary truncate cursor-pointer">

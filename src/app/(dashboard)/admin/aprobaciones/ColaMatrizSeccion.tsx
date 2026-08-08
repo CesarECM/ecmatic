@@ -16,7 +16,7 @@ function diasDesde(fecha: string) {
   return Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000);
 }
 
-function ItemMatriz({ item }: { item: MatrizItem }) {
+function ItemMatriz({ item, onRemoved }: { item: MatrizItem; onRemoved?: (id: string) => void }) {
   const [editando, setEditando] = useState(false);
   const [respuesta, setRespuesta] = useState(item.respuesta_sugerida);
   const [pending, startTransition] = useTransition();
@@ -42,6 +42,7 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
         await aprobarMatrizAction(item.id);
         toast.success("Entrada guardada y aprobada", { id });
         setEditando(false);
+        onRemoved?.(item.id);
       } catch {
         toast.error("Error al guardar y aprobar", { id });
       }
@@ -59,6 +60,7 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
       try {
         await aprobarMatrizAction(item.id);
         toast.success("Entrada aprobada", { id });
+        onRemoved?.(item.id);
       } catch {
         toast.error("Error al aprobar", { id });
       }
@@ -72,6 +74,7 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
       try {
         await eliminarMatrizAction(item.id);
         toast.success("Entrada rechazada", { id });
+        onRemoved?.(item.id);
       } catch {
         toast.error("Error al rechazar", { id });
       }
@@ -133,7 +136,7 @@ function ItemMatriz({ item }: { item: MatrizItem }) {
   );
 }
 
-export function ColaMatrizSeccion({ items }: { items: MatrizItem[] }) {
+export function ColaMatrizSeccion({ items, onRemoved }: { items: MatrizItem[]; onRemoved?: (id: string) => void }) {
   if (items.length === 0) return null;
   return (
     <section className="space-y-2">
@@ -141,7 +144,7 @@ export function ColaMatrizSeccion({ items }: { items: MatrizItem[] }) {
         <span className="w-3 h-3 rounded-full bg-orange-500" />
         Matriz nD ({items.length})
       </p>
-      {items.map((item) => <ItemMatriz key={item.id} item={item} />)}
+      {items.map((item) => <ItemMatriz key={item.id} item={item} onRemoved={onRemoved} />)}
     </section>
   );
 }

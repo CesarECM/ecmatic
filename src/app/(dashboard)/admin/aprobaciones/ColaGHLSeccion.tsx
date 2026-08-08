@@ -54,7 +54,7 @@ const CHIPS_COLA = [
   { label: "7d",  modo: "dias"  as const, valor: "7"  },
 ];
 
-function ItemGHL({ item, totalPorLead }: { item: ItemAprobacionGHL; totalPorLead: number }) {
+function ItemGHL({ item, totalPorLead, onRemoved }: { item: ItemAprobacionGHL; totalPorLead: number; onRemoved?: (id: string) => void }) {
   const [pending, startTransition] = useTransition();
   const [expandido, setExpandido] = useState(false);
   const fichaHref = item.lead_ecmatic_id
@@ -75,7 +75,7 @@ function ItemGHL({ item, totalPorLead }: { item: ItemAprobacionGHL; totalPorLead
         valor,
       );
       if (res?.error) toast.error(res.error, { id });
-      else toast.success(`Pospuesto ${valor}${modo === "horas" ? "h" : "d"}`, { id });
+      else { toast.success(`Pospuesto ${valor}${modo === "horas" ? "h" : "d"}`, { id }); onRemoved?.(item.id); }
     });
     setExpandido(false);
   }
@@ -170,7 +170,7 @@ function ItemGHL({ item, totalPorLead }: { item: ItemAprobacionGHL; totalPorLead
   );
 }
 
-export function ColaGHLSeccion({ items }: { items: ItemAprobacionGHL[] }) {
+export function ColaGHLSeccion({ items, onRemoved }: { items: ItemAprobacionGHL[]; onRemoved?: (id: string) => void }) {
   const [filtro, setFiltro] = useState<Filtro>("todos");
 
   if (items.length === 0) return null;
@@ -218,6 +218,7 @@ export function ColaGHLSeccion({ items }: { items: ItemAprobacionGHL[] }) {
               key={item.id}
               item={item}
               totalPorLead={item.lead_ecmatic_id ? (contadorPorLead.get(item.lead_ecmatic_id) ?? 1) : 1}
+              onRemoved={onRemoved}
             />
           ))}
         </div>

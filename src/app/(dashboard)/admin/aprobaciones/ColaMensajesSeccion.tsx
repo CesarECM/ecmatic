@@ -30,7 +30,7 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
-function ItemMensaje({ item }: { item: MensajeItem }) {
+function ItemMensaje({ item, onRemoved }: { item: MensajeItem; onRemoved?: (id: string) => void }) {
   const [editando, setEditando] = useState(false);
   const [respuesta, setRespuesta] = useState(item.respuesta);
   const [pending, startTransition] = useTransition();
@@ -40,7 +40,7 @@ function ItemMensaje({ item }: { item: MensajeItem }) {
     startTransition(async () => {
       const r = await aprobarMensajeAction(item.id, item.telefono, [respuesta]);
       if (r.error) toast.error(r.error, { id });
-      else toast.success("Mensaje enviado", { id });
+      else { toast.success("Mensaje enviado", { id }); onRemoved?.(item.id); }
     });
   }
 
@@ -58,7 +58,7 @@ function ItemMensaje({ item }: { item: MensajeItem }) {
     startTransition(async () => {
       const r = await rechazarMensajeAction(item.id);
       if (r.error) toast.error(r.error, { id });
-      else toast.success("Mensaje rechazado", { id });
+      else { toast.success("Mensaje rechazado", { id }); onRemoved?.(item.id); }
     });
   }
 
@@ -127,7 +127,7 @@ function ItemMensaje({ item }: { item: MensajeItem }) {
   );
 }
 
-export function ColaMensajesSeccion({ items }: { items: MensajeItem[] }) {
+export function ColaMensajesSeccion({ items, onRemoved }: { items: MensajeItem[]; onRemoved?: (id: string) => void }) {
   if (items.length === 0) return null;
   return (
     <section className="space-y-2">
@@ -135,7 +135,7 @@ export function ColaMensajesSeccion({ items }: { items: MensajeItem[] }) {
         <span className="w-3 h-3 rounded-full bg-teal-500" />
         Respuestas en cola ({items.length})
       </p>
-      {items.map((item) => <ItemMensaje key={item.id} item={item} />)}
+      {items.map((item) => <ItemMensaje key={item.id} item={item} onRemoved={onRemoved} />)}
     </section>
   );
 }

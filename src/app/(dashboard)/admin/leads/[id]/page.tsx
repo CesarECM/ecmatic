@@ -20,6 +20,7 @@ import { AgregarAPanelBtn } from "@/components/oportunidades/AgregarAPanelBtn";
 import { Badge } from "@/components/ui/badge";
 import { eliminarLlamadaAdminAction } from "./actions";
 import { telVisible } from "@/lib/utils";
+import { InactivityRedirect } from "./InactivityRedirect";
 
 export const revalidate = 0;
 
@@ -172,6 +173,7 @@ export default async function LeadPerfilPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="-m-6 flex flex-col md:h-[calc(100dvh-53px)]">
+      <InactivityRedirect />
       {/* Cabecera */}
       <div className="px-6 py-3 border-b bg-card shrink-0">
         <div className="flex items-start gap-3 flex-wrap">

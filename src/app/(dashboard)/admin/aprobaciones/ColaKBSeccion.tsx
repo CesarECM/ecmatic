@@ -26,7 +26,7 @@ const PRIORIDAD_COLOR: Record<string, string> = {
   puede_esperar: "bg-gray-300 text-gray-700",
 };
 
-function ItemKB({ item }: { item: KBItem }) {
+function ItemKB({ item, onRemoved }: { item: KBItem; onRemoved?: (id: string) => void }) {
   const [editando, setEditando] = useState(false);
   const [titulo, setTitulo] = useState(item.titulo);
   const [contenido, setContenido] = useState(item.contenido);
@@ -53,6 +53,7 @@ function ItemKB({ item }: { item: KBItem }) {
         await aprobarKBAction(item.id);
         toast.success("Recurso guardado y aprobado", { id });
         setEditando(false);
+        onRemoved?.(item.id);
       } catch {
         toast.error("Error al guardar y aprobar", { id });
       }
@@ -71,6 +72,7 @@ function ItemKB({ item }: { item: KBItem }) {
       try {
         await aprobarKBAction(item.id);
         toast.success("Recurso aprobado", { id });
+        onRemoved?.(item.id);
       } catch {
         toast.error("Error al aprobar", { id });
       }
@@ -84,6 +86,7 @@ function ItemKB({ item }: { item: KBItem }) {
       try {
         await eliminarKBAction(item.id);
         toast.success("Recurso rechazado", { id });
+        onRemoved?.(item.id);
       } catch {
         toast.error("Error al rechazar", { id });
       }
@@ -154,7 +157,7 @@ function ItemKB({ item }: { item: KBItem }) {
   );
 }
 
-export function ColaKBSeccion({ items }: { items: KBItem[] }) {
+export function ColaKBSeccion({ items, onRemoved }: { items: KBItem[]; onRemoved?: (id: string) => void }) {
   if (items.length === 0) return null;
   return (
     <section className="space-y-2">
@@ -162,7 +165,7 @@ export function ColaKBSeccion({ items }: { items: KBItem[] }) {
         <span className="w-3 h-3 rounded-full bg-blue-500" />
         Base de conocimiento ({items.length})
       </p>
-      {items.map((item) => <ItemKB key={item.id} item={item} />)}
+      {items.map((item) => <ItemKB key={item.id} item={item} onRemoved={onRemoved} />)}
     </section>
   );
 }
