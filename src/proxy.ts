@@ -5,6 +5,9 @@ import type { Database } from "@/lib/supabase/types";
 
 const PUBLIC_PATHS = ["/login", "/api/whatsapp/webhook", "/api/stripe/webhook", "/api/admin/", "/api/auth/google", "/api/ghl/"];
 
+// Única ruta disponible por el momento — todo lo demás redirige aquí.
+const WORKSPACE = "/admin/workspace";
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -45,7 +48,13 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
-    return withRefreshedCookies(NextResponse.redirect(new URL("/dashboard", request.url)));
+    return withRefreshedCookies(NextResponse.redirect(new URL(WORKSPACE, request.url)));
+  }
+
+  // Redirigir cualquier ruta autenticada que no sea el workspace
+  const isDashboardRoute = pathname.startsWith("/admin") || pathname.startsWith("/vendedor") || pathname === "/dashboard";
+  if (user && isDashboardRoute && pathname !== WORKSPACE) {
+    return withRefreshedCookies(NextResponse.redirect(new URL(WORKSPACE, request.url)));
   }
 
   return response;
