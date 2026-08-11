@@ -51,9 +51,10 @@ export async function proxy(request: NextRequest) {
     return withRefreshedCookies(NextResponse.redirect(new URL(WORKSPACE, request.url)));
   }
 
-  // Redirigir cualquier ruta autenticada que no sea el workspace
+  // Redirigir cualquier ruta autenticada que no sea el workspace ni una ruta explícitamente permitida
+  const ALLOWED_PREFIXES = [WORKSPACE, "/admin/leads"];
   const isDashboardRoute = pathname.startsWith("/admin") || pathname.startsWith("/vendedor") || pathname === "/dashboard";
-  if (user && isDashboardRoute && pathname !== WORKSPACE) {
+  if (user && isDashboardRoute && !ALLOWED_PREFIXES.some((p) => pathname.startsWith(p))) {
     return withRefreshedCookies(NextResponse.redirect(new URL(WORKSPACE, request.url)));
   }
 

@@ -5,6 +5,7 @@ import { OportunidadesClient } from "@/app/(dashboard)/admin/oportunidades/Oport
 import { LeadDetailPane } from "./LeadDetailPane";
 import { AprobacionesPane } from "./AprobacionesPane";
 import { NuevoLeadFAB } from "./NuevoLeadFAB";
+import { LeadSearchBox } from "./LeadSearchBox";
 import type { OportunidadLista } from "@/services/oportunidades";
 import type { AprobacionesData } from "@/app/api/admin/workspace/aprobaciones/route";
 
@@ -49,15 +50,11 @@ function WorkspaceLayout({ oportunidades, ultimaIaAt, initialAprobaciones }: Pro
 
       {/* ── Columna central: Lead Detail (flexible) ──────────────── */}
       <div className="flex-1 relative flex flex-col overflow-hidden border-r min-w-0">
-        <div className="px-4 py-3 border-b shrink-0 flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <div className="px-4 py-2 border-b shrink-0 flex items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground shrink-0">
             Lead
           </p>
-          {selectedLeadId && (
-            <span className="text-[10px] text-muted-foreground font-mono">
-              {selectedLeadId.slice(0, 8)}…
-            </span>
-          )}
+          <LeadSearchBox />
         </div>
         <div className="flex-1 overflow-hidden flex flex-col">
           <LeadDetailPane />
