@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { procesarContactoGHL, type GHLWebhookPayload } from "@/services/ghl";
 import { resolverCuerpoGHL, encolarEnBuffer } from "@/services/ghl-message-buffer";
 import { logSistema } from "@/services/log-sistema";
+import { sincronizarContactoV2, sincronizarMensajeEntranteV2 } from "@/services/v2/sync-ghl";
 
 const GHL_SECRET = process.env.GHL_WEBHOOK_SECRET;
 
@@ -94,6 +95,21 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // v2: re-analizar oportunidad si hay mensaje entrante nuevo
+    after(async () => {
+      const contactId = (payload.contactId ?? "") as string;
+      if (!contactId) return;
+      await sincronizarMensajeEntranteV2(contactId).catch((err) => {
+        void logSistema({
+          categoria:  "webhook",
+          tipoAccion: "v2.sync.mensaje",
+          fase:       "error",
+          resultado:  err instanceof Error ? err.message.slice(0, 200) : "Error",
+          metadata:   { contact_id: contactId },
+        });
+      });
+    });
+
     return NextResponse.json({ status: "ok" });
   }
 
@@ -119,6 +135,19 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       void logSistema({ categoria: "webhook", tipoAccion: "webhook.ghl", fase: "error", resultado: err instanceof Error ? err.message.slice(0, 200) : "Error", metadata: { event_type: tipo, error_message: String(err) } });
     }
+  });
+
+  // v2: sincronizar contacto y disparar análisis CAGC
+  after(async () => {
+    await sincronizarContactoV2(contactPayload, tipo).catch((err) => {
+      void logSistema({
+        categoria:  "webhook",
+        tipoAccion: "v2.sync.contacto",
+        fase:       "error",
+        resultado:  err instanceof Error ? err.message.slice(0, 200) : "Error",
+        metadata:   { event_type: tipo },
+      });
+    });
   });
 
   return NextResponse.json({ status: "ok" });

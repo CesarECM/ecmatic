@@ -39,6 +39,8 @@
     { "path": "/api/admin/ghl/procesar-buffer",         "schedule": "*/1 * * * *" },
     { "path": "/api/admin/ghl/prior-global",           "schedule": "0 12 * * 1" },
     { "path": "/api/admin/kbi/calcular-scores",        "schedule": "30 9 * * *" },
-    { "path": "/api/admin/kbi/detectar",               "schedule": "30 14 * * *" }
+    { "path": "/api/admin/kbi/detectar",               "schedule": "30 14 * * *" },
+    { "path": "/api/admin/v2/kb-decay",                "schedule": "0 3 * * *" },
+    { "path": "/api/admin/v2/kbx-scan",               "schedule": "0 4 * * *" }
   ]
 }

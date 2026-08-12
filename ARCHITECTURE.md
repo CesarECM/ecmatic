@@ -339,6 +339,60 @@ Lead (WA/formulario/anuncio) → GHL → webhook GHL → ECMatic (upsert + proce
 
 ---
 
+## ECMatic v2 — Fase 1 (MPS #40, iniciado 11 ago 2026)
+
+Sistema paralelo a v1.7. Comparte el mismo proyecto Supabase y variables de entorno. No comparte código ni lógica de negocio.
+
+### Principio rector
+
+> El sistema no debe ser inteligente antes de ser claro. Una sola tarea a la vez, human-in-the-loop.
+
+### Diferencias clave vs v1.7
+
+| Aspecto | v1.7 | v2 |
+|---|---|---|
+| Ruta base | `/admin/workspace` | `/workspace` |
+| Reactividad | Polling 15s | Supabase Realtime |
+| Paneles | 3 (Oportunidades + Lead + Aprobaciones) | 2 (Oportunidades + Tareas) |
+| KB | FAQs + IC + catálogo servicios | Solo FAQs + IC (sin catálogo) |
+| Oportunidades | Por lead (1:1) | Por lead/producto (1:N) |
+| State machine | Múltiples motores | Loop de 11 pasos (HITL) |
+
+### Tablas (prefijo `v2_`)
+
+```
+v2_leads              — réplica sincronizada de contactos GHL
+v2_opportunities      — una por lead/producto, CAGC independiente
+v2_opportunity_notes  — notas libres → disparan re-análisis IA
+v2_contact_points     — corazón del loop: acción propuesta/ejecutada
+v2_follow_up_notes    — resultado de cada contact_point
+v2_kb_items           — FAQs + IC con score de confianza + embedding
+v2_conversation_rules — reglas inyectadas siempre en el prompt
+v2_kbx_review_queue   — tareas de mantenimiento KB (cron diario)
+```
+
+Realtime habilitado en: `v2_contact_points`, `v2_opportunities`.
+
+### Estructura de carpetas v2
+
+```
+src/
+├── app/(dashboard)/workspace/
+│   ├── page.tsx                  — Server: metadata + render WorkspaceClient
+│   ├── WorkspaceContext.tsx      — Context + Provider + useV2Workspace
+│   ├── WorkspaceClient.tsx       — Shell 2 paneles + Realtime subscription
+│   ├── OportunidadesPane.tsx     — Panel izquierdo (380px)
+│   └── TareasPane.tsx            — Panel derecho (flex)
+└── lib/supabase/
+    └── types.v2.ts               — Tipos TypeScript para tablas v2_*
+```
+
+### Tipos
+
+Ver `src/lib/supabase/types.v2.ts`. Nunca mezclar con `types.ts` (v1.7).
+
+---
+
 ## Plan de Deprecación (jun 2026)
 
 | Fase | Descripción | Plazo |

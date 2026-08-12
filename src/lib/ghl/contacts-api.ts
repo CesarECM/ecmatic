@@ -83,6 +83,23 @@ export async function actualizarDatosContactoGHL(
   }
 }
 
+// S149.2 — Escribe un custom field de GHL en un contacto.
+// El fieldId se obtiene desde la UI de GHL → Settings → Custom Fields.
+export async function actualizarCustomFieldGHL(
+  contactId: string,
+  fieldId:   string,
+  value:     string,
+): Promise<boolean> {
+  try {
+    await ghlPut(`/contacts/${contactId}`, {
+      customFields: [{ id: fieldId, field_value: value }],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Busca contactos en GHL cuyo teléfono contenga la cadena dada (últimos dígitos).
 export async function buscarContactosPorTelefono(q: string): Promise<GHLContact[]> {
   const locationId = process.env.GHL_LOCATION_ID!;

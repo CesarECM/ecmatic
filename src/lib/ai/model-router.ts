@@ -42,7 +42,10 @@ export type TareaIA =
   | "GENERICIZAR_TEMPLATE"        // MPS-31: convierte mensaje específico en plantilla reutilizable
   | "RESUMEN_CATALOGO"            // MPS-32: comprime el catálogo de servicios para inyección en prompt
   | "OPORTUNIDAD_ANALISIS"        // MPS-34: analiza un lead y genera resumen, acción sugerida y score de cierre
-  | "SELECCIONAR_CANDIDATOS";     // MPS-34: elige los mejores leads activos para llenar slots del panel
+  | "SELECCIONAR_CANDIDATOS"      // MPS-34: elige los mejores leads activos para llenar slots del panel
+  | "V2_ANALIZAR_LOOP"            // MPS-40 S148.1: pasos 1-6 del loop HITL — CAGC + próximo contact_point
+  | "V2_GENERAR_CONTENIDO"        // MPS-40 S148.2: paso 8 — genera contenido del mensaje propuesto
+  | "V2_KB_PROPONER";             // MPS-40 S148.3: paso 10 — extrae aprendizaje de edición/rechazo y propone KB
 
 // Modelos disponibles en Anthropic (por costo ascendente)
 const MODELOS: Record<string, string> = {
@@ -92,8 +95,11 @@ const DEFAULTS: Record<TareaIA, keyof typeof MODELOS> = {
   GENERAR_RESPUESTA_CONV: "sonnet", // personalizada necesita más calidad contextual
   GENERICIZAR_TEMPLATE:  "haiku",  // transformación simple de texto
   RESUMEN_CATALOGO:      "haiku",  // compresión estructurada → haiku suficiente
-  OPORTUNIDAD_ANALISIS:  "sonnet", // análisis profundo de conversación + score de cierre
-  SELECCIONAR_CANDIDATOS: "haiku", // selección rápida de candidatos para el panel
+  OPORTUNIDAD_ANALISIS:  "sonnet",
+  SELECCIONAR_CANDIDATOS: "haiku",
+  V2_ANALIZAR_LOOP:      "sonnet", // análisis CAGC + próximo paso requiere buena lectura contextual
+  V2_GENERAR_CONTENIDO:  "sonnet", // generación de copy conversacional
+  V2_KB_PROPONER:        "haiku",  // extracción de aprendizaje — tarea de clasificación simple
 };
 
 // S12.3 — Devuelve el model ID óptimo para la tarea.
